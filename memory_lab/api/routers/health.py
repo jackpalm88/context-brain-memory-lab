@@ -1,0 +1,12 @@
+from fastapi import APIRouter
+
+router = APIRouter(tags=["health"])
+
+
+@router.get("/health")
+def get_health() -> dict:
+    return {
+        "status": "ok",
+        "service": "memory-lab-api",
+        "version": "pr1b-minimal",
+    }

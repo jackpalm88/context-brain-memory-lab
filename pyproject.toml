@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "context-brain-memory-lab"
+version = "0.1.0b1"
+description = "Context Brain Memory Lab — graph-aware semantic memory for AI agents"
+requires-python = ">=3.12"
+readme = "README.md"
+license = "Apache-2.0"
+
+dependencies = [
+    "fastapi>=0.130",
+    "uvicorn>=0.30",
+    "psycopg2-binary>=2.9",
+    "mcp>=1.27",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.10",
+    "starlette>=1.0",
+    "httpx>=0.28",
+    "httpx-sse>=0.4",
+    "sse-starlette>=3.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+anthropic = ["anthropic>=0.20"]
+pgvector = ["pgvector>=0.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["memory_lab"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "memory_lab/**",
+    "migrations/**",
+    "README.md",
+    "pyproject.toml",
+]
