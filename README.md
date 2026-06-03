@@ -11,7 +11,7 @@
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
 - Migrations: PostgreSQL schema `000..016`
 
-**Version**: `0.1.0b3` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b4` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -43,6 +43,8 @@ git clone https://github.com/jackpalm88/context-brain-memory-lab.git
 cd context-brain-memory-lab
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
+
+For local setup, see [docs/INSTALL.md](docs/INSTALL.md).
 ```
 
 ### Configure
@@ -104,6 +106,7 @@ memory_lab/
   decisions/    decision CRUD, lineage, conflict detection
   governance/   tier router, ingestion policy, events, cleanup, override
   ingestion/    provider-optional scorer, models
+  providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic adapter)
 migrations/
   000_base_schema.sql .. 016_add_governance_events.sql
 pyproject.toml
@@ -119,6 +122,7 @@ from memory_lab.mcp import server, tools
 from memory_lab.decisions import models as dm
 from memory_lab.governance import tier_router, ingestion_policy
 from memory_lab.ingestion import scorer
+from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
 ```
 
 ---
@@ -129,7 +133,7 @@ from memory_lab.ingestion import scorer
 - **No provider-backed embeddings by default** — deterministic retrieval path works without any key
 - **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
 - **No hosted service** — self-hosted only; bring your own PostgreSQL
-- **No full API stability guarantee** — `0.1.0b3` is a public beta; breaking changes may occur before `1.0`
+- **No full API stability guarantee** — `0.1.0b4` is a public beta; breaking changes may occur before `1.0`
 - **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
 
 ---
@@ -148,11 +152,47 @@ Package readiness verified in staging (`pr1a_staging`):
 | API runtime smoke | PASS |
 | MCP runtime smoke | PASS |
 
-Wheel: `context_brain_memory_lab-0.1.0b3-py3-none-any.whl`
+Wheel: `context_brain_memory_lab-0.1.0b4-py3-none-any.whl`
 
 ---
 
 ## Scoring and Governance
+
+### Provider Abstraction Layer (v0.1.0b4)
+
+ ships a provider-optional LLM backend abstraction:
+
+-  ABC — single  contract; no streaming, no tool-calls in base
+-  — default; , no external calls, no key required
+-  — test fixture; 4 modes (fixed, empty, error, timeout)
+-  — optional adapter; deferred import, no top-level
+-  enum — typed failure reasons across all backends
+-  — reads  env var;  is valid and default
+
+ (the default) is always valid — no external calls, no crash.
+
+**Live Anthropic smoke note:** live end-to-end scoring via  was not
+exercised in the v0.1.0b4 public baseline (API key not present during verification).
+The optional Anthropic path is implemented and tested via mocks.
+Live smoke is deferred to a future gate with key injection.
+
+### Provider Abstraction Layer (v0.1.0b4)
+
+`memory_lab.providers` ships a provider-optional LLM backend abstraction:
+
+- `LLMBackend` ABC — single `complete_text()` contract; no streaming, no tool-calls in base
+- `NoopLLMBackend` — default; `degraded=True`, no external calls, no key required
+- `FakeLLMBackend` — test fixture; 4 modes (fixed, empty, error, timeout)
+- `AnthropicLLMBackend` — optional adapter; deferred import, no top-level `import anthropic`
+- `FailureCode` enum — typed failure reasons across all backends
+- `ProviderConfig` — reads `LLM_PROVIDER` env var; `none` is valid and default
+
+`LLM_PROVIDER=none` (the default) is always valid — no external calls, no crash.
+
+**Live Anthropic smoke note:** live end-to-end scoring via `AnthropicLLMBackend` was not
+exercised in the v0.1.0b4 public baseline (API key not present during verification).
+The optional Anthropic path is implemented and tested via mocks.
+Live smoke is deferred to a future gate with key injection.
 
 ### Provider-Neutral Fallback Scoring
 
@@ -218,7 +258,7 @@ telemetry policy.
 
 ## Related
 
-- **Context Brain (Public Alpha)** — positioning, governance model, GPT Actions schema, MCP tool docs:  
+- **Context Brain (Public Alpha)** — positioning, governance model, GPT Actions schema, MCP tool docs:
   https://github.com/jackpalm88/context-brain-public-alpha
 
 ---

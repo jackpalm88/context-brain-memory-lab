@@ -51,12 +51,15 @@ def test_score_empty_content_fallback():
 
 
 def test_score_mocked_anthropic():
+    """Legacy test updated: now uses FakeLLMBackend instead of direct Anthropic mock."""
     from memory_lab.ingestion import scorer
-    mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=json.dumps({"quality": 0.75, "relevance": 0.80, "novelty": 0.65}))]
-    mock_client.messages.create.return_value = mock_response
-    with patch.object(scorer, "_get_anthropic_client", return_value=mock_client), \
+    from memory_lab.providers.fake import FakeLLMBackend
+
+    fake = FakeLLMBackend(preset_json={
+        "quality": 0.75, "relevance": 0.80, "novelty": 0.65,
+        "quality_reason": "ok", "relevance_reason": "ok", "novelty_reason": "ok",
+    })
+    with patch.object(scorer, "_get_llm_backend", return_value=fake), \
          patch.object(scorer, "_is_circuit_open", return_value=False):
         scores = scorer.score("PostgreSQL indexing strategies for JSONB columns.")
     expected = 0.75 * 0.35 + 0.80 * 0.35 + 0.65 * 0.30
@@ -66,7 +69,7 @@ def test_score_mocked_anthropic():
 def test_score_circuit_open_fallback():
     from memory_lab.ingestion import scorer
     with patch.object(scorer, "_is_circuit_open", return_value=True), \
-         patch.object(scorer, "_get_anthropic_client") as mock_fn:
+         patch.object(scorer, "_get_llm_backend") as mock_fn:
         scores = scorer.score("content")
     mock_fn.assert_not_called()
     assert 0.0 <= scores.composite <= 1.0
@@ -74,9 +77,12 @@ def test_score_circuit_open_fallback():
 
 def test_score_api_error_fallback():
     from memory_lab.ingestion import scorer
-    mock_client = MagicMock()
-    mock_client.messages.create.side_effect = Exception("provider overloaded")
-    with patch.object(scorer, "_get_anthropic_client", return_value=mock_client), \
+    from memory_lab.providers.failure import FailureCode
+    from memory_lab.providers.fake import FakeLLMBackend
+
+    # Simulate a provider HTTP error (transient failure that triggers _record_failure)
+    fake = FakeLLMBackend(preset_failure=FailureCode.PROVIDER_HTTP_ERROR)
+    with patch.object(scorer, "_get_llm_backend", return_value=fake), \
          patch.object(scorer, "_is_circuit_open", return_value=False), \
          patch.object(scorer, "_record_failure") as mock_record:
         scores = scorer.score("Test content.")

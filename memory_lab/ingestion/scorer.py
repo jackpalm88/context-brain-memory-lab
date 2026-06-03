@@ -2,15 +2,17 @@
 Phase 7a — Pre-Save Epistemic Scorer
 
 Scores incoming content on 3 axes (quality, relevance, novelty) using the
-Anthropic API before any DB write occurs.
+configured LLM backend before any DB write occurs.
 
 Key design constraints (from PITFALLS.md + PHASE7_PLAN.md):
-- Sync Anthropic call — callers MUST wrap with run_in_threadpool (never called
+- Sync LLM call — callers MUST wrap with run_in_threadpool (never called
   directly from async context without wrapping)
 - Circuit breaker fallback: open circuit → fallback scores (not a crash)
 - Circuit state is DB-backed — survives container restart (Pitfall #5)
 - Constitutional rules loaded by rule ID from ingestion_policy, never hardcoded
 - Score before opening asyncpg transaction (Pitfall: async/score boundary)
+- Provider-optional: no ANTHROPIC_API_KEY / missing package / circuit open
+  all produce fallback scores, never crash
 """
 import json
 import logging
@@ -31,16 +33,28 @@ _CIRCUIT_OPEN_UNTIL: float = 0.0  # epoch seconds; in-process cache
 _CIRCUIT_FAILURES: list = []       # [(timestamp, error_msg)]
 
 
-def _get_anthropic_client():
-    """Build Anthropic client from env. Returns None if key missing."""
+# ---------------------------------------------------------------------------
+# Provider backend factory
+# ---------------------------------------------------------------------------
+
+def _get_llm_backend():
+    """Return the configured LLM backend.
+
+    Resolution order:
+      1. AnthropicLLMBackend if anthropic package importable AND key present
+      2. NoopLLMBackend otherwise (degraded=True on every call, no crash)
+
+    Never raises.
+    """
     try:
-        import anthropic
-        api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
-        if not api_key:
-            return None
-        return anthropic.Anthropic(api_key=api_key)
+        from memory_lab.providers.anthropic import AnthropicLLMBackend
+        backend = AnthropicLLMBackend()
+        if backend.is_configured:
+            return backend
     except Exception:
-        return None
+        pass
+    from memory_lab.providers.noop import NoopLLMBackend
+    return NoopLLMBackend()
 
 
 def _is_circuit_open() -> bool:
@@ -138,6 +152,31 @@ def _record_success() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Failure code → fallback_reason string mapping
+# ---------------------------------------------------------------------------
+
+def _failure_code_to_reason(failure_reason) -> str:
+    """Map FailureCode to the public-contract fallback_reason string.
+
+    Preserves the exact strings consumed by api_adapter.py and MCP tools.
+    """
+    from memory_lab.providers.failure import FailureCode
+    _MAP = {
+        FailureCode.MISSING_API_KEY: "no_api_key",
+        FailureCode.PROVIDER_IMPORT_MISSING: "no_api_key",
+        FailureCode.NOT_CONFIGURED: "no_api_key",
+        FailureCode.CIRCUIT_OPEN: "circuit_open",
+        FailureCode.INVALID_JSON: "parse_error",
+        FailureCode.SCHEMA_VALIDATION_FAILED: "parse_error",
+        FailureCode.PROVIDER_HTTP_ERROR: "api_error",
+        FailureCode.RATE_LIMITED: "api_error",
+        FailureCode.TIMEOUT: "api_error",
+        FailureCode.UNKNOWN_ERROR: "api_error",
+    }
+    return _MAP.get(failure_reason, "api_error")
+
+
+# ---------------------------------------------------------------------------
 # Fallback scores (circuit open or API unavailable)
 # ---------------------------------------------------------------------------
 
@@ -162,12 +201,13 @@ def _fallback_scores(reason: str) -> IngestionScores:
 
 def score(content_preview: str, hub_context: str = "") -> IngestionScores:
     """
-    Score content on 3 axes using Anthropic.
+    Score content on 3 axes using the configured LLM backend.
 
     SYNC function — callers must use run_in_threadpool in async context.
     Never call this while holding an asyncpg connection.
 
     Returns IngestionScores. Never raises — fallback scores on any error.
+    Provider-optional: missing key, missing package, or circuit open → fallback.
     """
     if not content_preview or not content_preview.strip():
         return _fallback_scores("empty_content")
@@ -175,9 +215,9 @@ def score(content_preview: str, hub_context: str = "") -> IngestionScores:
     if _is_circuit_open():
         return _fallback_scores("circuit_open")
 
-    client = _get_anthropic_client()
-    if client is None:
-        logger.warning("[ingestion_scorer] Anthropic client unavailable — fallback scores")
+    backend = _get_llm_backend()
+    if not backend.is_configured:
+        logger.warning("[ingestion_scorer] LLM backend not configured — fallback scores")
         return _fallback_scores("no_api_key")
 
     prompt_cfg = policy.get_scoring_prompt()
@@ -196,14 +236,34 @@ def score(content_preview: str, hub_context: str = "") -> IngestionScores:
     )
 
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
+        from memory_lab.providers.llm_backend import LLMRequest
+        request = LLMRequest(
+            prompt=user_msg,
             system=system_msg,
-            messages=[{"role": "user", "content": user_msg}],
+            max_tokens=max_tokens,
         )
+        response = backend.complete_json(request)
+
+        if response.degraded:
+            reason = _failure_code_to_reason(response.failure_reason)
+            # Only open circuit for transient/server errors, not config issues
+            from memory_lab.providers.failure import FailureCode
+            transient_codes = {
+                FailureCode.PROVIDER_HTTP_ERROR,
+                FailureCode.RATE_LIMITED,
+                FailureCode.TIMEOUT,
+                FailureCode.UNKNOWN_ERROR,
+            }
+            if response.failure_reason in transient_codes:
+                _record_failure(Exception(str(response.failure_reason)))
+            logger.warning(
+                f"[ingestion_scorer] Backend degraded ({response.failure_reason}) — fallback"
+            )
+            return _fallback_scores(reason)
+
         _record_success()
-        raw = response.content[0].text.strip()
+        # Build raw JSON string from json_data for _parse_scores
+        raw = json.dumps(response.json_data) if response.json_data is not None else (response.text or "{}")
         return _parse_scores(raw)
     except Exception as e:
         _record_failure(e)
