@@ -11,7 +11,7 @@
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
 - Migrations: PostgreSQL schema `000..016`
 
-**Version**: `0.1.0b4` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b5` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -133,7 +133,7 @@ from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
 - **No provider-backed embeddings by default** — deterministic retrieval path works without any key
 - **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
 - **No hosted service** — self-hosted only; bring your own PostgreSQL
-- **No full API stability guarantee** — `0.1.0b4` is a public beta; breaking changes may occur before `1.0`
+- **No full API stability guarantee** — `0.1.0b5` is a public beta; breaking changes may occur before `1.0`
 - **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
 
 ---
@@ -152,50 +152,13 @@ Package readiness verified in staging (`pr1a_staging`):
 | API runtime smoke | PASS |
 | MCP runtime smoke | PASS |
 
-Wheel: `context_brain_memory_lab-0.1.0b4-py3-none-any.whl`
+Wheel: `context_brain_memory_lab-0.1.0b5-py3-none-any.whl`
 
 ---
 
 ## Scoring and Governance
 
-### Provider Abstraction Layer (v0.1.0b4)
-
- ships a provider-optional LLM backend abstraction:
-
--  ABC — single  contract; no streaming, no tool-calls in base
--  — default; , no external calls, no key required
--  — test fixture; 4 modes (fixed, empty, error, timeout)
--  — optional adapter; deferred import, no top-level
--  enum — typed failure reasons across all backends
--  — reads  env var;  is valid and default
-
- (the default) is always valid — no external calls, no crash.
-
-**Live Anthropic smoke note:** live end-to-end scoring via  was not
-exercised in the v0.1.0b4 public baseline (API key not present during verification).
-The optional Anthropic path is implemented and tested via mocks.
-Live smoke is deferred to a future gate with key injection.
-
-### Embedding Backends
-
- also ships a provider-optional embedding backend abstraction:
-
--  ABC — single  /  contract
--  — default; , no external calls, no key required
--  — test fixture; returns deterministic synthetic vectors
--  — optional adapter; deferred import, no top-level
-  - Requires  and Defaulting to user installation because normal site-packages is not writeable
-  - Default model: , default dims: 1536
-  - No-key / missing-package path: returns , empty vector, no crash
-
- (the default) is always valid — no external calls, no crash.
-
-**Live OpenAI embedding smoke note:** live end-to-end embedding via
-was not exercised in the v0.1.0b5 public baseline. All tests use mocked responses.
-Live smoke is deferred to a future gate with key injection.
-No retrieval behavior is changed in v0.1.0b5 — no consumer wiring in public package.
-
-### Provider Abstraction Layer (v0.1.0b4)
+### Provider Abstraction Layer (v0.1.0b5)
 
 `memory_lab.providers` ships a provider-optional LLM backend abstraction:
 
@@ -209,7 +172,7 @@ No retrieval behavior is changed in v0.1.0b5 — no consumer wiring in public pa
 `LLM_PROVIDER=none` (the default) is always valid — no external calls, no crash.
 
 **Live Anthropic smoke note:** live end-to-end scoring via `AnthropicLLMBackend` was not
-exercised in the v0.1.0b4 public baseline (API key not present during verification).
+exercised in the v0.1.0b5 public baseline (API key not present during verification).
 The optional Anthropic path is implemented and tested via mocks.
 Live smoke is deferred to a future gate with key injection.
 
