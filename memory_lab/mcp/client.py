@@ -121,3 +121,38 @@ class MemoryLabApiClient:
         if limit is not None:
             payload["limit"] = limit
         return self._request("POST", "/v1/retrieval/search", json_body=payload)
+
+    def decision_create(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return self._request("POST", "/decisions/", json_body=payload)
+
+    def decision_get(self, decision_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/decisions/{decision_id}")
+
+    def decision_list(self, status: Optional[str] = None, hub_id: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        if status is not None:
+            params["status"] = status
+        if hub_id is not None:
+            params["hub_id"] = hub_id
+        if limit is not None:
+            params["limit"] = limit
+        return self._request("GET", "/decisions/", params=params)
+
+    def decision_update_status(self, decision_id: str, decision_status: str) -> Dict[str, Any]:
+        return self._request("PATCH", f"/decisions/{decision_id}/status", json_body={"decision_status": decision_status})
+
+    def decision_lineage(self, decision_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/decisions/{decision_id}/lineage")
+
+    def decision_conflicts(self) -> Dict[str, Any]:
+        return self._request("GET", "/decisions/conflicts")
+
+    def decision_timeline(self, hub_id: Optional[str] = None, tags: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        if hub_id is not None:
+            params["hub_id"] = hub_id
+        if tags is not None:
+            params["tags"] = tags
+        if limit is not None:
+            params["limit"] = limit
+        return self._request("GET", "/decisions/timeline", params=params)

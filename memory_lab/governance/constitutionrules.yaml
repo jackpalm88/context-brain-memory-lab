@@ -1,0 +1,225 @@
+# Context Brain — Machine-Readable Constitution Rules
+# Phase 7a: Ingestion Scoring
+# Version: 1.0 | Based on: PHASE7_BRIEFING.md
+#
+# These rules are loaded at startup by ingestion_policy.py.
+# All threshold values can be overridden via env vars (see env_var fields).
+# Rule IDs are referenced in scoring code — never copy inline; always import by ID.
+
+metadata:
+  version: "1.1"
+  source_doc: ".planning/PHASE7_BRIEFING.md"
+  source_content_id: "c45c64f4"
+  phase7b_added: "2026-05-23"
+
+# ---------------------------------------------------------------------------
+# Principle-to-Rule mapping (Constitution Section 2)
+# ---------------------------------------------------------------------------
+principles:
+  - id: "P-I"
+    title: "Memory is selective, not exhaustive"
+    enforcement: "Scoring gate rejects content below min_composite_score"
+  - id: "P-II"
+    title: "Persistence is a cost, not a default"
+    enforcement: "Every save must have a score above 0 to persist"
+  - id: "P-IX"
+    title: "Retrieval quality begins at ingestion discipline"
+    enforcement: "Quality score below min_quality triggers rejection regardless of composite"
+
+# ---------------------------------------------------------------------------
+# Scoring axes (3-axis model from Phase 7 plan)
+# ---------------------------------------------------------------------------
+scoring:
+  axes:
+    quality:
+      id: "S-QUALITY"
+      principle: "P-IX"
+      description: >
+        Measures writing quality, factual density, and information value.
+        High quality: specific facts, clear reasoning, verifiable claims.
+        Low quality: vague summaries, filler text, redundant restatements.
+      weight: 0.35
+      min_score:
+        default: 0.4
+        env_var: CB_SCORE_MIN_QUALITY
+
+    relevance:
+      id: "S-RELEVANCE"
+      principle: "P-I"
+      description: >
+        Measures alignment with the agent's active context and hubs.
+        High relevance: directly addresses a known hub topic or active goal.
+        Low relevance: tangential, off-topic, or no hub connection.
+      weight: 0.35
+      min_score:
+        default: 0.0
+        env_var: CB_SCORE_MIN_RELEVANCE
+
+    novelty:
+      id: "S-NOVELTY"
+      principle: "P-II"
+      description: >
+        Measures how much new information this adds beyond what's already in CB.
+        High novelty: introduces new facts, angles, or conclusions.
+        Low novelty: repeats information already well-covered in CB.
+      weight: 0.30
+      min_score:
+        default: 0.0
+        env_var: CB_SCORE_MIN_NOVELTY
+
+  composite:
+    formula: "quality * 0.35 + relevance * 0.35 + novelty * 0.30"
+    min_score:
+      default: 0.5
+      env_var: CB_SCORE_MIN_COMPOSITE
+    persistent_threshold:
+      default: 0.7
+      env_var: CB_SCORE_PERSISTENT_THRESHOLD
+
+# ---------------------------------------------------------------------------
+# Tier routing thresholds (Phase 7b)
+# Constitution Principle IV: Memory has lifecycle states
+# Constitution Principle II: Persistence is a cost, not a default
+# ---------------------------------------------------------------------------
+tiers:
+  # discard: content never written to DB
+  discard:
+    id: "T-DISCARD"
+    principle: "P-I"
+    composite_max:
+      default: 0.3
+      env_var: CB_TIER_DISCARD_MAX
+    description: "Content below this composite score is not persisted. No DB write occurs."
+
+  # transient: session-scoped, auto-expires
+  transient:
+    id: "T-TRANSIENT"
+    principle: "P-II"
+    composite_min:
+      default: 0.3
+      env_var: CB_TIER_TRANSIENT_MIN
+    composite_max:
+      default: 0.5
+      env_var: CB_TIER_TRANSIENT_MAX
+    ttl_hours:
+      default: 24
+      env_var: CB_TIER_TRANSIENT_TTL_HOURS
+    description: "Low-signal content: saved but expires within 24h. Not retrieved by default."
+
+  # probationary: saved but not fully trusted yet
+  probationary:
+    id: "T-PROBATIONARY"
+    principle: "P-IV"
+    composite_min:
+      default: 0.5
+      env_var: CB_TIER_PROBATIONARY_MIN
+    composite_max:
+      default: 0.7
+      env_var: CB_TIER_PROBATIONARY_MAX
+    ttl_days:
+      default: 30
+      env_var: CB_TIER_PROBATIONARY_TTL_DAYS
+    description: >
+      Mid-signal content: saved, included in retrieval, but under review.
+      Promoted to persistent when retrieved >=3x or referenced by a decision_artifact.
+      Demoted to transient or archived after TTL if not used.
+
+  # persistent: full CB citizen
+  persistent:
+    id: "T-PERSISTENT"
+    principle: "P-I"
+    composite_min:
+      default: 0.7
+      env_var: CB_TIER_PERSISTENT_MIN
+    description: >
+      High-signal content: hub-linked, fully retrievable, long-lived.
+      Also assigned by circuit-open fallback when circuit is CLOSED and score >=0.7.
+
+  # decision_artifact: HUMAN GATE ONLY — never assigned by tier_router
+  decision_artifact:
+    id: "T-DECISION-ARTIFACT"
+    principle: "P-V"
+    assigned_by: "create_decision_memory router ONLY"
+    invariant: >
+      CRITICAL: tier_router MUST NEVER emit 'decision_artifact'.
+      This tier is set exclusively by the create_decision_memory endpoint after
+      explicit human action. Automatic elevation to decision_artifact is a
+      Constitution violation (Principle V: Human approval defines epistemic trust boundaries).
+
+# ---------------------------------------------------------------------------
+# Circuit breaker config (Pitfall #1, #5)
+# ---------------------------------------------------------------------------
+circuit_breaker:
+  id: "CB-SCORING"
+  failure_threshold: 3
+  window_seconds: 60
+  open_duration_seconds: 300
+  fallback_composite_score: 0.3
+  fallback_tier:
+    default: "transient"
+    env_var: CB_SCORE_FALLBACK_TIER
+
+# ---------------------------------------------------------------------------
+# Rejection rules (content that must not persist regardless of score)
+# ---------------------------------------------------------------------------
+rejection_rules:
+  - id: "R-SPECULATIVE"
+    principle: "P-I"
+    pattern: "speculative_without_grounding"
+    description: >
+      Content where the primary claim is explicitly marked as speculation,
+      assumption, or hypothesis without supporting evidence. Phrases like
+      "I think", "probably", "I assume" as the main factual claim.
+    action: "discard"
+
+  - id: "R-HALLUCINATION"
+    principle: "P-I"
+    pattern: "hallucination_indicators"
+    description: >
+      Content where the source appears to be AI-generated confabulation:
+      invented citations, URLs that don't exist, impossible dates.
+    action: "discard"
+
+  - id: "R-CIRCULAR"
+    principle: "P-I"
+    pattern: "circular_self_reference"
+    description: >
+      CB writing about CB behavior without external grounding. Scores as
+      0.0 quality if the only source is CB itself.
+    action: "discard"
+
+# ---------------------------------------------------------------------------
+# Scoring prompt template (referenced by ingestion_scorer.py)
+# ---------------------------------------------------------------------------
+scoring_prompt:
+  id: "SP-7A-V1"
+  model_preference: "claude-haiku-4-5-20251001"
+  max_tokens: 300
+  system: |
+    You are an epistemic quality scorer for a knowledge management system.
+    Your job is to evaluate content on three axes and return a JSON object.
+    Be objective and conservative — it is better to score low than to over-estimate.
+    Return ONLY valid JSON, no explanation outside the JSON.
+  user_template: |
+    Score this content on three axes from 0.0 to 1.0:
+
+    CONTENT:
+    {content_preview}
+
+    HUB_CONTEXT (topics this content should relate to, may be empty):
+    {hub_context}
+
+    Return JSON exactly:
+    {{
+      "quality": <float 0.0-1.0>,
+      "relevance": <float 0.0-1.0>,
+      "novelty": <float 0.0-1.0>,
+      "quality_reason": "<1 sentence>",
+      "relevance_reason": "<1 sentence>",
+      "novelty_reason": "<1 sentence>"
+    }}
+
+    Scoring guide:
+    - quality: factual density, clarity, verifiability (0=vague filler, 1=dense verifiable facts)
+    - relevance: alignment with hub_context topics (0=unrelated, 1=directly on-topic; if hub_context empty, score 0.5)
+    - novelty: new information not obviously redundant (0=pure restatement, 1=genuinely new insight)

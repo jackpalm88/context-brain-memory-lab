@@ -21,6 +21,13 @@ server.tool()(APPROVED_TOOLS["memory_lab_edge_get"])
 server.tool()(APPROVED_TOOLS["memory_lab_edge_list"])
 server.tool()(APPROVED_TOOLS["memory_lab_edge_archive"])
 server.tool()(APPROVED_TOOLS["memory_lab_retrieval_search"])
+server.tool()(APPROVED_TOOLS["create_decision_memory"])
+server.tool()(APPROVED_TOOLS["explain_decision"])
+server.tool()(APPROVED_TOOLS["list_decisions"])
+server.tool()(APPROVED_TOOLS["update_decision_status"])
+server.tool()(APPROVED_TOOLS["get_decision_lineage"])
+server.tool()(APPROVED_TOOLS["list_decision_conflicts"])
+server.tool()(APPROVED_TOOLS["get_decision_timeline"])
 
 
 if __name__ == "__main__":

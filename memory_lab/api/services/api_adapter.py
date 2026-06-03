@@ -5,6 +5,8 @@ from psycopg2.extras import RealDictCursor
 
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.hub_edge_store import HubEdgeStore
+from memory_lab.ingestion.scorer import score_content
+from memory_lab.governance.tier_router import route as tier_route
 
 
 class ApiAdapter:
@@ -18,9 +20,8 @@ class ApiAdapter:
     def _conn(self):
         return psycopg2.connect(self.database_url)
 
-    # Content: schema-safe minimal mode only (ID allocation only)
+    # Content: ID allocation + response-only governance scoring (no score persistence).
     def create_content_minimal(self, content: Optional[str] = None) -> Dict[str, Any]:
-        # Intentionally does not persist content body and does not write content_chunks.
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
@@ -32,11 +33,40 @@ class ApiAdapter:
                 row = cur.fetchone()
                 conn.commit()
 
+        event = score_content(content or "")
+        tier_decision = tier_route(
+            composite_score=event.scores.composite,
+            circuit_open=event.circuit_open,
+            quality_score=event.scores.quality,
+        )
+        tier = tier_decision.tier
+        tier_reason = tier_decision.reason
+
+        if event.fallback_reason:
+            governance_lines = [
+                f"score:fallback composite={event.scores.composite} reason={event.fallback_reason}",
+                f"tier:{tier} tier_reason:{tier_reason}",
+            ]
+        else:
+            governance_lines = [
+                f"score:quality={event.scores.quality} relevance={event.scores.relevance} novelty={event.scores.novelty} composite={event.scores.composite}",
+                f"tier:{tier} tier_reason:{tier_reason}",
+            ]
+
         return {
             "content_id": row["content_id"],
             "created": True,
-            "mode": "id_allocation_only",
-            "body_persistence": "not_supported_in_this_mode",
+            "mode": "governed_fallback" if event.fallback_reason else "governed",
+            "scores": {
+                "quality": event.scores.quality,
+                "relevance": event.scores.relevance,
+                "novelty": event.scores.novelty,
+                "composite": event.scores.composite,
+            },
+            "tier": tier,
+            "tier_reason": tier_reason,
+            "fallback_reason": event.fallback_reason,
+            "governance_lines": governance_lines,
         }
 
     def get_content_minimal(self, content_id: str) -> Optional[Dict[str, Any]]:
