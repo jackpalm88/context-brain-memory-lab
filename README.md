@@ -11,7 +11,7 @@
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
 - Migrations: PostgreSQL schema `000..016`
 
-**Version**: `0.1.0b2` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b3` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -129,7 +129,7 @@ from memory_lab.ingestion import scorer
 - **No provider-backed embeddings by default** — deterministic retrieval path works without any key
 - **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
 - **No hosted service** — self-hosted only; bring your own PostgreSQL
-- **No full API stability guarantee** — `0.1.0b2` is a public beta; breaking changes may occur before `1.0`
+- **No full API stability guarantee** — `0.1.0b3` is a public beta; breaking changes may occur before `1.0`
 - **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
 
 ---
@@ -148,7 +148,7 @@ Package readiness verified in staging (`pr1a_staging`):
 | API runtime smoke | PASS |
 | MCP runtime smoke | PASS |
 
-Wheel: `context_brain_memory_lab-0.1.0b2-py3-none-any.whl`
+Wheel: `context_brain_memory_lab-0.1.0b3-py3-none-any.whl`
 
 ---
 
@@ -205,6 +205,14 @@ Do not expose to untrusted networks without adding an auth layer.
 
 The following private modules are **not** included in this package:
 `audit.py`, `conflict_detector.py`, `ask_v2.py`
+
+---
+
+## Security & Privacy
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting, admin endpoint caveats,
+and secrets guidance. See [PRIVACY.md](PRIVACY.md) for data handling and
+telemetry policy.
 
 ---
 

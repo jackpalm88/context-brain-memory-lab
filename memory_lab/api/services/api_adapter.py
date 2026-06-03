@@ -42,6 +42,37 @@ class ApiAdapter:
         tier = tier_decision.tier
         tier_reason = tier_decision.reason
 
+        # Persist scoring/tier fields to content_items (Prestage 3 P3A)
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE content_items
+                       SET quality_score    = %s,
+                           relevance_score  = %s,
+                           novelty_score    = %s,
+                           composite_score  = %s,
+                           score_confidence = %s,
+                           circuit_open     = %s,
+                           tier             = %s::memory_tier,
+                           tier_assigned_at = NOW(),
+                           tier_reason      = %s
+                     WHERE content_id = %s::uuid
+                    """,
+                    (
+                        event.scores.quality,
+                        event.scores.relevance,
+                        event.scores.novelty,
+                        event.scores.composite,
+                        0.0,  # score_confidence: not exposed by IngestionScores; safe default
+                        event.circuit_open,
+                        tier,
+                        tier_reason,
+                        row["content_id"],
+                    ),
+                )
+                conn.commit()
+
         if event.fallback_reason:
             governance_lines = [
                 f"score:fallback composite={event.scores.composite} reason={event.fallback_reason}",
@@ -74,9 +105,21 @@ class ApiAdapter:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
-                    SELECT content_id::text AS content_id, created_at, updated_at
-                    FROM content_items
-                    WHERE content_id = %s::uuid
+                    SELECT content_id::text AS content_id,
+                           created_at, updated_at,
+                           tier::text AS tier,
+                           tier_assigned_at,
+                           tier_reason,
+                           quality_score,
+                           relevance_score,
+                           novelty_score,
+                           composite_score,
+                           score_confidence,
+                           circuit_open,
+                           retrieval_count,
+                           last_retrieved_at
+                      FROM content_items
+                     WHERE content_id = %s::uuid
                     """,
                     (content_id,),
                 )
@@ -85,11 +128,24 @@ class ApiAdapter:
         if not row:
             return None
 
+        def _iso(v):
+            return v.isoformat() if v else None
+
         return {
             "content_id": row["content_id"],
-            "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
-            "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
-            "mode": "id_allocation_only",
+            "created_at": _iso(row.get("created_at")),
+            "updated_at": _iso(row.get("updated_at")),
+            "tier": row.get("tier"),
+            "tier_assigned_at": _iso(row.get("tier_assigned_at")),
+            "tier_reason": row.get("tier_reason"),
+            "quality_score": row.get("quality_score"),
+            "relevance_score": row.get("relevance_score"),
+            "novelty_score": row.get("novelty_score"),
+            "composite_score": row.get("composite_score"),
+            "score_confidence": row.get("score_confidence"),
+            "circuit_open": row.get("circuit_open"),
+            "retrieval_count": row.get("retrieval_count"),
+            "last_retrieved_at": _iso(row.get("last_retrieved_at")),
         }
 
     def create_hub(self, payload: Dict[str, Any]) -> Dict[str, Any]:
