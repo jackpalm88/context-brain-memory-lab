@@ -3,7 +3,7 @@ Constitution loader for Memory Lab governance.
 
 Loads constitutionrules.yaml from the installed memory_lab.governance package.
 This is intentionally package-local: no private cwd lookup, no hardcoded
-staging path, and no /opt/contentingestor dependency.
+staging path, and no private source-tree dependency.
 """
 from __future__ import annotations
 

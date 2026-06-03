@@ -106,7 +106,7 @@ memory_lab/
   decisions/    decision CRUD, lineage, conflict detection
   governance/   tier router, ingestion policy, events, cleanup, override
   ingestion/    provider-optional scorer, models
-  providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic adapter)
+  providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic LLM + OpenAI Embedding adapters)
 migrations/
   000_base_schema.sql .. 016_add_governance_events.sql
 pyproject.toml
@@ -176,6 +176,25 @@ exercised in the v0.1.0b4 public baseline (API key not present during verificati
 The optional Anthropic path is implemented and tested via mocks.
 Live smoke is deferred to a future gate with key injection.
 
+### Embedding Backends
+
+ also ships a provider-optional embedding backend abstraction:
+
+-  ABC — single  /  contract
+-  — default; , no external calls, no key required
+-  — test fixture; returns deterministic synthetic vectors
+-  — optional adapter; deferred import, no top-level
+  - Requires  and Defaulting to user installation because normal site-packages is not writeable
+  - Default model: , default dims: 1536
+  - No-key / missing-package path: returns , empty vector, no crash
+
+ (the default) is always valid — no external calls, no crash.
+
+**Live OpenAI embedding smoke note:** live end-to-end embedding via
+was not exercised in the v0.1.0b5 public baseline. All tests use mocked responses.
+Live smoke is deferred to a future gate with key injection.
+No retrieval behavior is changed in v0.1.0b5 — no consumer wiring in public package.
+
 ### Provider Abstraction Layer (v0.1.0b4)
 
 `memory_lab.providers` ships a provider-optional LLM backend abstraction:
@@ -193,6 +212,25 @@ Live smoke is deferred to a future gate with key injection.
 exercised in the v0.1.0b4 public baseline (API key not present during verification).
 The optional Anthropic path is implemented and tested via mocks.
 Live smoke is deferred to a future gate with key injection.
+
+### Embedding Backends
+
+`memory_lab.providers` also ships a provider-optional embedding backend abstraction:
+
+- `EmbeddingBackend` ABC -- single `embed_text()` / `embed_batch()` contract
+- `NoopEmbeddingBackend` -- default; `degraded=True`, no external calls, no key required
+- `FakeEmbeddingBackend` -- test fixture; returns deterministic synthetic vectors
+- `OpenAIEmbeddingBackend` -- optional adapter; deferred import, no top-level `import openai`
+  - Requires `OPENAI_API_KEY` and `pip install "context-brain-memory-lab[openai]"`
+  - Default model: `text-embedding-3-small`, default dims: 1536
+  - No-key / missing-package path: returns `degraded=True`, empty vector, no crash
+
+`EMBEDDING_PROVIDER=none` (the default) is always valid -- no external calls, no crash.
+
+**Live OpenAI embedding smoke note:** live end-to-end embedding via OpenAIEmbeddingBackend
+was not exercised in the v0.1.0b5 public baseline. All tests use mocked responses.
+Live smoke is deferred to a future gate with key injection.
+No retrieval behavior is changed in v0.1.0b5 -- no consumer wiring in public package.
 
 ### Provider-Neutral Fallback Scoring
 
