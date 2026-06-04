@@ -9,6 +9,7 @@ def expand_query(
     max_hops: int = 1,
     min_confidence: float = 0.7,
     alias_store=None,  # AliasStore | None — optional to avoid circular import
+    workspace_id: Optional[str] = None,
 ) -> List[str]:
     expanded: Set[str] = {t.lower().strip() for t in query_terms}
 
@@ -21,7 +22,7 @@ def expand_query(
     for _ in range(max_hops):
         next_layer: Set[str] = set()
         for term in current_layer:
-            for neighbor in graph.get_neighbors(term, min_confidence):
+            for neighbor in graph.get_neighbors(term, min_confidence, workspace_id=workspace_id):
                 n = neighbor.lower().strip()
                 if n not in expanded:
                     expanded.add(n)

@@ -24,6 +24,7 @@ class HubStore:
         aliases: Optional[List[str]] = None,
         related_terms: Optional[List[str]] = None,
         workspace_id: Optional[str] = None,
+        workspace_uuid: Optional[str] = None,
         owner_defined: bool = True,
     ) -> Dict[str, Any]:
         with self._conn() as conn:
@@ -31,30 +32,37 @@ class HubStore:
                 cur.execute(
                     """
                     INSERT INTO cb_hubs
-                        (title, type, description, aliases, related_terms, workspace_id, owner_defined)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (title, type, description, aliases, related_terms, workspace_id, workspace_uuid, owner_defined)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::uuid, %s)
                     RETURNING hub_id::text, title, type, description, aliases, related_terms,
-                              status, owner_defined, workspace_id, created_at, updated_at
+                              status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
+                              created_at, updated_at
                     """,
-                    (title, type, description, aliases or [], related_terms or [], workspace_id, owner_defined),
+                    (title, type, description, aliases or [], related_terms or [], workspace_id, workspace_uuid, owner_defined),
                 )
                 conn.commit()
                 return dict(cur.fetchone())
 
-    def get_hub(self, hub_id: str) -> Optional[Dict[str, Any]]:
+    def get_hub(self, hub_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        conditions = ["h.hub_id = %s::uuid"]
+        params: List[Any] = [hub_id]
+        if workspace_id:
+            conditions.append("h.workspace_uuid = %s::uuid")
+            params.append(workspace_id)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
-                    """
+                    f"""
                     SELECT h.hub_id::text, h.title, h.type, h.description, h.aliases, h.related_terms,
-                           h.status, h.owner_defined, h.workspace_id, h.created_at, h.updated_at,
-                           COALESCE(ARRAY_AGG(hc.content_id) FILTER (WHERE hc.content_id IS NOT NULL), '{}') AS linked_content_ids
+                           h.status, h.owner_defined, h.workspace_id, h.workspace_uuid::text AS workspace_uuid,
+                           h.created_at, h.updated_at,
+                           COALESCE(ARRAY_AGG(hc.content_id) FILTER (WHERE hc.content_id IS NOT NULL), '{{}}') AS linked_content_ids
                     FROM cb_hubs h
                     LEFT JOIN cb_hub_content hc ON hc.hub_id = h.hub_id
-                    WHERE h.hub_id = %s::uuid
+                    WHERE {' AND '.join(conditions)}
                     GROUP BY h.hub_id
                     """,
-                    (hub_id,),
+                    tuple(params),
                 )
                 row = cur.fetchone()
                 return dict(row) if row else None
@@ -73,7 +81,8 @@ class HubStore:
                     UPDATE cb_hubs SET {set_clause}, updated_at = NOW()
                     WHERE hub_id = %s::uuid
                     RETURNING hub_id::text, title, type, description, aliases, related_terms,
-                              status, owner_defined, workspace_id, created_at, updated_at
+                              status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
+                              created_at, updated_at
                     """,
                     values,
                 )
@@ -81,17 +90,16 @@ class HubStore:
                 row = cur.fetchone()
                 return dict(row) if row else None
 
-    def list_hubs(
-        self, workspace_id: Optional[str] = None, status: str = "active"
-    ) -> List[Dict[str, Any]]:
+    def list_hubs(self, workspace_id: Optional[str] = None, status: str = "active") -> List[Dict[str, Any]]:
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if workspace_id is not None:
                     cur.execute(
                         """
                         SELECT hub_id::text, title, type, description, aliases, related_terms,
-                               status, owner_defined, workspace_id, created_at, updated_at
-                        FROM cb_hubs WHERE status = %s AND workspace_id = %s
+                               status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
+                               created_at, updated_at
+                        FROM cb_hubs WHERE status = %s AND workspace_uuid = %s::uuid
                         ORDER BY created_at DESC
                         """,
                         (status, workspace_id),
@@ -100,7 +108,8 @@ class HubStore:
                     cur.execute(
                         """
                         SELECT hub_id::text, title, type, description, aliases, related_terms,
-                               status, owner_defined, workspace_id, created_at, updated_at
+                               status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
+                               created_at, updated_at
                         FROM cb_hubs WHERE status = %s
                         ORDER BY created_at DESC
                         """,
@@ -108,40 +117,56 @@ class HubStore:
                     )
                 return [dict(r) for r in cur.fetchall()]
 
-    def link_content(self, hub_id: str, content_id: str) -> bool:
+    def link_content(self, hub_id: str, content_id: str, workspace_id: Optional[str] = None) -> bool:
         with self._conn() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                if workspace_id:
+                    cur.execute(
+                        "SELECT hub_id::text FROM cb_hubs WHERE hub_id = %s::uuid AND workspace_uuid = %s::uuid",
+                        (hub_id, workspace_id),
+                    )
+                    if not cur.fetchone():
+                        raise KeyError("hub not found in workspace")
+                    cur.execute(
+                        "SELECT content_id::text FROM content_items WHERE content_id = %s::uuid AND workspace_id = %s::uuid",
+                        (content_id, workspace_id),
+                    )
+                    if not cur.fetchone():
+                        raise KeyError("content not found in workspace")
                 cur.execute(
                     """
-                    INSERT INTO cb_hub_content (hub_id, content_id)
-                    VALUES (%s::uuid, %s)
+                    INSERT INTO cb_hub_content (hub_id, content_id, workspace_id)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid)
                     ON CONFLICT DO NOTHING
                     """,
-                    (hub_id, content_id),
+                    (hub_id, content_id, workspace_id),
                 )
                 conn.commit()
                 return True
 
-    def get_hub_content_ids(self, hub_id: str) -> List[str]:
+    def get_hub_content_ids(self, hub_id: str, workspace_id: Optional[str] = None) -> List[str]:
+        conditions = ["hc.hub_id = %s::uuid"]
+        params: List[Any] = [hub_id]
+        if workspace_id:
+            conditions.append("hc.workspace_id = %s::uuid")
+            conditions.append("ci.workspace_id = %s::uuid")
+            params.extend([workspace_id, workspace_id])
         with self._conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT content_id FROM cb_hub_content WHERE hub_id = %s::uuid",
-                    (hub_id,),
+                    f"""
+                    SELECT hc.content_id
+                    FROM cb_hub_content hc
+                    JOIN content_items ci ON ci.content_id = hc.content_id::uuid
+                    WHERE {' AND '.join(conditions)}
+                    """,
+                    tuple(params),
                 )
                 return [r[0] for r in cur.fetchall()]
 
     def match_query(self, query: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        Match query to an active hub. Priority order:
-          1. Exact title match
-          2. Exact alias match
-          3. Alias is a substring of the query (min 6 chars — spec §8 fuzzy match)
-          4. Exact related_term match
-        workspace_id scopes the search but falls back to global hubs (workspace_id IS NULL).
-        """
         q = query.strip().lower()
-        ws_clause = "AND (workspace_id = %s OR workspace_id IS NULL)" if workspace_id else ""
+        ws_clause = "AND (workspace_uuid = %s::uuid OR workspace_uuid IS NULL)" if workspace_id else ""
 
         def _params(base: list) -> list:
             return base + ([workspace_id] if workspace_id else [])
@@ -150,16 +175,12 @@ class HubStore:
             SELECT hub_id::text, title, aliases, related_terms
             FROM cb_hubs WHERE status = 'active'
         """
-
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 1. Exact title match
                 cur.execute(f"{select} AND LOWER(title) = %s {ws_clause} LIMIT 1", _params([q]))
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-
-                # 2. Any alias exact match
                 cur.execute(
                     f"""
                     {select}
@@ -171,8 +192,6 @@ class HubStore:
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-
-                # 3a. Alias substring: long alias (6+ chars) appears as substring in query
                 cur.execute(
                     f"""
                     {select}
@@ -188,8 +207,6 @@ class HubStore:
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-
-                # 3b. Short alias (3–5 chars) matched as a whole word in query (word-boundary)
                 cur.execute(
                     f"""
                     {select}
@@ -205,8 +222,6 @@ class HubStore:
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-
-                # 4. Any related_term exact match
                 cur.execute(
                     f"""
                     {select}
@@ -218,5 +233,4 @@ class HubStore:
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-
         return None

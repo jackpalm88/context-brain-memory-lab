@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List
 from .hybrid_search import hybrid_search
 from .store import GraphStore
 
-_ALLOWED_KWARGS = {"max_expanded_queries", "max_hops", "min_confidence", "graph_boost"}
+_ALLOWED_KWARGS = {"max_expanded_queries", "max_hops", "min_confidence", "graph_boost", "workspace_id", "vector_search_fn"}
 
 
 class CBGraphAdapter:
@@ -20,10 +20,11 @@ class CBGraphAdapter:
         self.rerank = rerank_fn
 
     def search(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+        vector_search_fn = kwargs.pop("vector_search_fn", self.vector_search)
         return hybrid_search(
             query=query,
             graph=self.graph,
-            vector_search_fn=self.vector_search,
+            vector_search_fn=vector_search_fn,
             rerank_fn=self.rerank,
             **{k: v for k, v in kwargs.items() if k in _ALLOWED_KWARGS},
         )

@@ -1,58 +1,107 @@
-"""PR1B minimal MCP tool handlers mapped to API-backed calls."""
+"""PR1B/P3C minimal MCP tool handlers mapped to API-backed calls."""
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional, List
 
-from .client import MemoryLabApiClient
+from .client import MemoryLabApiClient, MemoryLabApiError
 
 
 def _client() -> MemoryLabApiClient:
     return MemoryLabApiClient.from_env()
 
 
+def _structured_api_error(exc: MemoryLabApiError) -> Dict[str, Any]:
+    body_json: Any = None
+    if exc.body:
+        try:
+            body_json = json.loads(exc.body)
+        except ValueError:
+            body_json = None
+    return {
+        "ok": False,
+        "error": {
+            "type": "memory_lab_api_error",
+            "message": str(exc),
+            "method": exc.method,
+            "url": exc.url,
+            "status_code": exc.status_code,
+            "body": exc.body,
+            "body_json": body_json,
+        },
+    }
+
+
+def _call_api(fn, *args, **kwargs) -> Dict[str, Any]:
+    try:
+        return fn(*args, **kwargs)
+    except MemoryLabApiError as exc:
+        return _structured_api_error(exc)
+
+
 def memory_lab_health() -> Dict[str, Any]:
-    return _client().health()
+    return _call_api(_client().health)
 
 
-def memory_lab_content_create_id(content: Optional[str] = None) -> Dict[str, Any]:
-    return _client().content_create_id(content=content)
+def memory_lab_content_create_id(content: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().content_create_id, content=content, workspace_id=workspace_id)
 
 
-def memory_lab_content_get(content_id: str) -> Dict[str, Any]:
-    return _client().content_get(content_id=content_id)
+def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
-def memory_lab_hub_create(title: str, hub_type: Optional[str] = None, description: Optional[str] = None) -> Dict[str, Any]:
-    return _client().hub_create(title=title, hub_type=hub_type, description=description)
+def memory_lab_hub_create(
+    title: str,
+    hub_type: Optional[str] = None,
+    description: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(_client().hub_create, title=title, hub_type=hub_type, description=description, workspace_id=workspace_id)
 
 
-def memory_lab_hub_get(hub_id: str) -> Dict[str, Any]:
-    return _client().hub_get(hub_id=hub_id)
+def memory_lab_hub_get(hub_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().hub_get, hub_id=hub_id, workspace_id=workspace_id)
 
 
-def memory_lab_hub_link_content(hub_id: str, content_id: str) -> Dict[str, Any]:
-    return _client().hub_link_content(hub_id=hub_id, content_id=content_id)
+def memory_lab_hub_link_content(hub_id: str, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().hub_link_content, hub_id=hub_id, content_id=content_id, workspace_id=workspace_id)
 
 
-def memory_lab_edge_create(source_hub_id: str, target_hub_id: str, edge_type: str) -> Dict[str, Any]:
-    return _client().edge_create(source_hub_id=source_hub_id, target_hub_id=target_hub_id, edge_type=edge_type)
+def memory_lab_edge_create(
+    source_hub_id: str,
+    target_hub_id: str,
+    edge_type: str,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().edge_create,
+        source_hub_id=source_hub_id,
+        target_hub_id=target_hub_id,
+        edge_type=edge_type,
+        workspace_id=workspace_id,
+    )
 
 
-def memory_lab_edge_get(edge_id: str) -> Dict[str, Any]:
-    return _client().edge_get(edge_id=edge_id)
+def memory_lab_edge_get(edge_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().edge_get, edge_id=edge_id, workspace_id=workspace_id)
 
 
-def memory_lab_edge_list(hub_id: Optional[str] = None, include_archived: Optional[bool] = None) -> Dict[str, Any]:
-    return _client().edge_list(hub_id=hub_id, include_archived=include_archived)
+def memory_lab_edge_list(
+    hub_id: Optional[str] = None,
+    include_archived: Optional[bool] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(_client().edge_list, hub_id=hub_id, include_archived=include_archived, workspace_id=workspace_id)
 
 
-def memory_lab_edge_archive(edge_id: str) -> Dict[str, Any]:
-    return _client().edge_archive(edge_id=edge_id)
+def memory_lab_edge_archive(edge_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().edge_archive, edge_id=edge_id, workspace_id=workspace_id)
 
 
-def memory_lab_retrieval_search(query: str, limit: Optional[int] = None) -> Dict[str, Any]:
-    return _client().retrieval_search(query=query, limit=limit)
+def memory_lab_retrieval_search(query: str, limit: Optional[int] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().retrieval_search, query=query, limit=limit, workspace_id=workspace_id)
 
 
 def create_decision_memory(
@@ -69,6 +118,7 @@ def create_decision_memory(
     contradicting_evidence: Optional[str] = None,
     confidence_level: str = "medium",
     decision_tags: Optional[List[str]] = None,
+    workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "title": title,
@@ -93,31 +143,46 @@ def create_decision_memory(
         payload["contradicting_evidence"] = contradicting_evidence
     if decision_tags is not None:
         payload["decision_tags"] = decision_tags
-    return _client().decision_create(payload)
+    return _call_api(_client().decision_create, payload, workspace_id=workspace_id)
 
 
-def explain_decision(decision_id: str) -> Dict[str, Any]:
-    return _client().decision_get(decision_id)
+def explain_decision(decision_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().decision_get, decision_id, workspace_id=workspace_id)
 
 
-def list_decisions(status: Optional[str] = None, hub_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
-    return _client().decision_list(status=status, hub_id=hub_id, limit=limit)
+def list_decisions(
+    status: Optional[str] = None,
+    hub_id: Optional[str] = None,
+    limit: int = 20,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(_client().decision_list, status=status, hub_id=hub_id, limit=limit, workspace_id=workspace_id)
 
 
-def update_decision_status(decision_id: str, decision_status: str) -> Dict[str, Any]:
-    return _client().decision_update_status(decision_id=decision_id, decision_status=decision_status)
+def update_decision_status(decision_id: str, decision_status: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(
+        _client().decision_update_status,
+        decision_id=decision_id,
+        decision_status=decision_status,
+        workspace_id=workspace_id,
+    )
 
 
-def get_decision_lineage(decision_id: str) -> Dict[str, Any]:
-    return _client().decision_lineage(decision_id)
+def get_decision_lineage(decision_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().decision_lineage, decision_id, workspace_id=workspace_id)
 
 
-def list_decision_conflicts() -> Dict[str, Any]:
-    return _client().decision_conflicts()
+def list_decision_conflicts(workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().decision_conflicts, workspace_id=workspace_id)
 
 
-def get_decision_timeline(hub_id: Optional[str] = None, tags: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
-    return _client().decision_timeline(hub_id=hub_id, tags=tags, limit=limit)
+def get_decision_timeline(
+    hub_id: Optional[str] = None,
+    tags: Optional[str] = None,
+    limit: int = 50,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(_client().decision_timeline, hub_id=hub_id, tags=tags, limit=limit, workspace_id=workspace_id)
 
 
 APPROVED_TOOLS = {

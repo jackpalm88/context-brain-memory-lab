@@ -1,6 +1,6 @@
 # Context Brain Memory Lab
 
-**context-brain-memory-lab** is a provider-neutral, installable Python runtime for governed agent memory — structured around hub-linked knowledge, decision lineage, and retrieval discipline rather than raw vector storage.
+**context-brain-memory-lab** is a provider-neutral, installable Python runtime for governed agent memory — structured around hub-linked knowledge, decision lineage, workspace-aware retrieval, and retrieval discipline rather than raw vector storage.
 
 - API surface: FastAPI (`memory_lab.api`)
 - MCP surface: Model Context Protocol server (`memory_lab.mcp`)
@@ -9,9 +9,10 @@
 - Decision memory: Decision CRUD, lineage, conflict detection (`memory_lab.decisions`)
 - Governance tier: Quality scoring, tier routing, override, cleanup (`memory_lab.governance`)
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
-- Migrations: PostgreSQL schema `000..016`
+- Workspace foundation: default workspace bootstrap, API/MCP workspace context propagation, and retrieval workspace isolation
+- Migrations: PostgreSQL schema `000..021`
 
-**Version**: `0.1.0b5` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b6` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -24,6 +25,8 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Decision memory and lineage (what was decided and why)
 - Retrieval discipline: graph-aware, hub-boosted, score-transparent
 - API + MCP surfaces — works with any LLM client that speaks HTTP or MCP
+- Workspace-aware API/MCP context propagation for local-dev workspace separation
+- Retrieval workspace isolation for API and MCP retrieval paths
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -43,14 +46,14 @@ git clone https://github.com/jackpalm88/context-brain-memory-lab.git
 cd context-brain-memory-lab
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
+```
 
 For local setup, see [docs/INSTALL.md](docs/INSTALL.md).
-```
 
 ### Configure
 
 ```bash
-export DATABASE_URL="postgresql://user:password@localhost:5432/memory_lab"
+export DATABASE_URL="postgresql://user:***@localhost:5432/memory_lab"
 ```
 
 Provider keys are **not required** for the baseline runtime:
@@ -65,7 +68,7 @@ Optional — enable provider-backed embeddings only if you have a key and want s
 
 ```bash
 export EMBEDDING_PROVIDER=openai
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=***
 ```
 
 ### Run migrations
@@ -73,6 +76,8 @@ export OPENAI_API_KEY=sk-...
 ```bash
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
+
+The public beta schema includes migrations `000..021`, including the Prestage 3 workspace foundation migrations.
 
 ### Start the API runtime
 
@@ -87,11 +92,25 @@ curl http://localhost:8000/health
 # {"status": "ok"}
 ```
 
+### Workspace context: API
+
+The API supports an optional `X-Workspace-ID` header for workspace-aware requests:
+
+```bash
+curl http://localhost:8000/retrieval/search   -H "X-Workspace-ID: <workspace-uuid>"
+```
+
+If no `X-Workspace-ID` header is provided, the runtime uses the default workspace for local-dev compatibility. Unknown or invalid workspace IDs should be treated as structured errors rather than silently crossing workspace boundaries.
+
+This is **workspace foundation**, not tenant-safe production security. `X-Workspace-ID` is context propagation, not authentication or authorization.
+
 ### Start the MCP runtime
 
 ```bash
 python -m memory_lab.mcp.server
 ```
+
+MCP wrapper/tool calls can pass an optional `workspace_id` argument. If omitted, the MCP runtime follows the same local-dev default workspace behavior where configured. This proves MCP workspace context propagation at the wrapper/tool level; it does not claim separate protocol-level MCP transport proof unless a dedicated transport smoke is run.
 
 ---
 
@@ -100,15 +119,15 @@ python -m memory_lab.mcp.server
 ```
 memory_lab/
   bootstrap/    config, store init, smoke
-  api/          FastAPI routers, services, policies
-  graph/        hub store, edge store, hybrid search, expansion
-  mcp/          MCP server, tools, client
+  api/          FastAPI routers, workspace context, services, policies
+  graph/        hub store, edge store, hybrid search, expansion, workspace-scoped retrieval helpers
+  mcp/          MCP server, tools, client with workspace_id propagation
   decisions/    decision CRUD, lineage, conflict detection
   governance/   tier router, ingestion policy, events, cleanup, override
   ingestion/    provider-optional scorer, models
   providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic LLM + OpenAI Embedding adapters)
 migrations/
-  000_base_schema.sql .. 016_add_governance_events.sql
+  000_base_schema.sql .. 021_add_workspace_fk_constraints_not_valid.sql
 pyproject.toml
 ```
 
@@ -127,38 +146,61 @@ from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
 
 ---
 
+## Workspace foundation in v0.1.0b6
+
+This public beta adds the Prestage 3 workspace foundation:
+
+- Workspace schema foundation with `cb_workspaces` and default workspace bootstrap
+- API workspace context propagation across content, hubs, hub links, edges, decisions, and retrieval surfaces
+- MCP workspace context propagation through wrapper/tool `workspace_id` handling
+- Retrieval workspace isolation for API and MCP retrieval paths
+- Hub-linked retrieval scoping
+- Graph traversal / neighbor / edge expansion scoping
+- Decision list/timeline/conflict regression scoping
+- Default workspace behavior for local-dev compatibility
+
+This is an app/schema-level workspace foundation. It is useful for local development, public beta evaluation, and future auth/RBAC design, but it is not production multi-user security.
+
+---
+
 ## What this does not claim
 
-- **No production auth / multi-user access control** — single-tenant baseline only
+- **No auth/RBAC** — there is no production authentication or role-based authorization boundary in this beta
+- **Not production tenancy** — workspace isolation is app/schema-level context scoping, not tenant-safe production isolation
+- **Not Full Context Brain** — this package is a bounded Memory Lab public beta, not the full private Context Brain system
+- **No production multi-user security** — do not treat `X-Workspace-ID` or MCP `workspace_id` as a trusted identity boundary
 - **No provider-backed embeddings by default** — deterministic retrieval path works without any key
 - **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
 - **No hosted service** — self-hosted only; bring your own PostgreSQL
-- **No full API stability guarantee** — `0.1.0b5` is a public beta; breaking changes may occur before `1.0`
+- **No protocol-level MCP transport proof by default** — MCP workspace propagation is wrapper/tool-level unless a separate transport smoke is published
+- **No full API stability guarantee** — `0.1.0b6` is a public beta; breaking changes may occur before `1.0`
 - **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
 
 ---
 
 ## Runtime proven
 
-Package readiness verified in staging (`pr1a_staging`):
+Package readiness and workspace foundation behavior were verified in staging (`pr1a_staging`) before public release preparation:
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS |
-| `py_compile` 34 modules | PASS |
-| Import smoke (7 namespaces) | PASS |
-| `python -m build` wheel + sdist | PASS |
-| `twine check` | PASS |
-| API runtime smoke | PASS |
-| MCP runtime smoke | PASS |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b6 final proof |
+| `py_compile` / import smoke | Required in final package proof |
+| `python -m build` wheel + sdist | Required after version alignment |
+| `twine check` | Required after build |
+| API workspace context propagation smoke | PASS in Prestage 3 evidence |
+| MCP workspace context propagation smoke | PASS at wrapper/tool level in Prestage 3 evidence |
+| Retrieval workspace isolation smoke | PASS in Prestage 3 evidence |
+| Provider calls required | NO |
+| Disposable teardown | PASS in Prestage 3 evidence |
 
-Wheel: `context_brain_memory_lab-0.1.0b5-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b6-py3-none-any.whl`
 
 ---
 
 ## Scoring and Governance
 
-### Provider Abstraction Layer (v0.1.0b5)
+### Provider Abstraction Layer
 
 `memory_lab.providers` ships a provider-optional LLM backend abstraction:
 
@@ -171,34 +213,27 @@ Wheel: `context_brain_memory_lab-0.1.0b5-py3-none-any.whl`
 
 `LLM_PROVIDER=none` (the default) is always valid — no external calls, no crash.
 
-**Live Anthropic smoke note:** live end-to-end scoring via `AnthropicLLMBackend` was not
-exercised in the v0.1.0b5 public baseline (API key not present during verification).
-The optional Anthropic path is implemented and tested via mocks.
-Live smoke is deferred to a future gate with key injection.
+**Live Anthropic smoke note:** live end-to-end scoring via `AnthropicLLMBackend` was not exercised in the public baseline because provider keys are not required. The optional Anthropic path is implemented and tested via mocks. Live smoke is deferred to a future provider-specific gate with key injection.
 
 ### Embedding Backends
 
 `memory_lab.providers` also ships a provider-optional embedding backend abstraction:
 
-- `EmbeddingBackend` ABC -- single `embed_text()` / `embed_batch()` contract
-- `NoopEmbeddingBackend` -- default; `degraded=True`, no external calls, no key required
-- `FakeEmbeddingBackend` -- test fixture; returns deterministic synthetic vectors
-- `OpenAIEmbeddingBackend` -- optional adapter; deferred import, no top-level `import openai`
+- `EmbeddingBackend` ABC — single `embed_text()` / `embed_batch()` contract
+- `NoopEmbeddingBackend` — default; `degraded=True`, no external calls, no key required
+- `FakeEmbeddingBackend` — test fixture; returns deterministic synthetic vectors
+- `OpenAIEmbeddingBackend` — optional adapter; deferred import, no top-level `import openai`
   - Requires `OPENAI_API_KEY` and `pip install "context-brain-memory-lab[openai]"`
   - Default model: `text-embedding-3-small`, default dims: 1536
   - No-key / missing-package path: returns `degraded=True`, empty vector, no crash
 
-`EMBEDDING_PROVIDER=none` (the default) is always valid -- no external calls, no crash.
+`EMBEDDING_PROVIDER=none` (the default) is always valid — no external calls, no crash.
 
-**Live OpenAI embedding smoke note:** live end-to-end embedding via OpenAIEmbeddingBackend
-was not exercised in the v0.1.0b5 public baseline. All tests use mocked responses.
-Live smoke is deferred to a future gate with key injection.
-No retrieval behavior is changed in v0.1.0b5 -- no consumer wiring in public package.
+**Live OpenAI embedding smoke note:** live end-to-end embedding via `OpenAIEmbeddingBackend` was not exercised in the public baseline. All tests use mocked responses. Live smoke is deferred to a future provider-specific gate with key injection.
 
 ### Provider-Neutral Fallback Scoring
 
-Without `ANTHROPIC_API_KEY`: all scores default to `0.30` (composite=0.30), tier=`transient`,
-`fallback_reason` exposed in response. No crash, no missing fields.
+Without `ANTHROPIC_API_KEY`: all scores default to `0.30` (composite=0.30), tier=`transient`, and `fallback_reason` is exposed in response. No crash, no missing fields.
 
 ```json
 {
@@ -215,32 +250,27 @@ Without `ANTHROPIC_API_KEY`: all scores default to `0.30` (composite=0.30), tier
 
 ### Optional Anthropic Scoring
 
-Set `ANTHROPIC_API_KEY` to enable live quality/relevance/novelty scoring via the Anthropic API.
-Without it, fallback composite scores are used (see above).
+Set `ANTHROPIC_API_KEY` to enable live quality/relevance/novelty scoring via the Anthropic API. Without it, fallback composite scores are used (see above).
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=***
 ```
 
 When enabled, `mode` changes to `"governed"` and scores reflect actual content quality.
 
 ### Decision Memory Runtime
 
-Decision memory (create, retrieve, supersede) is fully available without any provider key.
-No `ANTHROPIC_API_KEY` required for decision memory operations.
+Decision memory (create, retrieve, supersede) is fully available without any provider key. No `ANTHROPIC_API_KEY` is required for decision memory operations.
 
 ```bash
-curl -X POST http://localhost:8000/decisions/ \
-  -H "Content-Type: application/json" \
-  -d '{"title": "...", "decision_reason": "...", "decision_status": "active"}'
+curl -X POST http://localhost:8000/decisions/   -H "Content-Type: application/json"   -d '{"title": "...", "decision_reason": "...", "decision_status": "active"}'
 ```
 
 ### Admin Endpoints Caveat
 
-Admin endpoints (`/admin/cleanup/ttl`, `/admin/content/{id}/tier/override`,
-`/admin/content/{id}/tier/rollback`) are unauthenticated in this release.
-Intended for local and development use only.
-Do not expose to untrusted networks without adding an auth layer.
+Admin endpoints (`/admin/cleanup/ttl`, `/admin/content/{id}/tier/override`, `/admin/content/{id}/tier/rollback`) are unauthenticated in this release. They are intended for local and development use only.
+
+Do not expose admin endpoints to untrusted networks without adding an auth layer. Admin endpoint caveats remain separate from workspace foundation; workspace IDs do not make admin endpoints production-safe.
 
 ### Excluded Modules
 
@@ -251,15 +281,13 @@ The following private modules are **not** included in this package:
 
 ## Security & Privacy
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting, admin endpoint caveats,
-and secrets guidance. See [PRIVACY.md](PRIVACY.md) for data handling and
-telemetry policy.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting, admin endpoint caveats, and secrets guidance. See [PRIVACY.md](PRIVACY.md) for data handling and telemetry policy.
 
 ---
 
 ## Related
 
-- **Context Brain (Public Alpha)** — positioning, governance model, GPT Actions schema, MCP tool docs:
+- **Context Brain (Public Alpha)** — positioning, governance model, GPT Actions schema, MCP tool docs:  
   https://github.com/jackpalm88/context-brain-public-alpha
 
 ---
