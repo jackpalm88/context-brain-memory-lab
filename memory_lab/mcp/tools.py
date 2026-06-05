@@ -12,22 +12,33 @@ def _client() -> MemoryLabApiClient:
     return MemoryLabApiClient.from_env()
 
 
+def _redact(value: Any) -> Any:
+    if isinstance(value, str):
+        return MemoryLabApiClient.redact_sensitive(value)
+    if isinstance(value, dict):
+        return {k: _redact(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v) for v in value]
+    return value
+
+
 def _structured_api_error(exc: MemoryLabApiError) -> Dict[str, Any]:
+    safe_body = _redact(exc.body)
     body_json: Any = None
-    if exc.body:
+    if safe_body:
         try:
-            body_json = json.loads(exc.body)
+            body_json = _redact(json.loads(safe_body))
         except ValueError:
             body_json = None
     return {
         "ok": False,
         "error": {
             "type": "memory_lab_api_error",
-            "message": str(exc),
+            "message": _redact(str(exc)),
             "method": exc.method,
-            "url": exc.url,
+            "url": _redact(exc.url),
             "status_code": exc.status_code,
-            "body": exc.body,
+            "body": safe_body,
             "body_json": body_json,
         },
     }

@@ -10,9 +10,10 @@
 - Governance tier: Quality scoring, tier routing, override, cleanup (`memory_lab.governance`)
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
 - Workspace foundation: default workspace bootstrap, API/MCP workspace context propagation, and retrieval workspace isolation
-- Migrations: PostgreSQL schema `000..021`
+- Authentication and RBAC: API key auth, workspace membership enforcement, six-role RBAC model across all API and MCP surfaces
+- Migrations: PostgreSQL schema `000..026`
 
-**Version**: `0.1.0b6` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b7` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -77,7 +78,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..021`, including the Prestage 3 workspace foundation migrations.
+The public beta schema includes migrations `000..026`, covering the Prestage 3 workspace foundation and the v0.1.0b7 auth/RBAC migrations.
 
 ### Start the API runtime
 
@@ -127,7 +128,7 @@ memory_lab/
   ingestion/    provider-optional scorer, models
   providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic LLM + OpenAI Embedding adapters)
 migrations/
-  000_base_schema.sql .. 021_add_workspace_fk_constraints_not_valid.sql
+  000_base_schema.sql .. 026_add_auth_indexes_constraints.sql
 pyproject.toml
 ```
 
@@ -148,7 +149,7 @@ from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
 
 ## Workspace foundation in v0.1.0b6
 
-This public beta adds the Prestage 3 workspace foundation:
+v0.1.0b6 added the Prestage 3 workspace foundation:
 
 - Workspace schema foundation with `cb_workspaces` and default workspace bootstrap
 - API workspace context propagation across content, hubs, hub links, edges, decisions, and retrieval surfaces
@@ -163,18 +164,83 @@ This is an app/schema-level workspace foundation. It is useful for local develop
 
 ---
 
+## Authentication and RBAC in v0.1.0b7
+
+v0.1.0b7 adds API key authentication and workspace role-based access control (RBAC) across all API and MCP surfaces. Migrations `022..026` add the auth/RBAC schema layer.
+
+### API key authentication
+
+All API and MCP requests require a Bearer token:
+
+```bash
+curl http://localhost:8000/v1/hubs \
+  -H "Authorization: Bearer <token>" \
+  -H "X-Workspace-ID: <workspace-uuid>"
+```
+
+API keys are stored as SHA-256 hashes only — the plain-text token is never stored and cannot be recovered if lost.
+
+### Service-agent tokens
+
+```bash
+export MEMORY_LAB_API_TOKEN=<token>       # direct API use
+export MEMORY_LAB_MCP_API_TOKEN=<token>   # MCP client use
+```
+
+Both accept the same token format. The MCP client passes `Authorization: Bearer <token>` to the API automatically.
+
+### Workspace membership and X-Workspace-ID
+
+All API and MCP operations require active workspace membership. Callers without membership receive `403 workspace_membership_required`.
+
+`X-Workspace-ID` remains a workspace **selector**, not auth. It selects the workspace context but does not authenticate the caller. Authentication is always via the Bearer token; membership and role determine access.
+
+### RBAC role model
+
+Six roles are enforced at every endpoint via `require_permission()`:
+
+| Role | Description |
+|---|---|
+| `owner` | Full access including admin endpoints |
+| `admin` | Full access including admin endpoints |
+| `writer` | Read and write; no admin |
+| `reader` | Read-only |
+| `service_agent` | Automated service access; read and write; no admin |
+| `auditor` | Read-only; audit event access |
+
+### Admin endpoint protection
+
+Admin endpoints (`/admin/cleanup/ttl`, `/admin/content/{id}/tier/override`, `/admin/content/{id}/tier/rollback`) require `owner` or `admin` role. All other roles receive `403 role_forbidden`.
+
+Admin MCP tools are not exposed. The 32 public MCP tools cover content, hub, edge, decision, and retrieval surfaces only.
+
+### Audit events
+
+- `auth.deny` events are written to `cb_audit_events` on every rejected request. No plain-text token is stored in audit metadata.
+- `admin.action` events are written on every successful admin operation.
+
+### Local-dev bypass caveat
+
+`MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS=true` is available for local development only. It still requires a valid auth subject and active workspace membership. **Do not enable in any deployed environment** — it is explicitly unsafe for production.
+
+---
+
 ## What this does not claim
 
-- **No auth/RBAC** — there is no production authentication or role-based authorization boundary in this beta
-- **Not production tenancy** — workspace isolation is app/schema-level context scoping, not tenant-safe production isolation
-- **Not Full Context Brain** — this package is a bounded Memory Lab public beta, not the full private Context Brain system
-- **No production multi-user security** — do not treat `X-Workspace-ID` or MCP `workspace_id` as a trusted identity boundary
+- **not production multi-user tenancy** — auth/RBAC is implemented for local and public beta use. It does not constitute a production multi-user tenancy claim. No hosted deployment is provided.
+- **not Full Context Brain** — this package is a bounded Memory Lab public beta, not the full private Context Brain system
+- **No OIDC/SSO** — only API key authentication is implemented; no OAuth2, OIDC, or SSO
+- **No password auth** — only hashed API keys are supported; no password or credential login
+- **No hosted service** — self-hosted only; bring your own PostgreSQL
+- **No reasoning/ask_v2** — reasoning layer is not included in this release
+- **No classify pipeline** — classify/embed/store pipeline is not included in this release
+- **No conflict detector** — conflict detection extraction is not included in this release
 - **No provider-backed embeddings by default** — deterministic retrieval path works without any key
 - **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
-- **No hosted service** — self-hosted only; bring your own PostgreSQL
 - **No protocol-level MCP transport proof by default** — MCP workspace propagation is wrapper/tool-level unless a separate transport smoke is published
-- **No full API stability guarantee** — `0.1.0b6` is a public beta; breaking changes may occur before `1.0`
+- **No full API stability guarantee** — `0.1.0b7` is a public beta; breaking changes may occur before `1.0`
 - **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
+- **No 027+ migrations** — public migration chain stops at `026`; classification_history, discovered_domains, and conflict schema are not yet included
 
 ---
 
@@ -184,7 +250,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b6 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b7 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
@@ -194,7 +260,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | Provider calls required | NO |
 | Disposable teardown | PASS in Prestage 3 evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b6-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b7-py3-none-any.whl`
 
 ---
 
@@ -266,11 +332,11 @@ Decision memory (create, retrieve, supersede) is fully available without any pro
 curl -X POST http://localhost:8000/decisions/   -H "Content-Type: application/json"   -d '{"title": "...", "decision_reason": "...", "decision_status": "active"}'
 ```
 
-### Admin Endpoints Caveat
+### Admin Endpoints
 
-Admin endpoints (`/admin/cleanup/ttl`, `/admin/content/{id}/tier/override`, `/admin/content/{id}/tier/rollback`) are unauthenticated in this release. They are intended for local and development use only.
+Admin endpoints (`/admin/cleanup/ttl`, `/admin/content/{id}/tier/override`, `/admin/content/{id}/tier/rollback`) require `owner` or `admin` role. All other roles receive `403 role_forbidden`. There is no unauthenticated admin success path — the local-dev bypass still enforces workspace membership and role.
 
-Do not expose admin endpoints to untrusted networks without adding an auth layer. Admin endpoint caveats remain separate from workspace foundation; workspace IDs do not make admin endpoints production-safe.
+Admin MCP tools are not exposed via MCP. Admin operations are available through the API only, with RBAC enforced.
 
 ### Excluded Modules
 

@@ -1,9 +1,10 @@
 """
 P2C bounded cleanup admin route.
 
-Caveat: this is an unauthenticated admin endpoint in the reviewed public
-surface. Deployment/network controls must protect it. P2C keeps the route
-bounded and dry-run safe; it does not redesign auth.
+Auth/RBAC status: this admin endpoint is protected by the API auth layer via
+``require_permission("admin.cleanup")``. Only owner/admin workspace members may
+call it. Older P2C public-baseline notes described this route as unauthenticated;
+that wording is superseded by the accepted Auth/RBAC API enforcement layer.
 """
 from __future__ import annotations
 
@@ -12,11 +13,13 @@ import uuid
 from typing import List, Optional
 
 import psycopg2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from psycopg2.extras import RealDictCursor
 
+from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
+from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.governance import events as gov
 
 logger = logging.getLogger(__name__)
@@ -51,7 +54,8 @@ def _conn():
 
 
 @router.post("/admin/cleanup/ttl", response_model=CleanupResult)
-def cleanup_ttl(body: CleanupRequest) -> CleanupResult:
+def cleanup_ttl(body: CleanupRequest, auth: AuthContext = Depends(require_permission("admin.cleanup"))) -> CleanupResult:
+    effective_workspace_id = auth.workspace_id
     trace_id = str(uuid.uuid4())
     escalations_expired = 0
     content_archived = 0
@@ -95,7 +99,7 @@ def cleanup_ttl(body: CleanupRequest) -> CleanupResult:
             )
             has_workspace_id = bool(cur.fetchone()["has_workspace_id"])
 
-            if body.workspace_id and not has_workspace_id:
+            if effective_workspace_id and not has_workspace_id:
                 raise HTTPException(
                     status_code=422,
                     detail="workspace_id filtering is unavailable in the public baseline: content_items.workspace_id is absent",
@@ -104,9 +108,9 @@ def cleanup_ttl(body: CleanupRequest) -> CleanupResult:
             if has_workspace_id:
                 ws_filter = ""
                 params = []
-                if body.workspace_id:
+                if effective_workspace_id:
                     ws_filter = "AND workspace_id = %s::uuid"
-                    params.append(body.workspace_id)
+                    params.append(effective_workspace_id)
 
                 cur.execute(
                     f"""

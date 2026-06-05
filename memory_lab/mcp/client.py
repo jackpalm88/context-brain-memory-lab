@@ -16,6 +16,7 @@ P3C workspace boundary:
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -46,6 +47,7 @@ class MemoryLabApiClient:
     base_url: str
     timeout_s: float = 15.0
     default_workspace_id: Optional[str] = None
+    api_token: Optional[str] = None
 
     @staticmethod
     def from_env() -> "MemoryLabApiClient":
@@ -56,7 +58,8 @@ class MemoryLabApiClient:
             raise MemoryLabApiError(f"Unsafe host for local MCP plan: {host}")
         base_url = f"{scheme}://{host}:{port}".rstrip("/")
         default_workspace_id = os.getenv("MEMORY_LAB_MCP_DEFAULT_WORKSPACE_ID") or None
-        return MemoryLabApiClient(base_url=base_url, default_workspace_id=default_workspace_id)
+        api_token = os.getenv("MEMORY_LAB_API_TOKEN") or os.getenv("MEMORY_LAB_MCP_API_TOKEN") or None
+        return MemoryLabApiClient(base_url=base_url, default_workspace_id=default_workspace_id, api_token=api_token)
 
     def _selected_workspace_id(self, workspace_id: Optional[str] = None) -> Optional[str]:
         explicit = workspace_id.strip() if isinstance(workspace_id, str) else workspace_id
@@ -65,11 +68,29 @@ class MemoryLabApiClient:
         default = self.default_workspace_id.strip() if isinstance(self.default_workspace_id, str) else self.default_workspace_id
         return default or None
 
-    def _workspace_headers(self, workspace_id: Optional[str] = None) -> Dict[str, str]:
+    @staticmethod
+    def redact_sensitive(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        redacted = value
+        patterns = [
+            (r"Authorization\s*:\s*Bearer\s+[^\s,;]+", "Authorization: Bearer [REDACTED]"),
+            (r"Bearer\s+[^\s,;]+", "Bearer [REDACTED]"),
+            (r"(?i)(token|api[_-]?key|key|secret|password)=([^\s&]+)", r"\1=[REDACTED]"),
+            (r"(?i)(\"(?:token|api[_-]?key|key|secret|password|authorization)\"\s*:\s*)\"[^\"]+\"", r"\1\"[REDACTED]\""),
+        ]
+        for pattern, replacement in patterns:
+            redacted = re.sub(pattern, replacement, redacted)
+        return redacted
+
+    def _headers(self, workspace_id: Optional[str] = None) -> Dict[str, str]:
+        headers: Dict[str, str] = {}
         selected = self._selected_workspace_id(workspace_id)
-        if not selected:
-            return {}
-        return {"X-Workspace-ID": selected}
+        if selected:
+            headers["X-Workspace-ID"] = selected
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
+        return headers
 
     def _request(
         self,
@@ -81,7 +102,7 @@ class MemoryLabApiClient:
         workspace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
-        headers = self._workspace_headers(workspace_id)
+        headers = self._headers(workspace_id)
         try:
             resp = requests.request(
                 method=method,
@@ -92,19 +113,21 @@ class MemoryLabApiClient:
                 timeout=self.timeout_s,
             )
         except requests.RequestException as exc:
+            safe_exc = self.redact_sensitive(str(exc))
             raise MemoryLabApiError(
-                f"Request failed for {method} {url}: {exc}",
+                f"Request failed for {method} {url}: {safe_exc}",
                 method=method,
                 url=url,
             ) from exc
 
         if resp.status_code < 200 or resp.status_code >= 300:
+            safe_body = self.redact_sensitive(resp.text[:2000])
             raise MemoryLabApiError(
-                f"Non-2xx from {method} {url}: {resp.status_code} body={resp.text[:500]}",
+                f"Non-2xx from {method} {url}: {resp.status_code} body={safe_body[:500]}",
                 method=method,
                 url=url,
                 status_code=resp.status_code,
-                body=resp.text[:2000],
+                body=safe_body,
             )
 
         try:
@@ -115,7 +138,7 @@ class MemoryLabApiClient:
                 method=method,
                 url=url,
                 status_code=resp.status_code,
-                body=resp.text[:2000],
+                body=self.redact_sensitive(resp.text[:2000]),
             ) from exc
 
     def health(self) -> Dict[str, Any]:

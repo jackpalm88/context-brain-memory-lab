@@ -1,9 +1,12 @@
 """
 P2C admin tier override / rollback surface.
 
-Caveat: these are unauthenticated admin endpoints in the reviewed public
-surface. They must be protected by deployment/network controls; P2C does not
-redesign auth.
+Auth/RBAC status: these admin endpoints are protected by the API auth layer via
+``require_permission("admin.tier_override")`` and
+``require_permission("admin.tier_rollback")``. Only owner/admin workspace
+members may call them. Older P2C public-baseline notes described these routes as
+unauthenticated; that wording is superseded by the accepted Auth/RBAC API
+enforcement layer.
 """
 from __future__ import annotations
 
@@ -13,11 +16,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import psycopg2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
 
+from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
+from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.governance import events as _gov
 from memory_lab.governance.transition_matrix import GovernanceTransitionError, validate_transition
 
@@ -95,7 +100,7 @@ def _update_content_tier(cur, content_id: str, new_tier: str, tier_reason: str) 
 
 
 @router.post("/admin/content/{content_id}/tier/override", response_model=TierOverrideResponse)
-def tier_override(content_id: str, payload: TierOverrideRequest):
+def tier_override(content_id: str, payload: TierOverrideRequest, auth: AuthContext = Depends(require_permission("admin.tier_override"))):
     if payload.override_action not in _OVERRIDE_TIER_MAP:
         raise HTTPException(
             status_code=400,
@@ -121,7 +126,7 @@ def tier_override(content_id: str, payload: TierOverrideRequest):
                 _update_content_tier(cur, content_id, new_tier, "governance_override:human")
                 event = _gov.build_event(
                     content_id=content_id,
-                    workspace_id=payload.workspace_id,
+                    workspace_id=auth.workspace_id,
                     previous_tier=previous_tier,
                     new_tier=new_tier,
                     transition_reason=(
@@ -157,7 +162,7 @@ def tier_override(content_id: str, payload: TierOverrideRequest):
 
 
 @router.post("/admin/content/{content_id}/tier/rollback", response_model=TierRollbackResponse)
-def tier_rollback(content_id: str, payload: TierRollbackRequest):
+def tier_rollback(content_id: str, payload: TierRollbackRequest, auth: AuthContext = Depends(require_permission("admin.tier_rollback"))):
     trace_id = _uuid_lib.uuid4().hex[:16]
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -225,7 +230,7 @@ def tier_rollback(content_id: str, payload: TierRollbackRequest):
                 _update_content_tier(cur, content_id, prior_tier, "governance_override:rollback")
                 rollback_event = _gov.build_event(
                     content_id=content_id,
-                    workspace_id=payload.workspace_id,
+                    workspace_id=auth.workspace_id,
                     previous_tier=current_tier,
                     new_tier=prior_tier,
                     transition_reason=(

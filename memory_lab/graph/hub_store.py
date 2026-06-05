@@ -67,19 +67,22 @@ class HubStore:
                 row = cur.fetchone()
                 return dict(row) if row else None
 
-    def update_hub(self, hub_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_hub(self, hub_id: str, updates: Dict[str, Any], workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         allowed = {"title", "type", "description", "aliases", "related_terms", "status"}
         fields = {k: v for k, v in updates.items() if k in allowed}
         if not fields:
-            return self.get_hub(hub_id)
+            return self.get_hub(hub_id, workspace_id=workspace_id)
         set_clause = ", ".join(f"{k} = %s" for k in fields)
+        ws_clause = "AND workspace_uuid = %s::uuid" if workspace_id else ""
         values = list(fields.values()) + [hub_id]
+        if workspace_id:
+            values.append(workspace_id)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     f"""
                     UPDATE cb_hubs SET {set_clause}, updated_at = NOW()
-                    WHERE hub_id = %s::uuid
+                    WHERE hub_id = %s::uuid {ws_clause}
                     RETURNING hub_id::text, title, type, description, aliases, related_terms,
                               status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
                               created_at, updated_at
