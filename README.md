@@ -225,22 +225,33 @@ Admin MCP tools are not exposed. The 32 public MCP tools cover content, hub, edg
 
 ---
 
-## What this does not claim
+## Public beta boundaries and roadmap
 
-- **not production multi-user tenancy** — auth/RBAC is implemented for local and public beta use. It does not constitute a production multi-user tenancy claim. No hosted deployment is provided.
-- **not Full Context Brain** — this package is a bounded Memory Lab public beta, not the full private Context Brain system
-- **No OIDC/SSO** — only API key authentication is implemented; no OAuth2, OIDC, or SSO
-- **No password auth** — only hashed API keys are supported; no password or credential login
-- **No hosted service** — self-hosted only; bring your own PostgreSQL
-- **No reasoning/ask_v2** — reasoning layer is not included in this release
-- **No classify pipeline** — classify/embed/store pipeline is not included in this release
-- **No conflict detector** — conflict detection extraction is not included in this release
-- **No provider-backed embeddings by default** — deterministic retrieval path works without any key
-- **No LLM generation by default** — retrieval and governance logic are independent of LLM calls
-- **No protocol-level MCP transport proof by default** — MCP workspace propagation is wrapper/tool-level unless a separate transport smoke is published
-- **No full API stability guarantee** — `0.1.0b7` is a public beta; breaking changes may occur before `1.0`
-- **No write tools for GPT Actions** — read-only API surface for external integrations at this stage
-- **No 027+ migrations** — public migration chain stops at `026`; classification_history, discovered_domains, and conflict schema are not yet included
+This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, and deterministic retrieval paths.
+
+It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
+
+### Safety boundaries
+
+- **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
+- **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
+- **Public beta API** — `0.1.0b7` may still introduce breaking changes before `1.0`.
+- **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
+- **Not the full Context Brain yet** — this release is a bounded public Memory Lab beta. The broader private Context Brain goal also includes reasoning, conflict resolution, current-state discipline, and wider governance workflows.
+
+### Coming next / planned Context Brain layers
+
+- **Reasoning / ask_v2** — planned as the public reasoning layer for evidence-grounded answers, citations, confidence, and degraded-mode behavior.
+- **Classify / embed / store pipeline** — planned extraction track for the full ingestion pipeline.
+- **Conflict detection and escalation workflow** — planned extraction track for contradiction detection, counterfindings, and human resolution loops.
+- **Current-state / context-pack layer** — planned track for canonical current-state anchors and agent context packaging.
+- **Additional public schema** — future migrations are expected for capability tables such as `classification_history`, `discovered_domains`, and related ingestion/search metadata. The v0.1.0b7 public migration chain is `000..026`; 027+ migrations are not present in this beta.
+
+### Current integration limits
+
+- **Provider-backed embeddings and LLM calls are optional** — deterministic/no-key paths work by default; provider-backed behavior requires explicit configuration.
+- **MCP proof level** — current public proof covers MCP wrapper/tool-level auth and workspace propagation. Protocol-level MCP transport proof can be published separately.
+- **External integrations are conservative** — GPT Actions and similar external integrations should be treated as read-oriented unless a write surface is explicitly documented and authorized.
 
 ---
 
