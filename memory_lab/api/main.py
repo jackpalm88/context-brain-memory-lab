@@ -5,6 +5,7 @@ from memory_lab.api.routers.content import router as content_router
 from memory_lab.api.routers.hubs import router as hubs_router
 from memory_lab.api.routers.edges import router as edges_router
 from memory_lab.api.routers.retrieval import router as retrieval_router
+from memory_lab.api.routers.ask import router as ask_router
 from memory_lab.api.routers.decisions import router as decisions_router
 from memory_lab.api.routers.tier_override import router as tier_override_router
 from memory_lab.api.routers.cleanup import router as cleanup_router
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
     app.include_router(hubs_router)
     app.include_router(edges_router)
     app.include_router(retrieval_router)
+    app.include_router(ask_router)
     app.include_router(decisions_router)
     app.include_router(tier_override_router)
     app.include_router(cleanup_router)

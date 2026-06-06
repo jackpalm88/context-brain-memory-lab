@@ -11,9 +11,10 @@
 - Ingestion scoring: Provider-optional quality/relevance/novelty scorer (`memory_lab.ingestion`)
 - Workspace foundation: default workspace bootstrap, API/MCP workspace context propagation, and retrieval workspace isolation
 - Authentication and RBAC: API key auth, workspace membership enforcement, six-role RBAC model across all API and MCP surfaces
+- Ask/reasoning beta: deterministic/noop-first `/v1/ask` over workspace-scoped retrieval, with evidence/citations and degraded insufficient-evidence behavior
 - Migrations: PostgreSQL schema `000..026`
 
-**Version**: `0.1.0b7` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b8` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -28,6 +29,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - API + MCP surfaces — works with any LLM client that speaks HTTP or MCP
 - Workspace-aware API/MCP context propagation for local-dev workspace separation
 - Retrieval workspace isolation for API and MCP retrieval paths
+- Deterministic, evidence-grounded ask surface for workspace-scoped retrieval (`POST /v1/ask`)
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -78,7 +80,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..026`, covering the Prestage 3 workspace foundation and the v0.1.0b7 auth/RBAC migrations.
+The public beta schema includes migrations `000..026`, covering the Prestage 3 workspace foundation and the v0.1.0b7 auth/RBAC migrations. v0.1.0b8 adds the public beta ask endpoint without adding 027+ migrations.
 
 ### Start the API runtime
 
@@ -127,6 +129,7 @@ memory_lab/
   governance/   tier router, ingestion policy, events, cleanup, override
   ingestion/    provider-optional scorer, models
   providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic LLM + OpenAI Embedding adapters)
+  reasoning/    deterministic/noop-first ask models, intent detection, policy generation, and answer synthesis
 migrations/
   000_base_schema.sql .. 026_add_auth_indexes_constraints.sql
 pyproject.toml
@@ -143,6 +146,8 @@ from memory_lab.decisions import models as dm
 from memory_lab.governance import tier_router, ingestion_policy
 from memory_lab.ingestion import scorer
 from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
+from memory_lab.reasoning import synthesize_answer
+from memory_lab.reasoning.models import AskRequest
 ```
 
 ---
@@ -174,7 +179,7 @@ All API and MCP requests require a Bearer token:
 
 ```bash
 curl http://localhost:8000/v1/hubs \
-  -H "Authorization: Bearer <token>" \
+  -H "Authorization: Bearer ***" \
   -H "X-Workspace-ID: <workspace-uuid>"
 ```
 
@@ -187,7 +192,7 @@ export MEMORY_LAB_API_TOKEN=<token>       # direct API use
 export MEMORY_LAB_MCP_API_TOKEN=<token>   # MCP client use
 ```
 
-Both accept the same token format. The MCP client passes `Authorization: Bearer <token>` to the API automatically.
+Both accept the same token format. The MCP client passes `Authorization: Bearer ***` to the API automatically.
 
 ### Workspace membership and X-Workspace-ID
 
@@ -225,9 +230,46 @@ Admin MCP tools are not exposed. The 32 public MCP tools cover content, hub, edg
 
 ---
 
+## Ask reasoning beta in v0.1.0b8
+
+v0.1.0b8 adds a public beta ask surface:
+
+```http
+POST /v1/ask
+```
+
+The endpoint is intentionally minimal and deterministic. It is a **noop-first reasoning layer** over workspace-scoped retrieval: it does not call a provider by default, does not require an LLM key, and does not attempt private ask_v2 parity.
+
+What it provides now:
+
+- deterministic/noop-first reasoning;
+- evidence-grounded answer synthesis from retrieved public Memory Lab evidence;
+- returned citations/evidence list;
+- insufficient-evidence response with degraded-mode wording instead of unsupported confidence;
+- workspace-scoped ask behavior;
+- RBAC-protected access via the existing `retrieval.search` permission;
+- no provider key required by default;
+- no provider calls by default.
+
+Example shape:
+
+```bash
+curl -X POST http://localhost:8000/v1/ask \
+  -H "Authorization: Bearer ***" \
+  -H "X-Workspace-ID: <workspace-uuid>" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What evidence do we have about this decision?"}'
+```
+
+If retrieval cannot support an answer, the response is expected to mark the result as insufficient/degraded rather than inventing unsupported conclusions.
+
+Provider-backed generation remains future/optional roadmap work. The public beta ask endpoint is deterministic and provider-free by default.
+
+---
+
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, and deterministic retrieval paths.
+This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, and a minimal/noop public ask layer.
 
 It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
 
@@ -235,17 +277,18 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b7` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b8` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
-- **Not the full Context Brain yet** — this release is a bounded public Memory Lab beta. The broader private Context Brain goal also includes reasoning, conflict resolution, current-state discipline, and wider governance workflows.
+- **Not the full Context Brain yet** — this release is a bounded public Memory Lab beta. It includes a first deterministic/noop ask layer, but the broader private Context Brain goal also includes provider-backed reasoning, conflict resolution, current-state discipline, and wider governance workflows.
 
 ### Coming next / planned Context Brain layers
 
-- **Reasoning / ask_v2** — planned as the public reasoning layer for evidence-grounded answers, citations, confidence, and degraded-mode behavior.
-- **Classify / embed / store pipeline** — planned extraction track for the full ingestion pipeline.
-- **Conflict detection and escalation workflow** — planned extraction track for contradiction detection, counterfindings, and human resolution loops.
-- **Current-state / context-pack layer** — planned track for canonical current-state anchors and agent context packaging.
-- **Additional public schema** — future migrations are expected for capability tables such as `classification_history`, `discovered_domains`, and related ingestion/search metadata. The v0.1.0b7 public migration chain is `000..026`; 027+ migrations are not present in this beta.
+- **Reasoning / ask_v2** — partially implemented as a minimal/noop public ask layer via `POST /v1/ask`, with evidence-grounded synthesis, citations, and insufficient-evidence degraded behavior. Private ask_v2 parity and provider-backed generation are not claimed.
+- **Classify / embed / store pipeline** — still a planned extraction track for the full ingestion pipeline; not included in this beta.
+- **Conflict detection and escalation workflow** — still a planned extraction track for contradiction detection, counterfindings, and human resolution loops; not included in this beta.
+- **Current-state / context-pack layer** — still a planned track for canonical current-state anchors and agent context packaging; not included in this beta.
+- **Chunk search v2** — not included in this beta.
+- **Additional public schema** — future migrations are expected for capability tables such as `classification_history`, `discovered_domains`, and related ingestion/search metadata. The v0.1.0b8 public migration chain remains `000..026`; 027+ migrations are not present in this beta.
 
 ### Current integration limits
 
@@ -261,17 +304,19 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b7 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b8 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
 | API workspace context propagation smoke | PASS in Prestage 3 evidence |
 | MCP workspace context propagation smoke | PASS at wrapper/tool level in Prestage 3 evidence |
 | Retrieval workspace isolation smoke | PASS in Prestage 3 evidence |
+| `POST /v1/ask` minimal/noop API smoke | PASS in staging with workspace/RBAC/evidence checks; rerun required for public package proof |
+| Ask provider calls required | NO |
 | Provider calls required | NO |
 | Disposable teardown | PASS in Prestage 3 evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b7-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b8-py3-none-any.whl`
 
 ---
 
