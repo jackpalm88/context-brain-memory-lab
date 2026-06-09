@@ -5,6 +5,7 @@ from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
 from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
+from memory_lab.reasoning.answer_synthesizer import normalize_evidence
 
 router = APIRouter(prefix="/v1/retrieval", tags=["retrieval"])
 
@@ -27,9 +28,10 @@ def retrieval_search(req: RetrievalRequest, auth: AuthContext = Depends(require_
         graph_boost=req.graph_boost,
         workspace_id=auth.workspace_id,
     )
+    evidence = normalize_evidence(results)
     return {
-        "results": results,
-        "count": len(results),
+        "results": [e.model_dump() for e in evidence],
+        "count": len(evidence),
         "mode": "workspace_scoped_deterministic_db",
         "workspace_id": auth.workspace_id,
         "workspace_source": auth.workspace_source,

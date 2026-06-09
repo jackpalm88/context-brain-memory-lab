@@ -12,9 +12,10 @@
 - Workspace foundation: default workspace bootstrap, API/MCP workspace context propagation, and retrieval workspace isolation
 - Authentication and RBAC: API key auth, workspace membership enforcement, six-role RBAC model across all API and MCP surfaces
 - Ask/reasoning beta: deterministic/noop-first `/v1/ask` over workspace-scoped retrieval, with evidence/citations and degraded insufficient-evidence behavior
+- Retrieval evidence contract: normalized `EvidenceItem` with deterministic `evidence_id`, rank, `score_kind`, and `retrieval_path` across `/v1/retrieval/search` and `/v1/ask`
 - Migrations: PostgreSQL schema `000..026`
 
-**Version**: `0.1.0b8` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b9` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -30,6 +31,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Workspace-aware API/MCP context propagation for local-dev workspace separation
 - Retrieval workspace isolation for API and MCP retrieval paths
 - Deterministic, evidence-grounded ask surface for workspace-scoped retrieval (`POST /v1/ask`)
+- Retrieval evidence contract: normalized, deterministic evidence fields across retrieval and ask surfaces
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -80,7 +82,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..026`, covering the Prestage 3 workspace foundation and the v0.1.0b7 auth/RBAC migrations. v0.1.0b8 adds the public beta ask endpoint without adding 027+ migrations.
+The public beta schema includes migrations `000..026`, covering the Prestage 3 workspace foundation and the v0.1.0b7 auth/RBAC migrations. v0.1.0b8 added the public beta ask endpoint; v0.1.0b9 adds the retrieval evidence contract. Neither adds 027+ migrations.
 
 ### Start the API runtime
 
@@ -267,6 +269,65 @@ Provider-backed generation remains future/optional roadmap work. The public beta
 
 ---
 
+## Retrieval evidence contract in v0.1.0b9
+
+v0.1.0b9 hardens the retrieval and ask surfaces with a normalized evidence contract. No new migrations are added — the public schema remains `000..026`.
+
+### /v1/retrieval/search — normalized response
+
+The `/v1/retrieval/search` response now returns normalized `EvidenceItem` objects. This is a **breaking change** relative to v0.1.0b8: the raw `RetrievalAdapter` row shape is no longer returned directly.
+
+Response shape per result:
+
+```json
+{
+  "evidence_id": "ev_<content_id>_<chunk_id>",
+  "rank": 1,
+  "content_id": "<uuid>",
+  "chunk_id": "<uuid>",
+  "snippet": "...",
+  "score": 0.9,
+  "score_kind": "chunk_text_match",
+  "retrieval_path": "content_chunk_workspace_scoped",
+  "source": null,
+  "title": null,
+  "metadata": null
+}
+```
+
+**Breaking field changes vs v0.1.0b8:**
+
+| Field | v0.1.0b8 | v0.1.0b9 |
+|---|---|---|
+| `id` | present | removed |
+| `text` | present | removed (→ `snippet`) |
+| `workspace_id` (in result items) | present | removed |
+| `hub_match` (conditional) | present | removed |
+| `evidence_id` | absent | added |
+| `rank` | absent | added |
+| `score_kind` | absent | added |
+| `snippet` | absent | added (replaces `text`) |
+| `source`, `title`, `metadata` | absent | added (nullable) |
+
+Fields `content_id`, `chunk_id`, `score`, and `retrieval_path` are preserved.
+
+### /v1/ask — evidence contract
+
+`AskResponse.evidence[]` items now carry the full 11-field `EvidenceItem` shape (same as `/v1/retrieval/search` above). `AskResponse.citations[]` now include `rank` alongside `evidence_id`.
+
+`evidence_id` format:
+- Chunk-backed: `ev_{content_id}_{chunk_id}`
+- No-chunk: `ev_{content_id}_{retrieval_path}_{rank}`
+
+### Evidence contract rules
+
+- Content-level deduplication before ranking: one `EvidenceItem` per `content_id`
+- `rank` is 1-based, sequential, and post-deduplication
+- `score_kind`: `chunk_text_match` unless `"hub"` is in `retrieval_path`, in which case `hub_link`
+- `evidence_id` is deterministic: same content and chunk inputs produce the same ID across calls
+
+---
+
 ## Public beta boundaries and roadmap
 
 This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, and a minimal/noop public ask layer.
@@ -277,18 +338,18 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b8` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b9` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
 - **Not the full Context Brain yet** — this release is a bounded public Memory Lab beta. It includes a first deterministic/noop ask layer, but the broader private Context Brain goal also includes provider-backed reasoning, conflict resolution, current-state discipline, and wider governance workflows.
 
 ### Coming next / planned Context Brain layers
 
-- **Reasoning / ask_v2** — partially implemented as a minimal/noop public ask layer via `POST /v1/ask`, with evidence-grounded synthesis, citations, and insufficient-evidence degraded behavior. Private ask_v2 parity and provider-backed generation are not claimed.
+- **Reasoning / ask_v2** — minimal/noop public ask layer via `POST /v1/ask` is implemented with evidence-grounded synthesis, citations, insufficient-evidence degraded behavior, and the v0.1.0b9 evidence contract (deterministic `evidence_id`, rank, `score_kind`). Private ask_v2 parity and provider-backed generation are not claimed.
 - **Classify / embed / store pipeline** — still a planned extraction track for the full ingestion pipeline; not included in this beta.
 - **Conflict detection and escalation workflow** — still a planned extraction track for contradiction detection, counterfindings, and human resolution loops; not included in this beta.
 - **Current-state / context-pack layer** — still a planned track for canonical current-state anchors and agent context packaging; not included in this beta.
 - **Chunk search v2** — not included in this beta.
-- **Additional public schema** — future migrations are expected for capability tables such as `classification_history`, `discovered_domains`, and related ingestion/search metadata. The v0.1.0b8 public migration chain remains `000..026`; 027+ migrations are not present in this beta.
+- **Additional public schema** — future migrations are expected for capability tables such as `classification_history`, `discovered_domains`, and related ingestion/search metadata. The v0.1.0b9 public migration chain remains `000..026`; 027+ migrations are not present in this beta.
 
 ### Current integration limits
 
@@ -304,7 +365,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b8 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b9 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
@@ -312,11 +373,12 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | MCP workspace context propagation smoke | PASS at wrapper/tool level in Prestage 3 evidence |
 | Retrieval workspace isolation smoke | PASS in Prestage 3 evidence |
 | `POST /v1/ask` minimal/noop API smoke | PASS in staging with workspace/RBAC/evidence checks; rerun required for public package proof |
+| `/v1/retrieval/search` + `/v1/ask` evidence contract live smoke | PASS in B9_API_LIVE_SMOKE (disposable DB, all 11 EvidenceItem fields, deterministic evidence_id, citations with rank) |
 | Ask provider calls required | NO |
 | Provider calls required | NO |
-| Disposable teardown | PASS in Prestage 3 evidence |
+| Disposable teardown | PASS in B9_API_LIVE_SMOKE evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b8-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b9-py3-none-any.whl`
 
 ---
 

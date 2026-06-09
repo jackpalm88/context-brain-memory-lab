@@ -15,24 +15,47 @@ def _clean_snippet(text: str, limit: int) -> str:
     return cleaned[: limit - 1].rstrip() + "…"
 
 
+def _score_kind(retrieval_path: str) -> str:
+    if "hub" in retrieval_path:
+        return "hub_link"
+    return "chunk_text_match"
+
+
 def normalize_evidence(results: list[dict[str, Any]], limit: int = 320) -> list[EvidenceItem]:
-    """Map public RetrievalAdapter rows into stable ask evidence items."""
+    """Map public RetrievalAdapter rows into stable, deduplicated evidence items."""
     evidence: list[EvidenceItem] = []
-    for idx, row in enumerate(results, 1):
+    seen_content_ids: set[str] = set()
+    rank = 0
+    for row in results:
         content_id = str(row.get("content_id") or row.get("id") or "").strip()
         text = str(row.get("text") or row.get("snippet") or "").strip()
         if not content_id or not text:
             continue
+        if content_id in seen_content_ids:
+            continue
+        seen_content_ids.add(content_id)
+        rank += 1
         chunk_id = row.get("chunk_id")
+        chunk_id_str = str(chunk_id).strip() if chunk_id else None
+        retrieval_path = str(row.get("retrieval_path") or "deterministic_db").strip()
         score = row.get("score")
+        if chunk_id_str:
+            evidence_id = f"ev_{content_id}_{chunk_id_str}"
+        else:
+            evidence_id = f"ev_{content_id}_{retrieval_path}_{rank}"
         evidence.append(
             EvidenceItem(
-                evidence_id=f"E{idx}",
+                evidence_id=evidence_id,
+                rank=rank,
                 content_id=content_id,
-                chunk_id=str(chunk_id) if chunk_id else None,
+                chunk_id=chunk_id_str,
                 snippet=_clean_snippet(text, limit),
                 score=float(score) if score is not None else None,
+                score_kind=_score_kind(retrieval_path),
+                retrieval_path=retrieval_path,
                 source=row.get("source") or row.get("title"),
+                title=row.get("title"),
+                metadata=None,
             )
         )
     return evidence
@@ -85,7 +108,10 @@ def synthesize_answer(
         )
 
     confidence, explanation = _confidence_for(evidence)
-    citations = [Citation(evidence_id=e.evidence_id, content_id=e.content_id, chunk_id=e.chunk_id, score=e.score) for e in evidence]
+    citations = [
+        Citation(evidence_id=e.evidence_id, rank=e.rank, content_id=e.content_id, chunk_id=e.chunk_id, score=e.score)
+        for e in evidence
+    ]
     snippets = [f"[{e.evidence_id}] {e.snippet}" for e in evidence]
     answer = "Based only on retrieved workspace evidence: " + " ".join(snippets)
     claims = [Claim(claim=e.snippet, evidence_ids=[e.evidence_id]) for e in evidence]

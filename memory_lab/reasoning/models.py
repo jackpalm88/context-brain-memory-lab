@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -25,15 +25,21 @@ class AskRequest(BaseModel):
 
 class EvidenceItem(BaseModel):
     evidence_id: str
+    rank: int
     content_id: str
     chunk_id: Optional[str] = None
     snippet: str
     score: Optional[float] = None
+    score_kind: str
+    retrieval_path: str
     source: Optional[str] = None
+    title: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class Citation(BaseModel):
     evidence_id: str
+    rank: int
     content_id: str
     chunk_id: Optional[str] = None
     score: Optional[float] = None
