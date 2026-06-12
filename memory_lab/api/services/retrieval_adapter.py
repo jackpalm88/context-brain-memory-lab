@@ -30,7 +30,7 @@ class RetrievalAdapter:
     def _query_terms(query: str) -> List[str]:
         return [t.strip().lower() for t in query.split() if len(t.strip()) >= 3][:8]
 
-    def _deterministic_vector_search(self, query: str, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _deterministic_vector_search(self, query: str, workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Deterministic provider-free DB search used by the public baseline and smokes.
 
         Workspace isolation rule: when workspace_id is provided, every content/chunk
@@ -45,6 +45,9 @@ class RetrievalAdapter:
         text_match = " OR ".join(["LOWER(ch.chunk_text) LIKE %s" for _ in like_patterns])
         where_parts.append(f"({text_match})")
         params.extend(like_patterns)
+        if memory_types:
+            where_parts.append("c.memory_type = ANY(%s::text[])")
+            params.append(list(memory_types))
         where = " AND ".join(where_parts)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -83,7 +86,7 @@ class RetrievalAdapter:
             )
         return results
 
-    def _hub_linked_results(self, query: str, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _hub_linked_results(self, query: str, workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         if not workspace_id:
             return []
         hub = self.hub_store.match_query(query, workspace_id=workspace_id)
@@ -94,8 +97,13 @@ class RetrievalAdapter:
             return []
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                hub_params: List[Any] = [workspace_id, content_ids]
+                hub_where = "c.workspace_id = %s::uuid AND c.content_id = ANY(%s::uuid[])"
+                if memory_types:
+                    hub_where += " AND c.memory_type = ANY(%s::text[])"
+                    hub_params.append(list(memory_types))
                 cur.execute(
-                    """
+                    f"""
                     SELECT
                         c.content_id::text AS content_id,
                         ch.chunk_id::text AS chunk_id,
@@ -104,12 +112,11 @@ class RetrievalAdapter:
                         ch.chunk_index
                     FROM content_items c
                     LEFT JOIN content_chunks ch ON ch.content_id = c.content_id AND ch.workspace_id = c.workspace_id
-                    WHERE c.workspace_id = %s::uuid
-                      AND c.content_id = ANY(%s::uuid[])
+                    WHERE {hub_where}
                     ORDER BY ch.created_at DESC NULLS LAST, ch.chunk_index ASC NULLS LAST
                     LIMIT 25
                     """,
-                    (workspace_id, content_ids),
+                    tuple(hub_params),
                 )
                 rows = [dict(r) for r in cur.fetchall()]
         results: List[Dict[str, Any]] = []
@@ -138,8 +145,9 @@ class RetrievalAdapter:
         min_confidence: float = 0.7,
         graph_boost: float = 0.1,
         workspace_id: Optional[str] = None,
+        memory_types: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id)
+        vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types)
         results = self.adapter.search(
             query=query,
             max_hops=max_hops,
@@ -149,7 +157,7 @@ class RetrievalAdapter:
             vector_search_fn=vector_search,
         )
         seen = {str(r.get("content_id") or r.get("id")) for r in results}
-        for row in self._hub_linked_results(query, workspace_id=workspace_id):
+        for row in self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types):
             rid = str(row.get("content_id") or row.get("id"))
             if rid not in seen:
                 seen.add(rid)

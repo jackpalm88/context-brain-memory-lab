@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "context-brain-memory-lab"
-version = "0.1.0b9"
+version = "0.1.0b10"
 description = "Context Brain Memory Lab — graph-aware semantic memory for AI agents"
 requires-python = ">=3.12"
 readme = "README.md"

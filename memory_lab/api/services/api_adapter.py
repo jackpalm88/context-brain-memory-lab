@@ -1,3 +1,5 @@
+import json
+import logging
 from typing import Any, Dict, List, Optional
 
 import psycopg2
@@ -6,7 +8,11 @@ from psycopg2.extras import RealDictCursor
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.hub_edge_store import HubEdgeStore
 from memory_lab.ingestion.scorer import score_content
+from memory_lab.ingestion.classify_pipeline import classify as _classify
 from memory_lab.governance.tier_router import route as tier_route
+from memory_lab.current_state.resolver import resolve_current_state_after_ingest
+
+logger = logging.getLogger(__name__)
 
 
 class ApiAdapter:
@@ -35,6 +41,47 @@ class ApiAdapter:
         workspace_id: Optional[str] = None,
         workspace_source: Optional[str] = None,
     ) -> Dict[str, Any]:
+        event = score_content(content or "")
+        tier_decision = tier_route(
+            composite_score=event.scores.composite,
+            circuit_open=event.circuit_open,
+            quality_score=event.scores.quality,
+        )
+        tier = tier_decision.tier
+        tier_reason = tier_decision.reason
+
+        if event.fallback_reason:
+            governance_lines = [
+                f"score:fallback composite={event.scores.composite} reason={event.fallback_reason}",
+                f"tier:{tier} tier_reason:{tier_reason}",
+            ]
+        else:
+            governance_lines = [
+                f"score:quality={event.scores.quality} relevance={event.scores.relevance} novelty={event.scores.novelty} composite={event.scores.composite}",
+                f"tier:{tier} tier_reason:{tier_reason}",
+            ]
+
+        base_response: Dict[str, Any] = {
+            "created": False,
+            "persisted": False,
+            "discarded": not tier_decision.should_persist,
+            "mode": "governed_discarded" if not tier_decision.should_persist else ("governed_fallback" if event.fallback_reason else "governed"),
+            "scores": {
+                "quality": event.scores.quality,
+                "relevance": event.scores.relevance,
+                "novelty": event.scores.novelty,
+                "composite": event.scores.composite,
+            },
+            "tier": tier,
+            "tier_reason": tier_reason,
+            "fallback_reason": event.fallback_reason,
+            "governance_lines": governance_lines,
+        }
+        base_response.update(self._workspace_meta(workspace_id, workspace_source))
+
+        if not tier_decision.should_persist:
+            return base_response
+
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
@@ -47,15 +94,6 @@ class ApiAdapter:
                 )
                 row = cur.fetchone()
                 conn.commit()
-
-        event = score_content(content or "")
-        tier_decision = tier_route(
-            composite_score=event.scores.composite,
-            circuit_open=event.circuit_open,
-            quality_score=event.scores.quality,
-        )
-        tier = tier_decision.tier
-        tier_reason = tier_decision.reason
 
         with self._conn() as conn:
             with conn.cursor() as cur:
@@ -87,34 +125,206 @@ class ApiAdapter:
                 )
                 conn.commit()
 
-        if event.fallback_reason:
-            governance_lines = [
-                f"score:fallback composite={event.scores.composite} reason={event.fallback_reason}",
-                f"tier:{tier} tier_reason:{tier_reason}",
-            ]
-        else:
-            governance_lines = [
-                f"score:quality={event.scores.quality} relevance={event.scores.relevance} novelty={event.scores.novelty} composite={event.scores.composite}",
-                f"tier:{tier} tier_reason:{tier_reason}",
-            ]
+        # T3: classify write — best-effort, isolated; failure never rolls back T1/T2
+        classify_meta: Dict[str, Any] = self._run_classify_and_write(
+            content=content or "",
+            content_id=row["content_id"],
+            workspace_id=workspace_id,
+            tier=tier,
+            composite_score=event.scores.composite,
+        ) or {}
 
-        response = {
+        # T4: current-state resolver — best-effort, after classify write, persisted rows only.
+        # Resolver owns current-state fields; classify remains limited to classify-owned fields.
+        current_state_meta: Dict[str, Any] = {}
+        try:
+            confidence = classify_meta.get("classify_confidence")
+            if confidence is not None and confidence >= 0.70:
+                with self._conn() as conn:
+                    resolution = resolve_current_state_after_ingest(
+                        conn,
+                        workspace_id=workspace_id,
+                        content_id=row["content_id"],
+                        memory_type=classify_meta.get("memory_type"),
+                        memory_sub_type=classify_meta.get("memory_sub_type"),
+                        classify_confidence=confidence,
+                        signals=classify_meta.get("signals"),
+                        project_topic=classify_meta.get("project_topic"),
+                        domain_hint=classify_meta.get("domain_hint"),
+                        content_text=content or "",
+                    )
+                current_state_meta = resolution.to_dict()
+        except Exception as exc:
+            logger.warning("[api_adapter] current-state resolve failed for %s: %s", row["content_id"], exc)
+            current_state_meta = {"status": "deferred", "reason": "resolver_error"}
+
+        response: Dict[str, Any] = {
+            **base_response,
             "content_id": row["content_id"],
             "created": True,
-            "mode": "governed_fallback" if event.fallback_reason else "governed",
-            "scores": {
-                "quality": event.scores.quality,
-                "relevance": event.scores.relevance,
-                "novelty": event.scores.novelty,
-                "composite": event.scores.composite,
-            },
-            "tier": tier,
-            "tier_reason": tier_reason,
-            "fallback_reason": event.fallback_reason,
-            "governance_lines": governance_lines,
+            "persisted": True,
+            "discarded": False,
+            "memory_type": classify_meta.get("memory_type"),
+            "memory_sub_type": classify_meta.get("memory_sub_type"),
+            "classify_confidence": classify_meta.get("classify_confidence"),
+            "classify_mode": classify_meta.get("classify_mode", "heuristic_v1"),
+            "classify_status": classify_meta.get("classify_status", "deferred"),
         }
-        response.update(self._workspace_meta(workspace_id, workspace_source))
+        if current_state_meta:
+            response.update({
+                "current_state_status": current_state_meta.get("status"),
+                "current_state_reason": current_state_meta.get("reason"),
+                "current_state_scope": current_state_meta.get("current_state_scope"),
+                "cs_supersedes_content_id": current_state_meta.get("supersedes_content_id"),
+            })
         return response
+
+    # ---------------------------------------------------------------------------
+    # T3: classify write helper
+    # ---------------------------------------------------------------------------
+
+    def _run_classify_and_write(
+        self,
+        content: str,
+        content_id: str,
+        workspace_id: Optional[str],
+        tier: str,
+        composite_score: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        T3: best-effort classify write.  Never raises.  Returns classify summary or None on failure.
+
+        Writes classify-owned fields only:
+          content_items.memory_type, memory_sub_type, classify_confidence, classified_at
+          cb_classification_history (active row, deactivates prior active)
+          content_items.domain_id (only when confidence >= 0.70)
+
+        NEVER writes: is_current, current_state_scope, cs_supersedes_content_id.
+        """
+        try:
+            result = _classify(content=content, tier=tier, composite_score=composite_score)
+        except Exception as exc:
+            logger.warning("[api_adapter] classify raised unexpectedly for %s: %s", content_id, exc)
+            result = None
+
+        if result is None:
+            return None
+
+        try:
+            with self._conn() as conn:
+                with conn.cursor() as cur:
+                    # Dedup: skip write if identical active classification already exists
+                    cur.execute(
+                        """
+                        SELECT 1 FROM cb_classification_history
+                         WHERE content_id = %s::uuid
+                           AND memory_type = %s
+                           AND classifier_version = 'heuristic_v1'
+                           AND is_active_classification = TRUE
+                         LIMIT 1
+                        """,
+                        (content_id, result.memory_type),
+                    )
+                    if cur.fetchone():
+                        return {
+                            "memory_type": result.memory_type,
+                            "memory_sub_type": result.memory_sub_type,
+                            "classify_confidence": result.confidence,
+                            "classify_mode": "heuristic_v1",
+                            "classify_status": "classified",
+                            "signals": result.signals,
+                            "project_topic": result.project_topic,
+                            "domain_hint": result.domain_hint,
+                            "dedup": True,
+                        }
+
+                    # T3a: update classify-owned columns on content_items
+                    cur.execute(
+                        """
+                        UPDATE content_items
+                           SET memory_type         = %s,
+                               memory_sub_type     = %s,
+                               classify_confidence = %s,
+                               classified_at       = NOW()
+                         WHERE content_id = %s::uuid
+                        """,
+                        (result.memory_type, result.memory_sub_type, result.confidence, content_id),
+                    )
+
+                    # T3b: deactivate prior active classification history rows
+                    cur.execute(
+                        """
+                        UPDATE cb_classification_history
+                           SET is_active_classification = FALSE
+                         WHERE content_id = %s::uuid
+                           AND is_active_classification = TRUE
+                        """,
+                        (content_id,),
+                    )
+
+                    # T3b: insert new active classification row (only if workspace_id known)
+                    if workspace_id:
+                        cur.execute(
+                            """
+                            INSERT INTO cb_classification_history
+                                (workspace_id, content_id, memory_type, memory_sub_type,
+                                 classify_confidence, classifier_version, project_topic,
+                                 classification_signals, is_active_classification)
+                            VALUES
+                                (%s::uuid, %s::uuid, %s, %s, %s,
+                                 'heuristic_v1', %s, %s::jsonb, TRUE)
+                            """,
+                            (
+                                workspace_id,
+                                content_id,
+                                result.memory_type,
+                                result.memory_sub_type,
+                                result.confidence,
+                                result.project_topic,
+                                json.dumps(result.signals),
+                            ),
+                        )
+
+                    # T3c: domain upsert + link — only when confident enough
+                    if result.domain_hint and result.confidence >= 0.70 and workspace_id:
+                        cur.execute(
+                            """
+                            INSERT INTO cb_discovered_domains (workspace_id, domain_name, source)
+                            VALUES (%s::uuid, %s, 'auto_classify')
+                            ON CONFLICT (workspace_id, domain_name) DO NOTHING
+                            """,
+                            (workspace_id, result.domain_hint),
+                        )
+                        cur.execute(
+                            """
+                            UPDATE content_items
+                               SET domain_id = (
+                                   SELECT domain_id FROM cb_discovered_domains
+                                    WHERE workspace_id = %s::uuid
+                                      AND domain_name = %s
+                                    LIMIT 1
+                               )
+                             WHERE content_id = %s::uuid
+                            """,
+                            (workspace_id, result.domain_hint, content_id),
+                        )
+
+                    conn.commit()
+
+            return {
+                "memory_type": result.memory_type,
+                "memory_sub_type": result.memory_sub_type,
+                "classify_confidence": result.confidence,
+                "classify_mode": "heuristic_v1",
+                "classify_status": "classified",
+                "signals": result.signals,
+                "project_topic": result.project_topic,
+                "domain_hint": result.domain_hint,
+            }
+
+        except Exception as exc:
+            logger.warning("[api_adapter] classify write failed for %s: %s", content_id, exc)
+            return None
 
     def get_content_minimal(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conditions = ["content_id = %s::uuid"]
