@@ -13,13 +13,14 @@
 - Retrieval filters: `memory_type` / `memory_types` filtering for scoped retrieval use cases
 - Current-state resolver: beta canonical-state supersession helper for high-confidence classified content
 - Catchup helper: dry-run-first classify catchup CLI for persisted rows that still need `memory_type`
+- Conflict discovery: public-beta `POST /v1/conflicts/search` for computed-only conflict/counterfinding candidates
 - Workspace foundation: default workspace bootstrap, API/MCP workspace context propagation, and retrieval workspace isolation
 - Authentication and RBAC: API key auth, workspace membership enforcement, six-role RBAC model across all API and MCP surfaces
 - Ask/reasoning beta: deterministic/noop-first `/v1/ask` over workspace-scoped retrieval, with evidence/citations and degraded insufficient-evidence behavior
 - Retrieval evidence contract: normalized `EvidenceItem` with deterministic `evidence_id`, rank, `score_kind`, and `retrieval_path` across `/v1/retrieval/search` and `/v1/ask`
 - Migrations: PostgreSQL schema `000..030`
 
-**Version**: `0.1.0b10` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b11` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -40,6 +41,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - `memory_type` / `memory_types` retrieval filters for focused search behavior
 - Current-state resolver beta for high-confidence classified content, without claiming broader agent context packaging
 - Dry-run-first classify catchup CLI/helper for existing persisted content
+- Conflict discovery / counterfinding surfacing via `POST /v1/conflicts/search`, without truth arbitration or automatic resolution
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -90,7 +92,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table.
 
 ### Start the API runtime
 
@@ -141,6 +143,7 @@ memory_lab/
   providers/    LLM + embedding backend abstractions (base interfaces, Noop, Fake, optional Anthropic LLM + OpenAI Embedding adapters)
   reasoning/    deterministic/noop-first ask models, intent detection, policy generation, and answer synthesis
   current_state/ beta current-state resolver helpers
+  conflicts/     public-beta computed conflict/counterfinding discovery helpers
 migrations/
   000_base_schema.sql .. 030_add_current_state_anchors.sql
 pyproject.toml
@@ -159,6 +162,7 @@ from memory_lab.ingestion import scorer
 from memory_lab.ingestion.classify import classify_content
 from memory_lab.ingestion.classify_catchup import run_catchup
 from memory_lab.current_state import resolve_current_state
+from memory_lab.conflicts.detector import detect_conflict_candidates
 from memory_lab.providers import LLMBackend, NoopLLMBackend, FailureCode
 from memory_lab.reasoning import synthesize_answer
 from memory_lab.reasoning.models import AskRequest
@@ -380,9 +384,53 @@ B10 remains a candidate-public capability set. It does not claim production tena
 
 ---
 
+### B11 beta conflict discovery and counterfinding surfacing in v0.1.0b11
+
+v0.1.0b11 adds a public-beta conflict discovery surface for finding potential counterfindings and contradictions in already persisted, workspace-scoped memory. It is a discovery layer, not a final reasoning or truth-resolution layer.
+
+New API endpoint:
+
+```text
+POST /v1/conflicts/search
+```
+
+What B11 adds:
+
+- **Computed-only candidates** — conflict and counterfinding results are calculated at request time from existing persisted memory signals.
+- **Deterministic `candidate_id`** — candidate IDs are deterministic for stable inputs, enabling repeatable review and downstream audit references.
+- **Explicit counterfinding detection** — the detector can surface evidence that pushes against another same-scope memory item without declaring a winner.
+- **Explicit contradiction detection** — the detector can surface direct opposing claims as candidate conflicts.
+- **Stale/current same-scope tension detection** — current-state and stale-state signals in the same scope can be surfaced as tension candidates.
+- **Support-only evidence is not a conflict** — evidence that merely supports the same claim is excluded from conflict creation.
+- **Workspace isolation** — searches are scoped by workspace context and do not cross workspace boundaries.
+- **Discard/no-persist content ignored** — discarded or non-persisted content is not used to create conflict candidates.
+
+B11 safety and boundary rules:
+
+- No durable conflict table in B11.
+- No B11 migrations.
+- No provider or LLM reasoning is required or performed by default.
+- No truth arbitration: candidates indicate tension, not which side is correct.
+- No destructive resolution: B11 does not overwrite, delete, or resolve source memories.
+- No automatic contradiction resolution or escalation workflow is included.
+
+Example request shape:
+
+```json
+{
+  "workspace_id": "<workspace-uuid>",
+  "scope": "same_hub_or_domain",
+  "limit": 20
+}
+```
+
+The exact candidate scoring and fields remain public-beta and may change before `1.0`. Treat results as review prompts for humans or governed agents, not as authoritative judgments.
+
+---
+
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, and a dry-run-first classify catchup helper.
+This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, and B11 conflict discovery / counterfinding surfacing.
 
 It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
 
@@ -390,18 +438,18 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b10` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b11` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
-- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning, production tenancy/billing, contradiction escalation workflows, agent context packaging, and client libraries remain outside this B10 public package.
+- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning, production tenancy/billing, contradiction escalation workflows, agent context packaging, and client libraries remain outside this B11 public package.
 
 ### Coming next / planned Context Brain layers
 
 - **Reasoning / ask_v2** — minimal/noop public ask layer via `POST /v1/ask` is implemented with evidence-grounded synthesis, citations, insufficient-evidence degraded behavior, and the evidence contract (deterministic `evidence_id`, rank, `score_kind`). Private ask_v2 parity and provider-backed generation are not claimed.
 - **Classify / embed / store pipeline** — B10 includes deterministic classify ingest wiring and catchup support. Provider-backed embeddings remain optional and are not required by default.
-- **Contradiction escalation workflow** — counterfindings and human resolution loops remain outside this public beta.
-- **Current-state and agent packaging** — B10 includes resolver helpers for current-state anchors, but does not expose a broader agent context packaging API.
+- **Conflict discovery vs resolution** — B11 surfaces computed counterfinding and contradiction candidates, but contradiction escalation workflows, truth arbitration, and human resolution loops remain outside this public beta.
+- **Current-state and agent packaging** — B10 includes resolver helpers for current-state anchors; B11 can surface stale/current same-scope tension, but the package does not expose a broader agent context packaging API.
 - **Chunk search v2** — not included in this beta.
-- **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors.
+- **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors. B11 adds no migrations and no durable conflict table.
 
 ### Current integration limits
 
@@ -417,7 +465,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b10 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b11 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
@@ -430,11 +478,15 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | B10 retrieval `memory_type` / `memory_types` filter tests | PASS in release-readiness review |
 | B10 current-state resolver tests | PASS in release-readiness review |
 | B10 classify catchup helper tests | PASS in release-readiness review |
+| B11 conflict/counterfinding API integration tests | PASS in release-readiness review with disposable public-style DB |
+| B11 conflict detector and marker unit tests | PASS in release-readiness review |
+| B11 migrations required | NO |
+| B11 durable conflict table | NO |
 | Ask provider calls required | NO |
 | Provider calls required | NO |
 | Disposable teardown | PASS in B9/B10 public-style evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b10-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b11-py3-none-any.whl`
 
 ---
 
