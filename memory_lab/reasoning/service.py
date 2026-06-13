@@ -6,8 +6,9 @@ from memory_lab.context_packs.models import ContextPackBuildRequest, ContextPack
 from memory_lab.context_packs.service import build_context_pack_for_request
 from memory_lab.providers.llm_backend import LLMBackend, LLMRequest
 from memory_lab.providers.noop import NoopLLMBackend
+from memory_lab.reasoning.answer import answer_context_pack
 from memory_lab.reasoning.explain import BASE_LIMITATIONS, BASE_NON_CLAIMS, build_conflict_warnings, deterministic_explanation
-from memory_lab.reasoning.models import ReasoningProviderMetadata, ReasoningRequest, ReasoningResponse
+from memory_lab.reasoning.models import ReasoningAnswerResponse, ReasoningProviderMetadata, ReasoningRequest, ReasoningResponse
 from memory_lab.reasoning.traverse import build_traversal_steps, collect_evidence_refs
 
 
@@ -150,3 +151,21 @@ def explain_for_request(
         workspace_source=workspace_source,
     )
     return explain_context_pack(context_pack=context_pack, request=request, backend=backend)
+
+
+def answer_for_request(
+    *,
+    database_url: str,
+    request: ReasoningRequest,
+    workspace_id: str,
+    workspace_source: Optional[str] = None,
+    backend: Optional[LLMBackend] = None,
+) -> ReasoningAnswerResponse:
+    cp_req = _context_pack_request(request)
+    context_pack = build_context_pack_for_request(
+        database_url=database_url,
+        request=cp_req,
+        workspace_id=workspace_id,
+        workspace_source=workspace_source,
+    )
+    return answer_context_pack(context_pack=context_pack, request=request, backend=backend)

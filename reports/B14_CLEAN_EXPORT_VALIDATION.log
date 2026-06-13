@@ -1,0 +1,48 @@
+== unit tests ==
+.....                                                                    [100%]
+5 passed in 0.31s
+......                                                                   [100%]
+6 passed in 0.45s
+....                                                                     [100%]
+4 passed in 0.24s
+== py_compile ==
+== build ==
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - hatchling
+* Getting build dependencies for sdist...
+* Building sdist...
+* Building wheel from sdist
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - hatchling
+* Getting build dependencies for wheel...
+* Building wheel...
+Successfully built context_brain_memory_lab-0.1.0b14.tar.gz and context_brain_memory_lab-0.1.0b14-py3-none-any.whl
+== migrations ==
+NOTICE:  trigger "trg_governance_events_immutable" for relation "cb_governance_events" does not exist, skipping
+== integration tests ==
+....                                                                     [100%]
+4 passed in 4.64s
+.....                                                                    [100%]
+5 passed in 5.68s
+...........                                                              [100%]
+11 passed in 7.95s
+.......                                                                  [100%]
+7 passed in 3.16s
+LEFT_DB=0 LEFT_ROLE=0
+== wheel artifacts ==
+-rw-r--r-- 1 root root 135848 Jun 13 19:59 dist/context_brain_memory_lab-0.1.0b14-py3-none-any.whl
+-rw-r--r-- 1 root root 117390 Jun 13 19:59 dist/context_brain_memory_lab-0.1.0b14.tar.gz
+5e071c8b84f016c17416f7f5a2a9d8193cb1b4091e6c2b67f5709f4e8bd7be18  dist/context_brain_memory_lab-0.1.0b14-py3-none-any.whl
+86b197f2656a3809e9f7e570175bbdb3de662a772b491b9333eb89bf795b6e65  dist/context_brain_memory_lab-0.1.0b14.tar.gz
+== venv create/install ==
+== import smoke ==
+version 0.1.0b14
+Traceback (most recent call last):
+  File "<stdin>", line 4, in <module>
+ModuleNotFoundError: No module named 'memory_lab.api.app'
+== venv create/install ==
+== import route smoke ==
+version 0.1.0b14
+route_ok True

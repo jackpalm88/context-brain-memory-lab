@@ -20,10 +20,10 @@
 - Ask/reasoning beta: deterministic/noop-first `/v1/ask` over workspace-scoped retrieval, with evidence/citations and degraded insufficient-evidence behavior
 - Retrieval evidence contract: normalized `EvidenceItem` with deterministic `evidence_id`, rank, `score_kind`, and `retrieval_path` across `/v1/retrieval/search` and `/v1/ask`
 - Context pack API: deterministic `context_pack_id` values (`cp_<sha256_first_24>`) for transient, non-mutating context packages
-- Reasoning over context packs: public-beta `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain` for deterministic/read-only evidence traversal over B12 context packs
+- Reasoning over context packs: public-beta `POST /v1/reasoning/traverse`, `POST /v1/reasoning/explain`, and `POST /v1/reasoning/answer` for deterministic/read-only evidence traversal, explanation, and answer-candidate assembly over B12 context packs
 - Migrations: PostgreSQL schema `000..030`
 
-**Version**: `0.1.0b13` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b14` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -46,7 +46,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Dry-run-first classify catchup CLI/helper for existing persisted content
 - Conflict discovery / counterfinding surfacing via `POST /v1/conflicts/search`, without truth arbitration or automatic resolution
 - Context packaging / evidence object layer via `POST /v1/context-packs/build`, without answer synthesis, truth arbitration, or DB mutation
-- Reasoning over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`, without standalone answer synthesis, truth arbitration, conflict resolution, graph mutation, or DB mutation
+- Reasoning over B12 context packs via `POST /v1/reasoning/traverse`, `POST /v1/reasoning/explain`, and B14 `POST /v1/reasoning/answer`, returning `answer_candidate` rather than top-level `answer` and without private ask_v2 parity, truth arbitration, conflict resolution, graph mutation, or DB mutation
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -97,7 +97,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table. v0.1.0b12 adds a computed/read-only context-pack API over existing B10/B11 signals; it adds no B12 migrations, no durable context-pack table, and no DB mutation path. v0.1.0b13 adds a deterministic/read-only reasoning layer over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`; it adds no B13 migrations, no durable reasoning table, and no DB mutation path.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table. v0.1.0b12 adds a computed/read-only context-pack API over existing B10/B11 signals; it adds no B12 migrations, no durable context-pack table, and no DB mutation path. v0.1.0b13 adds a deterministic/read-only reasoning layer over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`; it adds no B13 migrations, no durable reasoning table, and no DB mutation path. v0.1.0b14 adds `POST /v1/reasoning/answer` as an evidence-grounded answer-candidate endpoint over the same public-beta reasoning/context-pack layer; it adds no B14 migrations, no durable answer trace table, and no DB mutation path.
 
 ### Start the API runtime
 
@@ -536,9 +536,58 @@ The exact reasoning traversal/explanation fields remain public-beta and may chan
 
 ---
 
+### B14 beta answer candidate endpoint in v0.1.0b14
+
+v0.1.0b14 adds `POST /v1/reasoning/answer` as an evidence-grounded answer-candidate endpoint over the existing B12/B13 context-pack and reasoning layer. It returns `answer_candidate`; it does not return a top-level `answer`. The endpoint is deterministic/read-only by default, remains compatible with `LLM_PROVIDER=none`, and only attempts provider-backed synthesis when `enable_provider_synthesis=true` is explicitly requested and a provider is configured.
+
+New API endpoint:
+
+```text
+POST /v1/reasoning/answer
+```
+
+What B14 preserves in the response contract:
+
+- Evidence refs from the underlying context pack and reasoning path.
+- Traversal steps for inspectable evidence movement.
+- Conflict warnings for unresolved counterfinding/stale/conflict signals.
+- Limitations and `non_claims` to keep the response bounded.
+- Provider failure degradation that retains deterministic evidence references instead of hiding support context.
+
+B14 safety and boundary rules:
+
+- Not a private ask_v2 port.
+- Not a `/v1/ask` rewrite.
+- Not truth arbitration.
+- Not conflict resolution.
+- Not a production reasoning quality claim.
+- Not a Full Context Brain claim.
+- No top-level `answer` response field; use `answer_candidate` only.
+- No public response semantics named `verdict`, `truth_decision`, `resolution`, `winner`, or `canonical_truth`.
+- No B14 migrations.
+- No durable answer trace or provider trace persistence.
+- No graph or DB mutation in the default reasoning answer path.
+
+Example request shape:
+
+```json
+{
+  "query": "What does the evidence support about this topic?",
+  "scope": "same_hub_or_domain",
+  "memory_types": ["fact", "decision"],
+  "include_conflicts": true,
+  "max_hops": 3,
+  "enable_provider_synthesis": false
+}
+```
+
+The exact answer-candidate wording and reasoning fields remain public-beta and may change before `1.0`. Treat B14 output as structured review assistance grounded in evidence, not as an authoritative answer, verdict, truth decision, canonical truth, winner, or conflict resolution.
+
+---
+
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, B11 conflict discovery / counterfinding surfacing, B12 context packaging / evidence object layering, and B13 deterministic reasoning traversal/explanation over B12 context packs.
+This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, B11 conflict discovery / counterfinding surfacing, B12 context packaging / evidence object layering, B13 deterministic reasoning traversal/explanation over B12 context packs, and B14 evidence-grounded answer-candidate assembly via `POST /v1/reasoning/answer`.
 
 It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
 
@@ -546,16 +595,16 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b13` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b14` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
-- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, standalone `/v1/reasoning/answer`, and `1.0` API stability remain outside this B13 public-beta package.
+- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, and `1.0` API stability remain outside this B14 public-beta package. B14 includes `POST /v1/reasoning/answer` only as a deterministic/read-only, evidence-grounded `answer_candidate` endpoint; it is not a private ask_v2 port, truth arbiter, conflict resolver, production reasoning quality claim, or Full Context Brain claim.
 
 ### Coming next / planned Context Brain layers
 
-- **Reasoning over context packs** — B13 adds `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain` over B12 context packs. The default path is deterministic/read-only, `LLM_PROVIDER=none` remains valid/default, provider-backed synthesis is opt-in only, private ask_v2 parity is not claimed, standalone `/v1/reasoning/answer` remains deferred, and B13 does not perform truth arbitration or conflict resolution. The existing minimal/noop public ask layer via `POST /v1/ask` remains separate.
+- **Reasoning over context packs** — B13 adds `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain` over B12 context packs. B14 adds `POST /v1/reasoning/answer`, which returns `answer_candidate` (not top-level `answer`) while preserving evidence refs, traversal steps, conflict warnings, limitations, and `non_claims`. The default path is deterministic/read-only, `LLM_PROVIDER=none` remains valid/default, provider-backed synthesis is opt-in only via `enable_provider_synthesis=true`, private ask_v2 parity is not claimed, and B14 does not perform truth arbitration or conflict resolution. The existing minimal/noop public ask layer via `POST /v1/ask` remains separate and is not rewritten.
 - **Classify / embed / store pipeline** — B10 includes deterministic classify ingest wiring and catchup support. Provider-backed embeddings remain optional and are not required by default.
 - **Conflict discovery vs resolution** — B11 surfaces computed counterfinding and contradiction candidates, but contradiction escalation workflows, truth arbitration, automatic contradiction resolution, and human resolution loops remain outside this public beta.
-- **Context packaging vs reasoning** — B12 exposes a context packaging / evidence object layer via `POST /v1/context-packs/build`; B13 adds reasoning traversal/explanation over those B12 context packs, but it is not Full Context Brain, not a private ask_v2 port, not a standalone answer endpoint, not truth arbitration, and not automatic conflict resolution.
+- **Context packaging vs reasoning** — B12 exposes a context packaging / evidence object layer via `POST /v1/context-packs/build`; B13 adds reasoning traversal/explanation over those B12 context packs; B14 adds evidence-grounded answer-candidate assembly. These are not Full Context Brain, not a private ask_v2 port, not truth arbitration, not production reasoning quality claims, and not automatic conflict resolution.
 - **Current-state and agent packaging** — B10 includes resolver helpers for current-state anchors; B12 can package current-state signals and stale/superseded items, but the package is still not Full Context Brain and does not claim production agent-context orchestration.
 - **Chunk search v2** — not included in this beta.
 - **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors. B11 adds no migrations and no durable conflict table. B12 adds no migrations and no durable context-pack table. B13 adds no migrations and no durable reasoning table.
@@ -574,7 +623,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b13 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b14 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
@@ -604,11 +653,16 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | B13 provider-backed synthesis required | NO; opt-in only |
 | B13 truth arbitration or automatic conflict resolution | NO |
 | B13 standalone `/v1/reasoning/answer` endpoint | NO |
+| B14 `POST /v1/reasoning/answer` endpoint | PASS in implementation and DB-backed review (`tests/integration/test_reasoning_answer_api.py`: 4 passed) |
+| B14 DB-backed regression coverage | PASS in review (`27 passed`, `0 skipped`, `0 failed` across answer, reasoning, context-pack, conflicts integration tests) |
+| B14 response field | `answer_candidate`; no top-level `answer` claim |
+| B14 provider-backed synthesis required | NO; `LLM_PROVIDER=none` compatible and provider synthesis opt-in only via `enable_provider_synthesis=true` |
+| B14 truth arbitration or automatic conflict resolution | NO |
 | Ask provider calls required | NO |
 | Provider calls required | NO |
 | Disposable teardown | PASS in B9/B10 public-style evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b13-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b14-py3-none-any.whl`
 
 ---
 

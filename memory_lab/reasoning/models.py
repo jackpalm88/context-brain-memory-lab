@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -120,6 +120,20 @@ class ReasoningResponse(BaseModel):
     traversal_steps: List[ReasoningTraversalStep] = Field(default_factory=list)
     evidence_refs: List[Dict[str, Any]] = Field(default_factory=list)
     explanation: Dict[str, Any] = Field(default_factory=dict)
+    conflict_warnings: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+    provider_metadata: ReasoningProviderMetadata = Field(default_factory=ReasoningProviderMetadata)
+    degraded_reason: Optional[str] = None
+    non_claims: List[str] = Field(default_factory=list)
+
+
+class ReasoningAnswerResponse(BaseModel):
+    reasoning_id: str
+    mode: Literal["deterministic", "provider_backed", "degraded"]
+    answer_candidate: str
+    evidence_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    context_pack_ref: Dict[str, Any]
+    traversal_steps: List[ReasoningTraversalStep] = Field(default_factory=list)
     conflict_warnings: List[str] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
     provider_metadata: ReasoningProviderMetadata = Field(default_factory=ReasoningProviderMetadata)

@@ -1,0 +1,77 @@
+{
+  "artifacts": {
+    "dist/context_brain_memory_lab-0.1.0b14-py3-none-any.whl": "5e071c8b84f016c17416f7f5a2a9d8193cb1b4091e6c2b67f5709f4e8bd7be18",
+    "dist/context_brain_memory_lab-0.1.0b14.tar.gz": "86b197f2656a3809e9f7e570175bbdb3de662a772b491b9333eb89bf795b6e65"
+  },
+  "checks": {
+    "api_docs_markers": true,
+    "export_path_exists": true,
+    "hygiene_scan": true,
+    "pyproject_version_0_1_0b14": true,
+    "readme_version_0_1_0b14": true,
+    "release_boundary": true,
+    "required_b14_files_exist": true,
+    "required_reasoning_files_exist": true,
+    "required_reports_logs_exist": true,
+    "sdist_exists": true,
+    "validation_summary_carried_forward": true,
+    "wheel_exists": true
+  },
+  "expected_version": "0.1.0b14",
+  "export_target": "/opt/context-brain-memory-lab_public_export_b14",
+  "forbidden_actions_performed": {
+    "build_changes": false,
+    "cb_memory_write": false,
+    "git_commit": false,
+    "git_tag": false,
+    "github_release": false,
+    "private_db_credentials": false,
+    "private_env_reads": false,
+    "provider_calls": false,
+    "public_push": false,
+    "pypi_upload": false,
+    "readme_doc_changes": false,
+    "release_claim": false,
+    "source_modifications": false,
+    "version_changes": false
+  },
+  "gate": "GO_B14_PUBLIC_PUSH_PRECHECK",
+  "generated_at": "2026-06-13T18:13:38.311910+00:00",
+  "mode": [
+    "public_push_precheck_only",
+    "no_push",
+    "no_tag",
+    "no_pypi",
+    "no_github_release",
+    "no_cb_write"
+  ],
+  "public_repo": "https://github.com/jackpalm88/context-brain-memory-lab.git",
+  "recommended_next_gate": "GO_B14_PUBLIC_PUSH",
+  "release_boundary": {
+    "github_release_v0_1_0b14_exists": false,
+    "pypi_0_1_0b14_exists": false,
+    "remote_tag_0_1_0b14_exists": false,
+    "remote_tag_v0_1_0b14_exists": false
+  },
+  "reports": {
+    "markdown": "reports/B14_PUBLIC_PUSH_PRECHECK.md",
+    "summary_json": "reports/b14_public_push_precheck_summary.json"
+  },
+  "status": "B14_PUBLIC_PUSH_PRECHECK_PASS",
+  "validation_carried_forward": {
+    "db_backed": {
+      "failed": 0,
+      "passed": 27,
+      "skipped": 0
+    },
+    "provider_calls": false,
+    "unit_non_db": {
+      "build": "PASS",
+      "py_compile": "PASS",
+      "reasoning_answer": "5_passed",
+      "reasoning_explain": "4_passed",
+      "reasoning_traverse": "6_passed"
+    },
+    "wheel_install_import_smoke": "PASS"
+  }
+}
