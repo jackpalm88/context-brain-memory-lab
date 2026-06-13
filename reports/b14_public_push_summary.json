@@ -1,0 +1,74 @@
+{
+  "commit": {
+    "branch": "main",
+    "commit_message": "Release 0.1.0b14 reasoning answer candidate endpoint",
+    "git_status_short_after_push": "",
+    "new_public_commit": "1d6bf48537f6db34a0c0ab08cc1b70a2eb6d7440",
+    "previous_public_commit": "a5ac9d3e256e0e41970395facdb280c1cf46b5ea",
+    "remote_head_after_push": "1d6bf48537f6db34a0c0ab08cc1b70a2eb6d7440",
+    "remote_refs_heads_main_after_push": "1d6bf48537f6db34a0c0ab08cc1b70a2eb6d7440",
+    "tags_at_head": []
+  },
+  "expected_version": "0.1.0b14",
+  "export_source": "/opt/context-brain-memory-lab_public_export_b14",
+  "forbidden_actions_performed": {
+    "ask_v2_parity_claim": false,
+    "cb_memory_write": false,
+    "git_tag": false,
+    "github_release_creation": false,
+    "private_db_credentials": false,
+    "private_env_reads": false,
+    "production_reasoning_quality_claim": false,
+    "provider_calls": false,
+    "public_full_context_brain_claim": false,
+    "pypi_upload": false,
+    "version_bump_beyond_0_1_0b14": false
+  },
+  "gate": "GO_B14_PUBLIC_PUSH",
+  "generated_at": "2026-06-13T18:23:22.934270+00:00",
+  "mode": [
+    "public_push_only",
+    "no_tag",
+    "no_pypi",
+    "no_github_release",
+    "no_cb_write"
+  ],
+  "pre_push_checks": {
+    "docs_markers": true,
+    "export_source_exists": true,
+    "hygiene_scan": true,
+    "no_git_in_export_source_before_sync": true,
+    "readme_no_full_context_brain_claim": true,
+    "version_0_1_0b14": true
+  },
+  "public_repo": "https://github.com/jackpalm88/context-brain-memory-lab.git",
+  "push_remote_used": "git@github.com:jackpalm88/context-brain-memory-lab.git",
+  "recommended_next_gate": "GO_B14_POST_PUBLIC_PUSH_VERIFY",
+  "release_boundary_after_push": {
+    "github_release_v0_1_0b14_exists": false,
+    "pypi_0_1_0b14_exists": false,
+    "remote_tag_0_1_0b14_exists": false,
+    "remote_tag_v0_1_0b14_exists": false
+  },
+  "reports": {
+    "markdown": "reports/B14_PUBLIC_PUSH.md",
+    "summary_json": "reports/b14_public_push_summary.json"
+  },
+  "status": "B14_PUBLIC_PUSH_PASS",
+  "validation_carried_forward": {
+    "build": "PASS",
+    "db_backed": {
+      "failed": 0,
+      "passed": 27,
+      "skipped": 0
+    },
+    "provider_calls": false,
+    "py_compile": "PASS",
+    "unit_non_db": {
+      "reasoning_answer": "5_passed",
+      "reasoning_explain": "4_passed",
+      "reasoning_traverse": "6_passed"
+    },
+    "wheel_install_smoke": "PASS"
+  }
+}
