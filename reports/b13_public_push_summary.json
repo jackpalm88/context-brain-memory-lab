@@ -1,0 +1,45 @@
+{
+  "gate": "GO_B13_PUBLIC_PUSH",
+  "status": "B13_PUBLIC_PUSH_PASS_WITH_DB_COVERAGE_CAVEAT",
+  "public_repo": "https://github.com/jackpalm88/context-brain-memory-lab.git",
+  "branch": "main",
+  "version": "0.1.0b13",
+  "b13_public_push_completed": true,
+  "previous_public_commit": "0a40524a02d513af988e56c9d144cd5d239ca5e3",
+  "b13_implementation_commit": "8d4eef3bdd55ed4ba47a416a42afe25e758cf8eb",
+  "commit_message_used": "Release 0.1.0b13 reasoning over context packs",
+  "tags_at_b13_commit": [],
+  "github_release": false,
+  "pypi_upload": false,
+  "db_coverage_caveat_active": true,
+  "db_coverage_caveat": {
+    "fresh_post_fix_db_backed_integration": "not_run_cb_test_database_url_unset",
+    "fresh_post_fix_db_backed_integration_detail": "Fresh post-fix DB-backed integration was not run because CB_TEST_DATABASE_URL was unset.",
+    "prior_db_backed_evidence": "33 passed",
+    "fresh_export_validation": "11 passed, 22 skipped",
+    "fresh_post_fix_db_backed_release_coverage_claim_made": false
+  },
+  "non_claims": {
+    "full_context_brain_claim": false,
+    "private_ask_v2_port_claim": false,
+    "truth_arbitration_claim": false,
+    "automatic_conflict_resolution_claim": false
+  },
+  "scope": {
+    "publication_hygiene_artifact_only": true,
+    "runtime_code_changed": false,
+    "tests_changed": false,
+    "readme_changed": false,
+    "pyproject_changed": false,
+    "version_changed": false,
+    "package_rebuilt": false,
+    "dist_regenerated": false,
+    "tag_created": false,
+    "github_release_created": false,
+    "pypi_uploaded": false,
+    "provider_called": false,
+    "private_env_read": false,
+    "private_db_credentials_used": false,
+    "cb_memory_written": false
+  }
+}
