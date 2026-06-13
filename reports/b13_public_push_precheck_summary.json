@@ -1,0 +1,54 @@
+{
+  "checks": {
+    "api_docs_markers": true,
+    "db_caveat_carried_forward": true,
+    "export_path_exists": true,
+    "fresh_export_validation_summary_recorded": true,
+    "hygiene_scan": true,
+    "required_b13_files_exist": true,
+    "required_reports_exist": true,
+    "version_consistency": true
+  },
+  "created_at_utc": "2026-06-13T14:56:41Z",
+  "db_caveat": {
+    "fresh_export_validation_includes_skipped_db_tests": true,
+    "fresh_post_fix_db_backed_integration_run": false,
+    "prior_db_backed_evidence": "33 passed",
+    "prior_db_evidence_claimed_as_fresh_post_fix_release_coverage": false,
+    "public_push_can_proceed_only_with_caveat_unless_fresh_db_rerun_completed": true,
+    "reason": "CB_TEST_DATABASE_URL unset"
+  },
+  "expected_version": "0.1.0b13",
+  "export_target": "/opt/context-brain-memory-lab_public_export_b13",
+  "forbidden_actions": {
+    "build_changes": false,
+    "cb_memory_write": false,
+    "git_commit": false,
+    "git_tag": false,
+    "private_db_credentials": false,
+    "private_env_reads": false,
+    "provider_calls": false,
+    "public_push": false,
+    "public_release_claim": false,
+    "pypi_upload": false,
+    "readme_doc_changes": false,
+    "source_modifications": false,
+    "version_changes": false
+  },
+  "fresh_export_validation": {
+    "build": "PASS",
+    "clean_wheel_install_import_smoke": "PASS",
+    "passed": 11,
+    "py_compile": "PASS",
+    "skipped": 22
+  },
+  "gate": "GO_B13_PUBLIC_PUSH_PRECHECK",
+  "mode": "public_push_precheck_only / no_push / no_tag / no_pypi / no_release_claim",
+  "next_recommended_gate": "GO_B13_PUBLIC_PUSH",
+  "public_repo": "https://github.com/jackpalm88/context-brain-memory-lab.git",
+  "reports": [
+    "reports/B13_PUBLIC_PUSH_PRECHECK.md",
+    "reports/b13_public_push_precheck_summary.json"
+  ],
+  "status": "B13_PUBLIC_PUSH_PRECHECK_PASS_WITH_DB_COVERAGE_CAVEAT"
+}

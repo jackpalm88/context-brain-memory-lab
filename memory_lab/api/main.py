@@ -11,6 +11,7 @@ from memory_lab.api.routers.tier_override import router as tier_override_router
 from memory_lab.api.routers.cleanup import router as cleanup_router
 from memory_lab.api.routers.conflicts import router as conflicts_router
 from memory_lab.api.routers.context_packs import router as context_packs_router
+from memory_lab.api.routers.reasoning import router as reasoning_router
 
 
 def create_app() -> FastAPI:
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(cleanup_router)
     app.include_router(conflicts_router)
     app.include_router(context_packs_router)
+    app.include_router(reasoning_router)
     return app
 
 
