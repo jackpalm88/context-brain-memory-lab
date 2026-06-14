@@ -1,0 +1,158 @@
+{
+  "artifacts": {
+    "sdist": {
+      "path": "dist/context_brain_memory_lab-0.1.0b15.tar.gz",
+      "sha256": "b1ec3ce309e2efccfc6cefcf9b4f50755eecb57da4ba57f65c064c86b1799699"
+    },
+    "wheel": {
+      "path": "dist/context_brain_memory_lab-0.1.0b15-py3-none-any.whl",
+      "sha256": "68ddab56333541b78281f3fab6e3ce21eda58958d9d9eb580b68544b6124855d"
+    }
+  },
+  "caveats": [
+    "Public local checkout exists but is behind origin/main; public push execution must fast-forward/reset it to origin/main before applying clean export.",
+    "GitHub CLI is not available on the server; release absence was checked using public GitHub API HTTP 404 for v0.1.0b15 and 0.1.0b15, plus git ls-remote tag check.",
+    "Hygiene regex reports config identifier names in public code/docs/tests; no credential values/private keys/tokens were found.",
+    "B15 remains deterministic/static beta output with no live repository graph reads."
+  ],
+  "clean_export": "/opt/context-brain-memory-lab_public_export_b15",
+  "export_readiness": {
+    "b15_reports_present": true,
+    "b15_source_files_present": true,
+    "b15_tests_present": true,
+    "dist_artifacts_present_and_hashed": true,
+    "file_count": 199,
+    "readme_checks": {
+      "GET /v1/graph/alias-candidates": true,
+      "GET /v1/graph/health": true,
+      "GET /v1/hubs/{hub_id}/recall-health": true,
+      "hubs.read": true,
+      "no automatic merge": true,
+      "no graph mutation": true,
+      "no provider dependency": true,
+      "static sample": true
+    },
+    "size_bytes": 1151346,
+    "version": "0.1.0b15"
+  },
+  "gate": "B15_PUBLIC_PUSH_PRECHECK",
+  "generated_at": "2026-06-14T12:25:25.850470+00:00",
+  "hygiene": {
+    "allowlisted_reports": [
+      "B15_CLEAN_EXPORT_AND_BUILD_REVIEW.md",
+      "B15_GRAPH_HEALTH_REPORT_GENERATOR.md",
+      "B15_GRAPH_HEALTH_SERVICE_ONLY.md",
+      "B15_VERSION_DOCS_PREP.md",
+      "b15_clean_export_and_build_review_summary.json",
+      "b15_graph_health_report_generator_summary.json",
+      "b15_graph_health_service_only_summary.json",
+      "b15_version_docs_prep_summary.json"
+    ],
+    "caveats": [
+      "B15_CLEAN_EXPORT_AND_BUILD_REVIEW.md contains allowed wording that states private production source material was absent; this is not source leakage.",
+      "Public docs/code/tests include configuration identifier names for provider/API/database settings; no secret values were found.",
+      "MISSING_API_KEY=\"***\" placeholder is non-secret.",
+      "dist artifacts are present because they were rebuilt inside the clean export."
+    ],
+    "env_paths": [],
+    "forbidden_artifact_paths_note": "dist entries are intentionally rebuilt clean-export artifacts; no source old dist artifacts are present",
+    "forbidden_non_dist_artifact_paths": [],
+    "private_source_material_found": false,
+    "secret_values_found": false
+  },
+  "mode": "public_push_precheck_only / no_push / no_tag / no_release / no_pypi / no_cb_write",
+  "public_repo": {
+    "b15_release_checks": {
+      "0.1.0b15_http": 404,
+      "v0.1.0b15_http": 404
+    },
+    "b15_tag_refs_found": [],
+    "gh_cli_available": false,
+    "local_head_after_fetch": "8d4eef3bdd55ed4ba47a416a42afe25e758cf8eb",
+    "local_head_before_fetch": "8d4eef3bdd55ed4ba47a416a42afe25e758cf8eb",
+    "local_path": "/opt/context-brain-memory-lab_public_repo",
+    "local_repo_state_caveat": "local checkout is behind origin/main; push execution must first fast-forward/reset to origin/main before copying export files",
+    "origin_main_head": "97830f0828359e9bab79ce558e03494f9547ae1e",
+    "previous_known_b14_final_public_head": "97830f0828359e9bab79ce558e03494f9547ae1e",
+    "url": "https://github.com/jackpalm88/context-brain-memory-lab.git"
+  },
+  "push_plan_only": {
+    "added": [
+      "dist/context_brain_memory_lab-0.1.0b15-py3-none-any.whl",
+      "dist/context_brain_memory_lab-0.1.0b15.tar.gz",
+      "memory_lab/api/routers/graph_health.py",
+      "memory_lab/graph/alias_hygiene.py",
+      "memory_lab/graph/health_models.py",
+      "memory_lab/graph/health_service.py",
+      "memory_lab/graph/hub_recall_health.py",
+      "memory_lab/reports/__init__.py",
+      "memory_lab/reports/graph_health_report.py",
+      "reports/B15_CLEAN_EXPORT_AND_BUILD_REVIEW.md",
+      "reports/B15_GRAPH_HEALTH_REPORT_GENERATOR.md",
+      "reports/B15_GRAPH_HEALTH_SERVICE_ONLY.md",
+      "reports/B15_VERSION_DOCS_PREP.md",
+      "reports/b15_clean_export_and_build_review_summary.json",
+      "reports/b15_graph_health_report_generator_summary.json",
+      "reports/b15_graph_health_service_only_summary.json",
+      "reports/b15_version_docs_prep_summary.json",
+      "scripts/b15_graph_health_report.py",
+      "tests/integration/test_graph_health_api.py",
+      "tests/smoke/test_b15_graph_health_report.py",
+      "tests/unit/test_alias_hygiene_candidates.py",
+      "tests/unit/test_graph_health_service.py",
+      "tests/unit/test_hub_recall_health.py"
+    ],
+    "added_count": 23,
+    "base_for_copy": "origin/main at 97830f0828359e9bab79ce558e03494f9547ae1e",
+    "copy_source": "/opt/context-brain-memory-lab_public_export_b15/",
+    "copy_target": "/opt/context-brain-memory-lab_public_repo/ after fast-forward/reset to origin/main",
+    "execution_forbidden_now": [
+      "no commit",
+      "no push",
+      "no tag",
+      "no GitHub release",
+      "no PyPI upload",
+      "no CB write"
+    ],
+    "expected_commit_message": "Release 0.1.0b15 graph health and retrieval governance",
+    "modified": [
+      "README.md",
+      "memory_lab/api/main.py",
+      "pyproject.toml"
+    ],
+    "modified_count": 3,
+    "removed": [
+      "dist/context_brain_memory_lab-0.1.0b14-py3-none-any.whl",
+      "dist/context_brain_memory_lab-0.1.0b14.tar.gz",
+      "reports/.gitkeep_public_export_review_note",
+      "reports/B14_CLEAN_EXPORT_AND_BUILD_REVIEW.md",
+      "reports/B14_CLEAN_EXPORT_VALIDATION.log",
+      "reports/B14_PUBLIC_PUSH.md",
+      "reports/B14_PUBLIC_PUSH_PRECHECK.md",
+      "reports/b14_clean_export_and_build_review_summary.json",
+      "reports/b14_public_push_precheck_summary.json",
+      "reports/b14_public_push_summary.json"
+    ],
+    "removed_count": 10
+  },
+  "scope_guard": {
+    "cb_write": false,
+    "db_private_cb_access": false,
+    "git_commit": false,
+    "git_fetch_only": true,
+    "git_push": false,
+    "git_tag": false,
+    "github_release": false,
+    "graph_mutation": false,
+    "provider_calls": false,
+    "pypi_upload": false
+  },
+  "status": "B15_PUBLIC_PUSH_PRECHECK_PASS_WITH_CAVEATS",
+  "validation": {
+    "artifact_hash_verification": "PASS",
+    "b15_targeted_tests": "20 passed in 2.03s",
+    "broader_api_smoke": "PASS",
+    "py_compile": "PASS",
+    "rebuild_performed": "not repeated in precheck; existing clean-export build artifacts verified by sha256"
+  }
+}

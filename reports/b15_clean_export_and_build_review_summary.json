@@ -1,0 +1,109 @@
+{
+  "artifacts": {
+    "sdist": {
+      "path": "dist/context_brain_memory_lab-0.1.0b15.tar.gz",
+      "sha256": "b1ec3ce309e2efccfc6cefcf9b4f50755eecb57da4ba57f65c064c86b1799699"
+    },
+    "wheel": {
+      "path": "dist/context_brain_memory_lab-0.1.0b15-py3-none-any.whl",
+      "sha256": "68ddab56333541b78281f3fab6e3ce21eda58958d9d9eb580b68544b6124855d"
+    }
+  },
+  "caveats": [
+    "Export is not a git worktree; git diff/status proof is intentionally unavailable and no git operations were performed.",
+    "Wheel smoke used --system-site-packages and --no-deps to avoid network dependency resolution while still validating installed wheel metadata, imports, create_app, B15 routes, and report generator importability.",
+    "Static/deterministic B15 beta behavior remains: no live repository graph reads yet.",
+    "Dist artifacts are present in export because they were intentionally rebuilt inside the clean export for this review."
+  ],
+  "export": {
+    "file_count_after_clean_build": 199,
+    "reports_allowlist": [
+      "B15_CLEAN_EXPORT_AND_BUILD_REVIEW.md",
+      "B15_GRAPH_HEALTH_REPORT_GENERATOR.md",
+      "B15_GRAPH_HEALTH_SERVICE_ONLY.md",
+      "B15_VERSION_DOCS_PREP.md",
+      "b15_clean_export_and_build_review_summary.json",
+      "b15_graph_health_report_generator_summary.json",
+      "b15_graph_health_service_only_summary.json",
+      "b15_version_docs_prep_summary.json"
+    ],
+    "size_bytes_after_clean_build": 1151244,
+    "size_human_after_clean_build": "1.7M"
+  },
+  "export_target": "/opt/context-brain-memory-lab_public_export_b15",
+  "gate": "B15_CLEAN_EXPORT_AND_BUILD_REVIEW",
+  "generated_at": "2026-06-14T12:17:56.958308+00:00",
+  "hygiene": {
+    "contentingestor_source_material_found": false,
+    "env_files_absent": true,
+    "excluded": [
+      ".git",
+      ".venv",
+      "__pycache__",
+      ".pytest_cache",
+      ".mypy_cache",
+      ".ruff_cache",
+      ".env*",
+      ".claude",
+      ".planning",
+      "logs",
+      "local backups",
+      "debug/temp files",
+      "old dist artifacts"
+    ],
+    "forbidden_artifacts_absent_after_cleanup": true,
+    "notes": [
+      "Historical report directory was not copied wholesale; only B15 gate reports were allowlisted to avoid private path leakage from older evidence files.",
+      "Clean-export dist/ contains only artifacts rebuilt inside the clean export during this gate.",
+      "Credential/provider/database identifier names exist in public docs/code/tests as configuration keys, but no secret values/private keys/tokens were found by the hygiene scan.",
+      "memory_lab/providers/failure.py contains the literal placeholder MISSING_API_KEY=\"***\"; treated as non-secret placeholder, not a credential."
+    ],
+    "private_key_or_token_values_found": false
+  },
+  "scope_guard": {
+    "db_private_cb_access": false,
+    "git_commit_push_tag": false,
+    "graph_mutation": false,
+    "provider_calls": false,
+    "public_release": false,
+    "pypi_upload": false,
+    "schema_migration": false
+  },
+  "source": "/opt/context-brain-memory-lab_pr1a_staging",
+  "status": "B15_CLEAN_EXPORT_AND_BUILD_REVIEW_PASS_WITH_CAVEATS",
+  "validation": {
+    "broader_api_smoke": "PASS",
+    "clean_build": "PASS",
+    "py_compile": "PASS",
+    "targeted_b15_tests": "20 passed in 1.77s",
+    "wheel_install_smoke": "PASS"
+  },
+  "version": "0.1.0b15",
+  "version_docs_checks": {
+    "non_claims_present": [
+      "no Full Context Brain claim",
+      "no production graph quality claim",
+      "no production reasoning quality claim",
+      "no automatic graph repair",
+      "no graph mutation",
+      "no automatic entity/alias merge",
+      "no truth arbitration",
+      "no conflict resolution",
+      "no private CB port",
+      "no ask_v2 parity",
+      "no provider dependency"
+    ],
+    "pyproject_version_0_1_0b15": true,
+    "readme_b15_endpoints_documented": true,
+    "readme_hubs_read_permission_documented": true,
+    "readme_static_beta_caveat_documented": true
+  },
+  "wheel_smoke": {
+    "b15_routes_registered_get_only": true,
+    "create_app": "PASS",
+    "install_mode": "python3 -m venv --system-site-packages; pip install --no-deps built wheel",
+    "installed_version": "0.1.0b15",
+    "report_generator_importable": true,
+    "venv": "/tmp/b15_clean_export_wheel_smoke_venv"
+  }
+}

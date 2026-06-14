@@ -21,9 +21,10 @@
 - Retrieval evidence contract: normalized `EvidenceItem` with deterministic `evidence_id`, rank, `score_kind`, and `retrieval_path` across `/v1/retrieval/search` and `/v1/ask`
 - Context pack API: deterministic `context_pack_id` values (`cp_<sha256_first_24>`) for transient, non-mutating context packages
 - Reasoning over context packs: public-beta `POST /v1/reasoning/traverse`, `POST /v1/reasoning/explain`, and `POST /v1/reasoning/answer` for deterministic/read-only evidence traversal, explanation, and answer-candidate assembly over B12 context packs
+- Graph health beta: read-only Graph Health Score, Hub Recall Health, and Alias Hygiene candidate reporting over deterministic/sample graph-health data
 - Migrations: PostgreSQL schema `000..030`
 
-**Version**: `0.1.0b14` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b15` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -47,6 +48,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Conflict discovery / counterfinding surfacing via `POST /v1/conflicts/search`, without truth arbitration or automatic resolution
 - Context packaging / evidence object layer via `POST /v1/context-packs/build`, without answer synthesis, truth arbitration, or DB mutation
 - Reasoning over B12 context packs via `POST /v1/reasoning/traverse`, `POST /v1/reasoning/explain`, and B14 `POST /v1/reasoning/answer`, returning `answer_candidate` rather than top-level `answer` and without private ask_v2 parity, truth arbitration, conflict resolution, graph mutation, or DB mutation
+- B15 graph-health reporting via read-only API endpoints for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates, using the existing `hubs.read` permission and deterministic/sample data in this beta
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -97,7 +99,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table. v0.1.0b12 adds a computed/read-only context-pack API over existing B10/B11 signals; it adds no B12 migrations, no durable context-pack table, and no DB mutation path. v0.1.0b13 adds a deterministic/read-only reasoning layer over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`; it adds no B13 migrations, no durable reasoning table, and no DB mutation path. v0.1.0b14 adds `POST /v1/reasoning/answer` as an evidence-grounded answer-candidate endpoint over the same public-beta reasoning/context-pack layer; it adds no B14 migrations, no durable answer trace table, and no DB mutation path.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table. v0.1.0b12 adds a computed/read-only context-pack API over existing B10/B11 signals; it adds no B12 migrations, no durable context-pack table, and no DB mutation path. v0.1.0b13 adds a deterministic/read-only reasoning layer over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`; it adds no B13 migrations, no durable reasoning table, and no DB mutation path. v0.1.0b14 adds `POST /v1/reasoning/answer` as an evidence-grounded answer-candidate endpoint over the same public-beta reasoning/context-pack layer; it adds no B14 migrations, no durable answer trace table, and no DB mutation path. v0.1.0b15 adds read-only B15 graph-health reporting for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates over deterministic/sample beta data; it adds no B15 migrations, no durable graph-health table, no live repository read requirement yet, and no graph mutation path.
 
 ### Start the API runtime
 
@@ -585,9 +587,52 @@ The exact answer-candidate wording and reasoning fields remain public-beta and m
 
 ---
 
+### B15 beta graph health endpoints in v0.1.0b15
+
+v0.1.0b15 adds read-only graph-health reporting for public-beta review of graph retrieval readiness. The B15 layer exposes Graph Health Score, Hub Recall Health, and Alias Hygiene candidate outputs using existing B15 service/models and the existing `hubs.read` permission. In this beta, the API endpoints use deterministic/static sample data; live repository reads are deferred to a later gate.
+
+New read-only API endpoints:
+
+```text
+GET /v1/graph/health
+GET /v1/hubs/{hub_id}/recall-health
+GET /v1/graph/alias-candidates
+```
+
+B15 report/API output documents:
+
+- `health_score` and component scores.
+- warnings for embedding/index/searchability consistency states.
+- indexing/searchability states, including missing/null embeddings and searchable/not-searchable cases.
+- hub recall findings for hub-linked content that is not searchable or not retrieved.
+- alias candidates that require human review.
+- limitations and `non_claims` to keep the beta boundary explicit.
+
+B15 safety and boundary rules:
+
+- Requires the existing `hubs.read` permission.
+- Deterministic/sample-data beta output; no live repository reads yet.
+- Report generator is available from Python tests via `memory_lab.reports.graph_health_report`.
+- Not a Full Context Brain claim.
+- Not a production graph quality claim.
+- Not a production reasoning quality claim.
+- Not automatic graph repair.
+- No graph mutation.
+- No automatic entity or alias merge.
+- No truth arbitration.
+- No conflict resolution.
+- No private CB port.
+- No ask_v2 parity.
+- No provider dependency or provider call requirement.
+- No B15 migrations and no durable graph-health table.
+
+Treat B15 output as deterministic review assistance for graph-health diagnostics, not as a production quality verdict, canonical truth decision, graph repair engine, or conflict-resolution system.
+
+---
+
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, B11 conflict discovery / counterfinding surfacing, B12 context packaging / evidence object layering, B13 deterministic reasoning traversal/explanation over B12 context packs, and B14 evidence-grounded answer-candidate assembly via `POST /v1/reasoning/answer`.
+This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, B11 conflict discovery / counterfinding surfacing, B12 context packaging / evidence object layering, B13 deterministic reasoning traversal/explanation over B12 context packs, B14 evidence-grounded answer-candidate assembly via `POST /v1/reasoning/answer`, and B15 read-only graph-health diagnostics for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates.
 
 It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
 
@@ -595,19 +640,20 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b14` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b15` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
-- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, and `1.0` API stability remain outside this B14 public-beta package. B14 includes `POST /v1/reasoning/answer` only as a deterministic/read-only, evidence-grounded `answer_candidate` endpoint; it is not a private ask_v2 port, truth arbiter, conflict resolver, production reasoning quality claim, or Full Context Brain claim.
+- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, and `1.0` API stability remain outside this B15 public-beta package. B14 includes `POST /v1/reasoning/answer` only as a deterministic/read-only, evidence-grounded `answer_candidate` endpoint; B15 adds deterministic/read-only graph-health diagnostics only. These are not a private ask_v2 port, truth arbiter, conflict resolver, production reasoning quality claim, production graph quality claim, graph repair engine, automatic entity merge, provider dependency, or Full Context Brain claim.
 
 ### Coming next / planned Context Brain layers
 
 - **Reasoning over context packs** — B13 adds `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain` over B12 context packs. B14 adds `POST /v1/reasoning/answer`, which returns `answer_candidate` (not top-level `answer`) while preserving evidence refs, traversal steps, conflict warnings, limitations, and `non_claims`. The default path is deterministic/read-only, `LLM_PROVIDER=none` remains valid/default, provider-backed synthesis is opt-in only via `enable_provider_synthesis=true`, private ask_v2 parity is not claimed, and B14 does not perform truth arbitration or conflict resolution. The existing minimal/noop public ask layer via `POST /v1/ask` remains separate and is not rewritten.
+- **Graph health diagnostics** — B15 adds read-only Graph Health Score, Hub Recall Health, and Alias Hygiene candidate endpoints using `hubs.read`. The B15 API uses deterministic/static sample data in this beta; live repository reads are deferred. It does not mutate the graph, merge aliases/entities, perform graph repair, claim production graph quality, call providers, arbitrate truth, resolve conflicts, or port private CB/ask_v2 behavior.
 - **Classify / embed / store pipeline** — B10 includes deterministic classify ingest wiring and catchup support. Provider-backed embeddings remain optional and are not required by default.
 - **Conflict discovery vs resolution** — B11 surfaces computed counterfinding and contradiction candidates, but contradiction escalation workflows, truth arbitration, automatic contradiction resolution, and human resolution loops remain outside this public beta.
 - **Context packaging vs reasoning** — B12 exposes a context packaging / evidence object layer via `POST /v1/context-packs/build`; B13 adds reasoning traversal/explanation over those B12 context packs; B14 adds evidence-grounded answer-candidate assembly. These are not Full Context Brain, not a private ask_v2 port, not truth arbitration, not production reasoning quality claims, and not automatic conflict resolution.
 - **Current-state and agent packaging** — B10 includes resolver helpers for current-state anchors; B12 can package current-state signals and stale/superseded items, but the package is still not Full Context Brain and does not claim production agent-context orchestration.
 - **Chunk search v2** — not included in this beta.
-- **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors. B11 adds no migrations and no durable conflict table. B12 adds no migrations and no durable context-pack table. B13 adds no migrations and no durable reasoning table.
+- **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors. B11 adds no migrations and no durable conflict table. B12 adds no migrations and no durable context-pack table. B13 adds no migrations and no durable reasoning table. B14 adds no migrations and no durable answer trace table. B15 adds no migrations and no durable graph-health table.
 
 ### Current integration limits
 
@@ -623,7 +669,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b14 final proof |
+| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b15 final proof |
 | `py_compile` / import smoke | Required in final package proof |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
@@ -658,11 +704,19 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | B14 response field | `answer_candidate`; no top-level `answer` claim |
 | B14 provider-backed synthesis required | NO; `LLM_PROVIDER=none` compatible and provider synthesis opt-in only via `enable_provider_synthesis=true` |
 | B14 truth arbitration or automatic conflict resolution | NO |
+| B15 Graph Health Score API endpoint | PASS in pass review (`GET /v1/graph/health`) |
+| B15 Hub Recall Health API endpoint | PASS in pass review (`GET /v1/hubs/{hub_id}/recall-health`) |
+| B15 Alias Hygiene candidate API endpoint | PASS in pass review (`GET /v1/graph/alias-candidates`) |
+| B15 permission | `hubs.read` |
+| B15 data source caveat | deterministic/static sample data in beta; no live repository reads yet |
+| B15 graph mutation / automatic alias merge | NO |
+| B15 truth arbitration or conflict resolution | NO |
+| B15 provider calls required | NO |
 | Ask provider calls required | NO |
 | Provider calls required | NO |
 | Disposable teardown | PASS in B9/B10 public-style evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b14-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b15-py3-none-any.whl`
 
 ---
 
