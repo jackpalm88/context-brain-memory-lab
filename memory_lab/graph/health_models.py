@@ -141,6 +141,8 @@ class AliasCandidateReport(BaseModel):
 
 class GraphHealthReport(BaseModel):
     status: str = "ok"
+    data_source: str = "static"
+    mode: str = "static"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     health_score: int = Field(ge=0, le=100)
     component_scores: GraphHealthComponentScores

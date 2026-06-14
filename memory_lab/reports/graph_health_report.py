@@ -40,11 +40,44 @@ class GraphHealthReportGenerator:
         )
         return self._to_jsonable(report, scenario_name=scenario_name)
 
+    def generate_from_repository_snapshot(
+        self,
+        *,
+        scenario_name: str,
+        snapshot: Any,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Generate a JSON-compatible report from an explicit repository snapshot.
+
+        This is B16 report-layer integration only. It does not read a database,
+        import API routers, mutate graph state, or silently substitute sample
+        data for repository data.
+        """
+        mode = str(getattr(snapshot, "mode", "unknown"))
+        data_source = str(getattr(snapshot, "data_source", "unknown"))
+        if mode == "sample" or data_source == "sample":
+            raise ValueError("repository report mode refuses sample-as-repository input")
+        report = GraphHealthService().evaluate_repository_snapshot(snapshot, now=now)
+        return self._to_jsonable(report, scenario_name=scenario_name)
+
+    def generate_from_graph_health_report(
+        self,
+        *,
+        scenario_name: str,
+        report: GraphHealthReport,
+    ) -> Dict[str, Any]:
+        """Serialize an explicit graph health report without changing its mode."""
+        if getattr(report, "mode", None) == "sample" or getattr(report, "data_source", None) == "sample":
+            raise ValueError("repository report serialization refuses sample-as-repository input")
+        return self._to_jsonable(report, scenario_name=scenario_name)
+
     def _to_jsonable(self, report: GraphHealthReport, scenario_name: str) -> Dict[str, Any]:
         return {
             "scenario": scenario_name,
             "generated_at": report.generated_at.isoformat() if report.generated_at else None,
             "status": report.status,
+            "mode": report.mode,
+            "data_source": report.data_source,
             "health_score": report.health_score,
             "component_scores": report.component_scores.model_dump(),
             "topology_metrics": report.topology_metrics.model_dump(),

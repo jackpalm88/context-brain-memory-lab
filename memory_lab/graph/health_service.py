@@ -45,6 +45,10 @@ class GraphHealthService:
         retrieval_observations: Optional[Dict[Tuple[str, str], bool]] = None,
         alias_labels: Optional[Iterable[str]] = None,
         now: Optional[datetime] = None,
+        data_source: str = "static",
+        mode: str = "static",
+        inherited_limitations: Optional[Iterable[str]] = None,
+        inherited_warnings: Optional[Iterable[Any]] = None,
     ) -> GraphHealthReport:
         now = now or datetime.now(timezone.utc)
         content = [dict(item) for item in (content_items or [])]
@@ -84,13 +88,14 @@ class GraphHealthService:
 
         warnings = list(index_warnings) + list(hub_report.warnings) + list(alias_report.warnings)
         warnings.extend(self._consistency_warnings(content, hub_links))
+        warnings.extend(_repository_warnings(inherited_warnings or []))
         affected_content_ids = sorted(
             {cid for w in warnings for cid in w.affected_content_ids}
             | {f.content_id for f in hub_report.findings}
         )
         affected_node_ids = sorted({nid for w in warnings for nid in w.affected_node_ids})
 
-        limitations: List[str] = []
+        limitations: List[str] = list(dict.fromkeys(str(v) for v in (inherited_limitations or [])))
         if not graph_nodes and not graph_edges:
             limitations.append("empty_graph_or_no_graph_data")
         if not content:
@@ -104,6 +109,8 @@ class GraphHealthService:
 
         return GraphHealthReport(
             status=status,
+            data_source=str(data_source),
+            mode=str(mode),
             health_score=component_scores.total,
             component_scores=component_scores,
             topology_metrics=topology_metrics,
@@ -116,6 +123,51 @@ class GraphHealthService:
             alias_candidates=alias_report.candidates,
             limitations=limitations + hub_report.limitations + alias_report.limitations,
             non_claims=DEFAULT_NON_CLAIMS,
+        )
+
+
+    def evaluate_repository_snapshot(
+        self,
+        snapshot: Any,
+        *,
+        now: Optional[datetime] = None,
+    ) -> GraphHealthReport:
+        """Evaluate a B16 repository snapshot through the B15 graph health model.
+
+        This is service-level integration only. It performs no repository reads,
+        API exposure, report-generator wiring, graph mutation, or sample fallback.
+        The caller must pass an explicit snapshot from RepositoryGraphHealthReader.
+        """
+        mode = str(getattr(snapshot, "mode", "unknown"))
+        data_source = str(getattr(snapshot, "data_source", "unknown"))
+        if mode == "sample" or data_source == "sample":
+            raise ValueError("repository snapshot integration refuses sample-as-repository input")
+        if mode == "unavailable" or data_source == "unavailable":
+            return self.evaluate(
+                now=now or getattr(snapshot, "generated_at", None),
+                data_source=data_source,
+                mode=mode,
+                inherited_limitations=getattr(snapshot, "limitations", ()),
+                inherited_warnings=getattr(snapshot, "warnings", ()),
+            )
+
+        inputs = repository_snapshot_to_graph_health_inputs(snapshot)
+        limitations = list(getattr(snapshot, "limitations", ()))
+        unknown_fields = list(getattr(snapshot, "unknown_fields", ()))
+        if unknown_fields:
+            limitations.append("unknown_fields:" + ",".join(sorted(str(v) for v in unknown_fields)))
+        return self.evaluate(
+            nodes=inputs["nodes"],
+            edges=inputs["edges"],
+            content_items=inputs["content_items"],
+            hub_links=inputs["hub_links"],
+            retrieval_observations=inputs["retrieval_observations"],
+            alias_labels=inputs["alias_labels"],
+            now=now or getattr(snapshot, "generated_at", None),
+            data_source=data_source,
+            mode=mode,
+            inherited_limitations=limitations,
+            inherited_warnings=getattr(snapshot, "warnings", ()),
         )
 
     def compute_topology_metrics(self, nodes: Iterable[str], edges: Iterable[Any]) -> TopologyMetrics:
@@ -291,6 +343,119 @@ class GraphHealthService:
             largest = max(largest, size)
         return largest
 
+
+
+def repository_snapshot_to_graph_health_inputs(snapshot: Any) -> Dict[str, Any]:
+    """Normalize a RepositoryGraphSnapshot into GraphHealthService inputs.
+
+    The function is intentionally duck-typed to avoid coupling API/report layers
+    to repository classes. It never falls back to sample data.
+    """
+    mode = str(getattr(snapshot, "mode", "unknown"))
+    data_source = str(getattr(snapshot, "data_source", "unknown"))
+    if mode == "sample" or data_source == "sample":
+        raise ValueError("sample snapshots are not valid repository inputs")
+
+    content_records = list(getattr(snapshot, "content_records", ()) or ())
+    chunks = list(getattr(snapshot, "chunk_embedding_states", ()) or ())
+    hub_links_raw = list(getattr(snapshot, "hub_content_links", ()) or ())
+    graph_edges_raw = list(getattr(snapshot, "graph_edges", ()) or ())
+    hub_edges_raw = list(getattr(snapshot, "hub_edges", ()) or ())
+    hubs = list(getattr(snapshot, "hubs", ()) or ())
+    alias_records = list(getattr(snapshot, "alias_records", ()) or ())
+    alias_candidates = list(getattr(snapshot, "alias_candidates", ()) or ())
+
+    chunk_by_content: Dict[str, List[Any]] = defaultdict(list)
+    for chunk in chunks:
+        chunk_by_content[str(getattr(chunk, "content_id", ""))].append(chunk)
+
+    hub_links: Dict[str, List[str]] = defaultdict(list)
+    for link in hub_links_raw:
+        hub_links[str(getattr(link, "hub_id", ""))].append(str(getattr(link, "content_id", "")))
+
+    edges: List[Tuple[str, str]] = []
+    for edge in graph_edges_raw:
+        edges.append((str(getattr(edge, "from_node", "")), str(getattr(edge, "to_node", ""))))
+    for edge in hub_edges_raw:
+        edges.append((str(getattr(edge, "source_hub_id", "")), str(getattr(edge, "target_hub_id", ""))))
+
+    graph_nodes: Set[str] = set()
+    for a, b in edges:
+        if a:
+            graph_nodes.add(a)
+        if b:
+            graph_nodes.add(b)
+
+    linked_content_ids = {cid for values in hub_links.values() for cid in values}
+    content_items: List[Dict[str, Any]] = []
+    for record in sorted(content_records, key=lambda item: str(getattr(item, "content_id", ""))):
+        content_id = str(getattr(record, "content_id", ""))
+        record_chunks = chunk_by_content.get(content_id, [])
+        has_any_text = any(bool(getattr(chunk, "has_text", False)) for chunk in record_chunks)
+        has_any_embedding = any(bool(getattr(chunk, "has_embedding", False)) for chunk in record_chunks)
+        searchable = bool(has_any_text and has_any_embedding)
+        if searchable:
+            indexing_status = IndexingStatus.SEARCHABLE.value
+        elif record_chunks and not has_any_text:
+            indexing_status = IndexingStatus.BLOCKED_EMPTY.value
+        else:
+            indexing_status = IndexingStatus.UNKNOWN.value
+        content_items.append(
+            {
+                "content_id": content_id,
+                "saved": True,
+                "searchable": searchable,
+                "hub_linked": content_id in linked_content_ids,
+                "graph_reachable": content_id in graph_nodes,
+                "retrieval_observed": None,
+                "indexing_status": indexing_status,
+                "embedding_present": has_any_embedding if record_chunks else None,
+                "item_embedding_state": str(getattr(record, "item_embedding_state", "unknown")),
+            }
+        )
+
+    alias_labels = sorted(
+        {
+            str(value)
+            for hub in hubs
+            for value in (
+                getattr(hub, "title", None),
+                *(getattr(hub, "aliases", ()) or ()),
+                *(getattr(hub, "related_terms", ()) or ()),
+            )
+            if value
+        }
+        | {str(getattr(alias, "term", "")) for alias in alias_records if getattr(alias, "term", None)}
+        | {str(getattr(alias, "canonical", "")) for alias in alias_records if getattr(alias, "canonical", None)}
+        | {str(getattr(candidate, "term_a", "")) for candidate in alias_candidates if getattr(candidate, "term_a", None)}
+        | {str(getattr(candidate, "term_b", "")) for candidate in alias_candidates if getattr(candidate, "term_b", None)}
+    )
+
+    return {
+        "nodes": sorted(graph_nodes),
+        "edges": edges,
+        "content_items": content_items,
+        "hub_links": {hub: sorted(values) for hub, values in sorted(hub_links.items())},
+        "retrieval_observations": {},
+        "alias_labels": alias_labels,
+    }
+
+
+def _repository_warnings(warnings: Iterable[Any]) -> List[GraphHealthWarning]:
+    converted: List[GraphHealthWarning] = []
+    for warning in warnings:
+        if isinstance(warning, GraphHealthWarning):
+            converted.append(warning)
+            continue
+        code = "REPOSITORY_" + str(warning).upper().replace("-", "_")
+        converted.append(
+            GraphHealthWarning(
+                code=code,
+                message=f"Repository snapshot warning: {warning}",
+                details={"repository_warning": str(warning)},
+            )
+        )
+    return converted
 
 def derive_indexing_status(item: Dict[str, Any], now: datetime) -> IndexingStatus:
     raw = item.get("indexing_status")
