@@ -24,7 +24,7 @@
 - Graph health beta: read-only Graph Health Score, Hub Recall Health, and Alias Hygiene candidate reporting over deterministic/sample graph-health data
 - Migrations: PostgreSQL schema `000..030`
 
-**Version**: `0.1.0b15` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b17` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -49,6 +49,8 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Context packaging / evidence object layer via `POST /v1/context-packs/build`, without answer synthesis, truth arbitration, or DB mutation
 - Reasoning over B12 context packs via `POST /v1/reasoning/traverse`, `POST /v1/reasoning/explain`, and B14 `POST /v1/reasoning/answer`, returning `answer_candidate` rather than top-level `answer` and without private ask_v2 parity, truth arbitration, conflict resolution, graph mutation, or DB mutation
 - B15 graph-health reporting via read-only API endpoints for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates, using the existing `hubs.read` permission and deterministic/sample data in this beta
+- B16 centralized `workspace_id` propagation across evidence surface, reasoning endpoints, classification pipeline, and retrieval evidence contract wiring, plus `/v1/inspect/consistency` restriction to admin/scorer roles only
+- B17 public-safe ingestion foundation with deterministic provider-free content chunking, mechanical chunk scoring, read-only embedding health over supplied rows, and deterministic noop classifiers (domain, hub, tag) — a local, provider-neutral, DB-free, mutation-free ingestion scaffold with synthetic fixture-driven tests and no claims to real extraction intelligence
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 ---
@@ -640,7 +642,7 @@ It is intentionally scoped: the public package exposes the foundation now, while
 
 - **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
-- **Public beta API** — `0.1.0b15` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b17` may still introduce breaking changes before `1.0`.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
 - **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, and `1.0` API stability remain outside this B15 public-beta package. B14 includes `POST /v1/reasoning/answer` only as a deterministic/read-only, evidence-grounded `answer_candidate` endpoint; B15 adds deterministic/read-only graph-health diagnostics only. These are not a private ask_v2 port, truth arbiter, conflict resolver, production reasoning quality claim, production graph quality claim, graph repair engine, automatic entity merge, provider dependency, or Full Context Brain claim.
 
