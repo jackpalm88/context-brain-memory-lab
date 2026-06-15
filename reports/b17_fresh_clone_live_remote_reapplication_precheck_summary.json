@@ -1,0 +1,571 @@
+{
+  "b17_path_conflict_precheck": {
+    "approved_path_count": 16,
+    "blocked_if_any_existing_b17_path": false,
+    "existing_b17_paths_count": 0,
+    "existing_b17_paths_on_fresh_live_base": [],
+    "expected_b16_live_path_overlap_with_b17_paths": 0,
+    "expected_exact_b17_paths_on_live_remote": 0
+  },
+  "caveats": [
+    "A fresh clone was created/used only as a clean baseline; B17 files were not applied.",
+    "The report files themselves are untracked audit artifacts in the fresh baseline after the precheck report is written.",
+    "Future implementation must re-check live remote HEAD immediately before applying files."
+  ],
+  "final_status": "B17_FRESH_CLONE_LIVE_REMOTE_REAPPLICATION_PRECHECK_PASS_WITH_CAVEATS",
+  "forbidden_actions_not_performed": {
+    "b17_file_application": true,
+    "build_export": true,
+    "cb_write": true,
+    "cherry_pick": true,
+    "commit": true,
+    "db_private_cb_access": true,
+    "deletion_or_staging_of_stale_worktree_reports": true,
+    "merge": true,
+    "provider_calls": true,
+    "push": true,
+    "rebase": true,
+    "reset_existing_worktree": true,
+    "scorecard_update": true,
+    "source_changes": true,
+    "tag_release_pypi": true,
+    "tests_changed": true
+  },
+  "fresh_clone_worktree_identity": {
+    "branch": "main",
+    "clean_worktree_status_before_reports": true,
+    "fresh_path": "/opt/context-brain-memory-lab_b17_fresh_live_remote",
+    "head": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "head_equals_authoritative_live_remote_head": true,
+    "origin_main": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "pycache_count": 0,
+    "remote_url": "git@github.com:jackpalm88/context-brain-memory-lab.git",
+    "staged_files_before_reports": [],
+    "tracked_diff_files_before_reports": [],
+    "untracked_files_before_reports": []
+  },
+  "gate": "GO_B17_FRESH_CLONE_LIVE_REMOTE_REAPPLICATION_PRECHECK",
+  "live_remote_baseline": {
+    "ahead_behind_origin_main_head": "0\t0",
+    "expected_live_remote_head": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "fresh_local_head_equals_live_remote_head": true,
+    "live_remote_matches_expected": true,
+    "live_remote_refs_heads_main": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "no_divergence": true,
+    "no_stale_origin_main_state": true
+  },
+  "mode": "fresh_baseline_precheck_only",
+  "next_gate": "GO_B17_FRESH_LIVE_REMOTE_REAPPLICATION_IMPLEMENTATION",
+  "package_import_compatibility_precheck": {
+    "compatible_for_future_b17_package_application": true,
+    "memory_lab_ingestion_dir_exists": true,
+    "memory_lab_ingestion_init_exists": true,
+    "package_metadata_version_change_needed": false,
+    "pyproject_exists": true,
+    "pyproject_has_setuptools_or_project_config": true,
+    "tests_unit_dir_exists": true
+  },
+  "protected_no_change_precheck": {
+    "future_application_must_not_touch": [
+      "README.md",
+      "pyproject.toml",
+      "package version metadata",
+      "API routers/main",
+      "migrations",
+      "docs",
+      "config/env files",
+      "build/release files",
+      "scorecard reports"
+    ],
+    "pyproject_version_api_changes_needed": false
+  },
+  "public_safe_precheck": {
+    "candidate_operational_source_hits": [],
+    "candidate_operational_source_hits_count": 0,
+    "candidate_test_fixture_hits": [
+      {
+        "file": "tests/unit/test_b17_synthetic_ingestion_fixtures.py",
+        "kind": "provider",
+        "line": 31,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_synthetic_ingestion_fixtures.py",
+        "kind": "provider",
+        "line": 32,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_synthetic_ingestion_fixtures.py",
+        "kind": "provider",
+        "line": 142,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_synthetic_ingestion_fixtures.py",
+        "kind": "provider",
+        "line": 142,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_synthetic_ingestion_fixtures.py",
+        "kind": "db",
+        "line": 149,
+        "match": "postgres"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 161,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 161,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 162,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 162,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 175,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "provider",
+        "line": 176,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "db",
+        "line": 161,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "db",
+        "line": 161,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "db",
+        "line": 162,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "db",
+        "line": 162,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "db",
+        "line": 179,
+        "match": "postgres"
+      },
+      {
+        "file": "tests/unit/test_b17_ingestion_interface_scaffold.py",
+        "kind": "private_prompt_or_ip",
+        "line": 174,
+        "match": "conting.superagents.solutions"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_content_chunker.py",
+        "kind": "provider",
+        "line": 166,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_content_chunker.py",
+        "kind": "provider",
+        "line": 167,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_content_chunker.py",
+        "kind": "db",
+        "line": 168,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_content_chunker.py",
+        "kind": "private_prompt_or_ip",
+        "line": 178,
+        "match": "/opt/contentingestor"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "provider",
+        "line": 208,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "provider",
+        "line": 208,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "provider",
+        "line": 209,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "provider",
+        "line": 209,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "db",
+        "line": 220,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "db",
+        "line": 220,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "db",
+        "line": 221,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "db",
+        "line": 221,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "db",
+        "line": 227,
+        "match": "postgres"
+      },
+      {
+        "file": "tests/unit/test_b17_deterministic_chunk_scorer.py",
+        "kind": "private_prompt_or_ip",
+        "line": 227,
+        "match": "conting.superagents.solutions"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 249,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 249,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 250,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 250,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 275,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "provider",
+        "line": 276,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "db",
+        "line": 249,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "db",
+        "line": 249,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "db",
+        "line": 250,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "db",
+        "line": 250,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "db",
+        "line": 279,
+        "match": "postgres"
+      },
+      {
+        "file": "tests/unit/test_b17_embedding_ops_read_only_health.py",
+        "kind": "private_prompt_or_ip",
+        "line": 274,
+        "match": "conting.superagents.solutions"
+      },
+      {
+        "file": "tests/unit/test_b17_classifier_noop.py",
+        "kind": "provider",
+        "line": 19,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_classifier_noop.py",
+        "kind": "provider",
+        "line": 20,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_classifier_noop.py",
+        "kind": "db",
+        "line": 23,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_classifier_noop.py",
+        "kind": "db",
+        "line": 25,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_classifier_noop.py",
+        "kind": "db",
+        "line": 26,
+        "match": "asyncpg"
+      },
+      {
+        "file": "tests/unit/test_b17_content_extraction_noop.py",
+        "kind": "provider",
+        "line": 18,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_content_extraction_noop.py",
+        "kind": "provider",
+        "line": 19,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_content_extraction_noop.py",
+        "kind": "db",
+        "line": 23,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_content_extraction_noop.py",
+        "kind": "db",
+        "line": 25,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_content_extraction_noop.py",
+        "kind": "db",
+        "line": 26,
+        "match": "asyncpg"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "provider",
+        "line": 192,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "provider",
+        "line": 192,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "provider",
+        "line": 193,
+        "match": "anthropic"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "provider",
+        "line": 193,
+        "match": "openai"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "db",
+        "line": 192,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "db",
+        "line": 192,
+        "match": "sqlalchemy"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "db",
+        "line": 193,
+        "match": "psycopg2"
+      },
+      {
+        "file": "tests/unit/test_b17_repository_embedding_health_adapter.py",
+        "kind": "db",
+        "line": 193,
+        "match": "sqlalchemy"
+      }
+    ],
+    "candidate_test_fixture_hits_count": 61,
+    "fresh_base_high_signal_hits": [
+      {
+        "file": "memory_lab/reasoning/answer.py",
+        "kind": "private_prompt_or_ip",
+        "line": 28,
+        "match": "private_prompt"
+      },
+      {
+        "file": "memory_lab/reasoning/answer.py",
+        "kind": "private_prompt_or_ip",
+        "line": 136,
+        "match": "private prompt"
+      },
+      {
+        "file": "memory_lab/reasoning/explain.py",
+        "kind": "private_prompt_or_ip",
+        "line": 22,
+        "match": "private_prompt"
+      }
+    ],
+    "fresh_base_high_signal_hits_count": 3,
+    "note": "Defensive literals/synthetic blockers are allowed in tests/fixtures. Existing fresh-base textual field-name hits are recorded as caveats; candidate B17 operational source hits block readiness.",
+    "scan_ok": true
+  },
+  "readiness_recommendation": "ready_for_fresh_live_remote_reapplication_gate",
+  "report_artifact_policy_confirmation": {
+    "apply_only_16_source_test_fixture_files_first": true,
+    "do_not_carry_stale_public_application_reports_by_default": true,
+    "regenerate_fresh_live_base_reports": true
+  },
+  "source_package_reference": {
+    "all_16_approved_files_available": true,
+    "all_source_hashes_match_stale_reference": true,
+    "available_count": 16,
+    "hashes_can_be_compared_to_stale_commit_reference": true,
+    "manifest_candidates": [
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/AUTH_RBAC_PUBLIC_ALLOWLIST_FREEZE.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_CONTENT_EXTRACTION_NOOP_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_CONTENT_EXTRACTION_NOOP_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_REFRESH_2_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_REFRESH_2_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_REFRESH_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_LOCAL_INGESTION_FOUNDATION_REFRESH_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_REPOSITORY_EMBEDDING_HEALTH_ADAPTER_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/B17_REPOSITORY_EMBEDDING_HEALTH_ADAPTER_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PR1A_CONSOLIDATED_FREEZE_REVIEW_AFTER_RETRIEVAL.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PR1A_DB_PASS_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PR1A_STORE_OPERATION_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PR1B_MCP_RUNTIME_PASS_FREEZE_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PR1B_MINIMAL_API_RUNTIME_PASS_FREEZE_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PRESTAGE_2_ALLOWLIST_FREEZE.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PRESTAGE_2_CONSOLIDATED_SMOKE_FREEZE_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PRESTAGE_3_CONSOLIDATED_FREEZE_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PRESTAGE_3_PUBLIC_ALLOWLIST_FREEZE.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PRESTAGE_3_WORKSPACE_FOUNDATION_CONSOLIDATED_FREEZE_REVIEW.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/PUBLIC_EXPORT_ALLOWLIST_FREEZE.md",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_content_extraction_noop_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_content_extraction_noop_freeze_pass_review_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_freeze_pass_review_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_refresh_2_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_refresh_2_freeze_pass_review_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_refresh_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_local_ingestion_foundation_refresh_freeze_pass_review_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_repository_embedding_health_adapter_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/b17_repository_embedding_health_adapter_freeze_pass_review_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/prestage_2_consolidated_smoke_freeze_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/prestage_3_consolidated_freeze_summary.json",
+      "/opt/context-brain-memory-lab_pr1a_staging/reports/prestage_3_workspace_foundation_consolidated_freeze_summary.json",
+      "/opt/context-brain-memory-lab_public_repo/reports/B17_PUBLIC_REPO_APPLICATION_FREEZE_MANIFEST.md",
+      "/opt/context-brain-memory-lab_public_repo/reports/B17_PUBLIC_REPO_APPLICATION_FREEZE_PASS_REVIEW.md",
+      "/opt/context-brain-memory-lab_public_repo/reports/b17_public_repo_application_freeze_manifest_summary.json",
+      "/opt/context-brain-memory-lab_public_repo/reports/b17_public_repo_application_freeze_pass_review_summary.json"
+    ],
+    "missing_files": [],
+    "preferred_source_path": "/opt/context-brain-memory-lab_pr1a_staging",
+    "source_policy": "reviewed staging/audit source files; not stale commit cherry-pick",
+    "source_sha256": {
+      "memory_lab/ingestion/chunk_scoring.py": "d82e160f8c940968382526de7e7b53bec9505f60b3f02db12ffcac83ce94995f",
+      "memory_lab/ingestion/chunking.py": "a0aa064a630fad8e240b69c971707a69a2fac874d1626ae2076574899b1925fa",
+      "memory_lab/ingestion/classifiers.py": "921b914bd12bc0c5f2542106a0087684fa8da96466788ac8d0777fbc25d7ac58",
+      "memory_lab/ingestion/embedding_health.py": "1c04426ff5202722ac91d2b8c4aef1a2b46a639f4de4f339fae2e21e2cd8c595",
+      "memory_lab/ingestion/embedding_health_adapter.py": "d08237d0f67918c33c7b003a901e389458cf613c668fd4151e879356319e5a8d",
+      "memory_lab/ingestion/extraction.py": "e1b78b6e30201cb2de7bda5803b1e77f112f8c29d85bdcdc64d5fe1db8cbdcad",
+      "memory_lab/ingestion/interfaces.py": "f38b01b8b9df5563743cf30b772747adf70ca6b44ea6cfe471ea97c94cef4304",
+      "tests/fixtures/b17_ingestion/synthetic_ingestion_fixtures.json": "d1b0bb938e62abdae2e2cab600a2bfd5b928e0489fd1ecefe0ebba644355a4ab",
+      "tests/unit/test_b17_classifier_noop.py": "763887b90287dcfb96b709fc92dad7e8515e1a9f4cc05905a777b7f4417ceeb0",
+      "tests/unit/test_b17_content_extraction_noop.py": "348e4a42ff14e606f19e883a9e9b5690a3db167e9b671c584466714b374c428b",
+      "tests/unit/test_b17_deterministic_chunk_scorer.py": "ab77b851a9e668ab71016bdcdaf04a1b46e9fbeb308f6721539632e3e641b90c",
+      "tests/unit/test_b17_deterministic_content_chunker.py": "d7ff61ada5afff6f0a188f8f44a30b17eb16de357b6cea20c9a3b5032cbe1a75",
+      "tests/unit/test_b17_embedding_ops_read_only_health.py": "6034dc980be4a59da4dacee7d7897405c480029a1a32406d3863f1bfdb96d261",
+      "tests/unit/test_b17_ingestion_interface_scaffold.py": "d7d5193f5d8b5ee96742e586f5538608be1fa7649bf71b1a539ee26a476f9789",
+      "tests/unit/test_b17_repository_embedding_health_adapter.py": "acbd7ba61a8ef1a0f2c806570f11b3c2d1893d6d6d191946efa5343ba75c955a",
+      "tests/unit/test_b17_synthetic_ingestion_fixtures.py": "72fa5514d7b21e4b9b88c60ba34c4720fd11698c35a3d8b9502cde548c5c8610"
+    },
+    "stale_reference_sha256": {
+      "memory_lab/ingestion/chunk_scoring.py": "d82e160f8c940968382526de7e7b53bec9505f60b3f02db12ffcac83ce94995f",
+      "memory_lab/ingestion/chunking.py": "a0aa064a630fad8e240b69c971707a69a2fac874d1626ae2076574899b1925fa",
+      "memory_lab/ingestion/classifiers.py": "921b914bd12bc0c5f2542106a0087684fa8da96466788ac8d0777fbc25d7ac58",
+      "memory_lab/ingestion/embedding_health.py": "1c04426ff5202722ac91d2b8c4aef1a2b46a639f4de4f339fae2e21e2cd8c595",
+      "memory_lab/ingestion/embedding_health_adapter.py": "d08237d0f67918c33c7b003a901e389458cf613c668fd4151e879356319e5a8d",
+      "memory_lab/ingestion/extraction.py": "e1b78b6e30201cb2de7bda5803b1e77f112f8c29d85bdcdc64d5fe1db8cbdcad",
+      "memory_lab/ingestion/interfaces.py": "f38b01b8b9df5563743cf30b772747adf70ca6b44ea6cfe471ea97c94cef4304",
+      "tests/fixtures/b17_ingestion/synthetic_ingestion_fixtures.json": "d1b0bb938e62abdae2e2cab600a2bfd5b928e0489fd1ecefe0ebba644355a4ab",
+      "tests/unit/test_b17_classifier_noop.py": "763887b90287dcfb96b709fc92dad7e8515e1a9f4cc05905a777b7f4417ceeb0",
+      "tests/unit/test_b17_content_extraction_noop.py": "348e4a42ff14e606f19e883a9e9b5690a3db167e9b671c584466714b374c428b",
+      "tests/unit/test_b17_deterministic_chunk_scorer.py": "ab77b851a9e668ab71016bdcdaf04a1b46e9fbeb308f6721539632e3e641b90c",
+      "tests/unit/test_b17_deterministic_content_chunker.py": "d7ff61ada5afff6f0a188f8f44a30b17eb16de357b6cea20c9a3b5032cbe1a75",
+      "tests/unit/test_b17_embedding_ops_read_only_health.py": "6034dc980be4a59da4dacee7d7897405c480029a1a32406d3863f1bfdb96d261",
+      "tests/unit/test_b17_ingestion_interface_scaffold.py": "d7d5193f5d8b5ee96742e586f5538608be1fa7649bf71b1a539ee26a476f9789",
+      "tests/unit/test_b17_repository_embedding_health_adapter.py": "acbd7ba61a8ef1a0f2c806570f11b3c2d1893d6d6d191946efa5343ba75c955a",
+      "tests/unit/test_b17_synthetic_ingestion_fixtures.py": "72fa5514d7b21e4b9b88c60ba34c4720fd11698c35a3d8b9502cde548c5c8610"
+    }
+  },
+  "timestamp_utc": "2026-06-15T04:37:22Z"
+}

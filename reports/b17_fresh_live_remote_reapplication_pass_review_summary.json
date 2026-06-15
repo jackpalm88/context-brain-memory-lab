@@ -1,0 +1,140 @@
+{
+  "all_checks_passed": true,
+  "applied_file_scope": {
+    "exactly_16_b17_files_present": true,
+    "no_extra_b17_files": true,
+    "no_stale_public_reports_copied": true,
+    "only_expected_untracked": true,
+    "passed": true,
+    "present_count": 16,
+    "present_files": [
+      "memory_lab/ingestion/chunk_scoring.py",
+      "memory_lab/ingestion/chunking.py",
+      "memory_lab/ingestion/classifiers.py",
+      "memory_lab/ingestion/embedding_health.py",
+      "memory_lab/ingestion/embedding_health_adapter.py",
+      "memory_lab/ingestion/extraction.py",
+      "memory_lab/ingestion/interfaces.py",
+      "tests/fixtures/b17_ingestion/synthetic_ingestion_fixtures.json",
+      "tests/unit/test_b17_classifier_noop.py",
+      "tests/unit/test_b17_content_extraction_noop.py",
+      "tests/unit/test_b17_deterministic_chunk_scorer.py",
+      "tests/unit/test_b17_deterministic_content_chunker.py",
+      "tests/unit/test_b17_embedding_ops_read_only_health.py",
+      "tests/unit/test_b17_ingestion_interface_scaffold.py",
+      "tests/unit/test_b17_repository_embedding_health_adapter.py",
+      "tests/unit/test_b17_synthetic_ingestion_fixtures.py"
+    ]
+  },
+  "caveats": [
+    "Public-safe scan found defensive/negative-control strings in tests/fixtures only (api_key variable names); operational source blockers, UUIDs, private prompt/IP, and actual provider payload hits are zero."
+  ],
+  "final_status": "B17_FRESH_LIVE_REMOTE_REAPPLICATION_PASS_REVIEW_PASS_WITH_CAVEATS",
+  "forbidden_actions_not_performed": {
+    "build_export": true,
+    "cb_write": true,
+    "cherry_pick": true,
+    "commit": true,
+    "merge": true,
+    "push": true,
+    "rebase": true,
+    "reset": true,
+    "scorecard_update": true,
+    "tag_release_pypi": true
+  },
+  "fresh_baseline": {
+    "branch": "main",
+    "head": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "live_remote_main": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "no_divergence": true,
+    "origin_main": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "passed": true,
+    "target_path": "/opt/context-brain-memory-lab_b17_fresh_live_remote"
+  },
+  "gate": "GO_B17_FRESH_LIVE_REMOTE_REAPPLICATION_PASS_REVIEW",
+  "hash_reproducibility": {
+    "all_b17_match_staging": true,
+    "impl_json_hash_match": true,
+    "impl_md_hash_match": true,
+    "passed": true,
+    "precheck_files_exist": true,
+    "precheck_json_valid": true
+  },
+  "mode": "review_only",
+  "next_gate": "GO_B17_FRESH_LIVE_REMOTE_REAPPLICATION_FREEZE_MANIFEST",
+  "non_claims": {
+    "no_production_dlp": true,
+    "no_semantic_extraction": true,
+    "not_full_cb": true,
+    "not_production_readiness": true,
+    "not_public_push": true,
+    "not_release": true,
+    "not_scorecard": true
+  },
+  "protected_no_change": {
+    "all_untouched": true,
+    "passed": true,
+    "tracked_diff_files": []
+  },
+  "public_safe_scan": {
+    "caveat_hits": 36,
+    "op_forbidden_hits": 0,
+    "passed": true,
+    "private_ip_prompt_hits": 0,
+    "provider_payload_hits": 0,
+    "uuid_hits": 0
+  },
+  "readiness": "ready_for_freeze_manifest_gate",
+  "review_hashes": {
+    "review_md": "d162168f85c9171356e3d9887252a4f2fb2663ee1ed7b0ac47b28ce0bc6ba774",
+    "summary_json": "ac77548384273b1396708ba341d6acc58210680d6b0d249d73b1706966365da0"
+  },
+  "timestamp_utc": "2026-06-15T05:30:16Z",
+  "validation_evidence": {
+    "broader_public_unit_subset_passed": true,
+    "broader_public_unit_subset_summary": "502 passed, 9 skipped in 2.66s",
+    "cheap_ingestion_tests_passed": true,
+    "cheap_ingestion_tests_summary": "reused targeted B17 test results",
+    "final_pycache_count_zero": true,
+    "import_package_passed": true,
+    "passed": true,
+    "public_safe_scan_passed": true,
+    "py_compile_passed": true,
+    "targeted_b17_tests_passed": true,
+    "targeted_b17_tests_summary": "116 passed in 1.11s"
+  },
+  "worktree_state": {
+    "expected_untracked_only": true,
+    "head": "f5f1db4ae74217ce93b96eac8ff948481030d0e9",
+    "head_unchanged": true,
+    "passed": true,
+    "pycache_count": 0,
+    "staged_files_count": 0,
+    "tracked_diff_files_count": 0,
+    "unexpected_untracked": [],
+    "untracked_files": [
+      "memory_lab/ingestion/chunk_scoring.py",
+      "memory_lab/ingestion/chunking.py",
+      "memory_lab/ingestion/classifiers.py",
+      "memory_lab/ingestion/embedding_health.py",
+      "memory_lab/ingestion/embedding_health_adapter.py",
+      "memory_lab/ingestion/extraction.py",
+      "memory_lab/ingestion/interfaces.py",
+      "reports/B17_FRESH_CLONE_LIVE_REMOTE_REAPPLICATION_PRECHECK.md",
+      "reports/B17_FRESH_LIVE_REMOTE_REAPPLICATION_IMPLEMENTATION.md",
+      "reports/B17_FRESH_LIVE_REMOTE_REAPPLICATION_PASS_REVIEW.md",
+      "reports/b17_fresh_clone_live_remote_reapplication_precheck_summary.json",
+      "reports/b17_fresh_live_remote_reapplication_implementation_summary.json",
+      "reports/b17_fresh_live_remote_reapplication_pass_review_summary.json",
+      "tests/fixtures/b17_ingestion/synthetic_ingestion_fixtures.json",
+      "tests/unit/test_b17_classifier_noop.py",
+      "tests/unit/test_b17_content_extraction_noop.py",
+      "tests/unit/test_b17_deterministic_chunk_scorer.py",
+      "tests/unit/test_b17_deterministic_content_chunker.py",
+      "tests/unit/test_b17_embedding_ops_read_only_health.py",
+      "tests/unit/test_b17_ingestion_interface_scaffold.py",
+      "tests/unit/test_b17_repository_embedding_health_adapter.py",
+      "tests/unit/test_b17_synthetic_ingestion_fixtures.py"
+    ]
+  }
+}

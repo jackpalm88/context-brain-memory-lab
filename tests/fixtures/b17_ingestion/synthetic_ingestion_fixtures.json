@@ -1,0 +1,171 @@
+{
+  "description": "Synthetic-only fixture pack for B17 ingestion intelligence design validation. Contains no private Context Brain data, no provider endpoints, no secrets, and no production identifiers.",
+  "fixtures": [
+    {
+      "case": "short note",
+      "expected_signals": {
+        "candidate_domains": [
+          "planning"
+        ],
+        "min_length_class": "short",
+        "notes": [
+          "single paragraph"
+        ]
+      },
+      "id": "syn-b17-short-note-001",
+      "text": "Remember to review the draft onboarding checklist for the sample knowledge workspace after the mock planning meeting.",
+      "title": "Synthetic short note"
+    },
+    {
+      "case": "long document",
+      "expected_signals": {
+        "candidate_domains": [
+          "operations",
+          "knowledge management"
+        ],
+        "min_length_class": "long",
+        "notes": [
+          "multi-sentence synthetic memo"
+        ]
+      },
+      "id": "syn-b17-long-document-001",
+      "text": "This synthetic operations memo describes a fictional team preparing a public sample knowledge base. The team documents intake rules, review cadence, quality labels, ownership notes, and handoff expectations for mock records. Each section uses invented names such as Project Orchard, Team Lantern, and Workspace Sample Alpha to avoid any private reference. The document explains that source text may be split into readable units when a future segmenter exists, but this fixture does not implement segmentation. It also states that quality checks should remain deterministic and should not call any external service, stored record system, vector store, or administration endpoint. A reviewer can use this long example to verify parsing, stable ordering, and boundary scans across multiple sentences and paragraphs. The closing paragraph repeats the safety rule: all identifiers, labels, and entities in this fixture are fictional and public-safe.",
+      "title": "Synthetic long document"
+    },
+    {
+      "case": "mixed-language content",
+      "expected_signals": {
+        "candidate_domains": [
+          "planning"
+        ],
+        "languages": [
+          "lv",
+          "en"
+        ]
+      },
+      "id": "syn-b17-mixed-language-001",
+      "text": "Šis ir izdomāts plānošanas pieraksts par Sample Alpha. The same fictional note continues in English to check language-mixing boundaries without using private project data.",
+      "title": "Synthetic mixed language note"
+    },
+    {
+      "case": "empty content",
+      "expected_signals": {
+        "empty": true,
+        "notes": [
+          "future intake should handle blank text safely"
+        ]
+      },
+      "id": "syn-b17-empty-content-001",
+      "text": "",
+      "title": "Synthetic empty content"
+    },
+    {
+      "case": "low-quality content",
+      "expected_signals": {
+        "notes": [
+          "intentionally vague synthetic text"
+        ],
+        "quality_hint": "low"
+      },
+      "id": "syn-b17-low-quality-001",
+      "text": "todo stuff later maybe maybe ??? sample placeholder words without enough context",
+      "title": "Synthetic low quality placeholder"
+    },
+    {
+      "case": "duplicate or near-duplicate content",
+      "duplicate_group": "syn-b17-dup-group-001",
+      "expected_signals": {
+        "duplicate_role": "primary"
+      },
+      "id": "syn-b17-near-duplicate-a-001",
+      "text": "Project Orchard uses a mock review checklist to sort sample notes before they enter the fictional knowledge base.",
+      "title": "Synthetic duplicate candidate A"
+    },
+    {
+      "case": "duplicate or near-duplicate content",
+      "duplicate_group": "syn-b17-dup-group-001",
+      "expected_signals": {
+        "duplicate_role": "near_duplicate"
+      },
+      "id": "syn-b17-near-duplicate-b-001",
+      "text": "Project Orchard uses a sample review checklist to organize mock notes before adding them to the fictional knowledge base.",
+      "title": "Synthetic duplicate candidate B"
+    },
+    {
+      "case": "ambiguous domain",
+      "expected_signals": {
+        "ambiguous": true,
+        "candidate_domains": [
+          "construction",
+          "sports",
+          "software planning"
+        ]
+      },
+      "id": "syn-b17-ambiguous-domain-001",
+      "text": "The sample team discussed a bridge, a sprint, and a release window, but the note does not reveal whether the topic is construction, athletics, or software planning.",
+      "title": "Synthetic ambiguous domain note"
+    },
+    {
+      "case": "hub candidate text",
+      "expected_signals": {
+        "hub_candidates": [
+          "Sample Governance Patterns",
+          "public-safe evidence bundles"
+        ]
+      },
+      "id": "syn-b17-hub-candidate-001",
+      "text": "Several mock records mention Sample Governance Patterns, fictional review gates, and public-safe evidence bundles; these repeated phrases could become a future synthetic hub candidate.",
+      "title": "Synthetic hub candidate note"
+    },
+    {
+      "case": "tag candidate text",
+      "expected_signals": {
+        "tag_candidates": [
+          "review-needed",
+          "sample-quality",
+          "planning-only",
+          "boundary-check"
+        ]
+      },
+      "id": "syn-b17-tag-candidate-001",
+      "text": "The fictional record is labeled with review-needed, sample-quality, planning-only, and boundary-check tags for future tag classification tests.",
+      "title": "Synthetic tag candidate note"
+    },
+    {
+      "case": "chunking boundary example",
+      "expected_signals": {
+        "boundary_markers": [
+          "paragraph_breaks",
+          "section_labels"
+        ]
+      },
+      "id": "syn-b17-chunk-boundary-001",
+      "text": "Section One: The fictional intake note starts with a summary and two short facts.\n\nSection Two: A separate mock decision rationale follows with enough text to test paragraph boundaries.\n\nSection Three: The final sample paragraph contains a checklist ending, a limitation note, and a non-claim that no segmenter is implemented here.",
+      "title": "Synthetic chunking boundary example"
+    },
+    {
+      "case": "extraction candidate example",
+      "expected_signals": {
+        "extractable_fields": [
+          "event",
+          "owner",
+          "outcome",
+          "follow_up"
+        ]
+      },
+      "id": "syn-b17-extraction-candidate-001",
+      "text": "Mock Event: Sample Review Day. Owner: Fictional Coordinator. Outcome: public-safe fixture approved for tests. Follow-up: verify deterministic parsing only.",
+      "title": "Synthetic extraction candidate note"
+    }
+  ],
+  "non_claims": [
+    "synthetic examples only",
+    "no classifier implementation",
+    "no segmenter implementation",
+    "no vector operation implementation",
+    "no stored record system access",
+    "no external service classification"
+  ],
+  "pack_id": "syn-b17-ingestion-fixture-pack-v1",
+  "version": 1
+}
