@@ -1,0 +1,62 @@
+{
+  "description": "Synthetic-only B18 fixture pack for deterministic public-safe extraction and domain signal tests. No private data, providers, DB access, URLs to fetch, or production identifiers.",
+  "version": 1,
+  "fixtures": [
+    {
+      "case": "plain planning note",
+      "id": "syn-b18-planning-001",
+      "title": "Planning checklist",
+      "text": "Remember to review the draft onboarding checklist after the sample planning meeting. Follow-up stays local and deterministic.",
+      "expected_domain": "planning"
+    },
+    {
+      "case": "html operations memo",
+      "id": "syn-b18-html-operations-001",
+      "title": "Operations memo",
+      "text": "<html><head><style>.x{display:none}</style><script>secret()</script></head><body><!-- hidden --><h1>Sample Operations Memo</h1><p>The operations team documents intake rules, review cadence, handoff expectations, and quality labels for a fictional public knowledge base.</p><ul><li>First deterministic item</li><li>Second local item</li></ul></body></html>",
+      "expected_domain": "operations"
+    },
+    {
+      "case": "key value extraction note",
+      "id": "syn-b18-key-value-001",
+      "title": "Synthetic extraction note",
+      "text": "Mock Event: Sample Review Day. Owner: Fictional Coordinator. Outcome: public-safe fixture approved for tests. Follow-up: verify deterministic parsing only.",
+      "expected_kind": "key_value_note"
+    },
+    {
+      "case": "governance quality evidence",
+      "id": "syn-b18-governance-001",
+      "title": "Governance evidence bundle",
+      "text": "The public-safe governance gate records evidence, boundary checks, scorecard review, approval notes, and validation tests for a fictional release.",
+      "expected_domain": "governance"
+    },
+    {
+      "case": "ambiguous domain signal",
+      "id": "syn-b18-ambiguous-001",
+      "title": "Ambiguous bridge sprint note",
+      "text": "The sample team discussed a bridge, a sprint, and a release window, but the note does not reveal whether the topic is construction, athletics, or software planning.",
+      "expected_domain": "ambiguous"
+    },
+    {
+      "case": "hub tag deferred note",
+      "id": "syn-b18-hub-tag-deferred-001",
+      "title": "Deferred hub and tag note",
+      "text": "Several mock records mention Sample Governance Patterns and labels review-needed, sample-quality, planning-only, and boundary-check, but B18 does not classify hubs or tags.",
+      "expected_domain": "governance"
+    },
+    {
+      "case": "empty content",
+      "id": "syn-b18-empty-001",
+      "title": "Empty fixture",
+      "text": "",
+      "expected_domain": "unknown"
+    }
+  ],
+  "non_claims": [
+    "deterministic public-safe fixtures only",
+    "no external service use",
+    "no DB or private Context Brain access",
+    "no semantic understanding claim",
+    "no hub or tag classification in B18"
+  ]
+}
