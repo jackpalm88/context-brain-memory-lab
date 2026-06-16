@@ -1,0 +1,58 @@
+{
+  "gate": "GO_B18_MILESTONE_REPORT_AND_CB_SAVE_ONCE_REAL_CONTENT_EXTRACTION_DOMAIN_SIGNAL",
+  "status": "milestone_report_created",
+  "project": "Context Brain Memory Lab",
+  "public_repo": "git@github.com:jackpalm88/context-brain-memory-lab.git",
+  "branch": "main",
+  "public_code_commit": "c83508fed28901ee3d332ed86b5be97dcf865d8d",
+  "parent_before_b18": "6a899ee49fe6775ad82ea1247188b347bbfca5e7",
+  "public_version": "0.1.0b17",
+  "version_changed": false,
+  "changed_files": [
+    "memory_lab/ingestion/classifiers.py",
+    "memory_lab/ingestion/extraction.py",
+    "tests/fixtures/b18_ingestion/synthetic_extraction_domain_fixtures.json",
+    "tests/unit/test_b18_deterministic_content_extraction.py",
+    "tests/unit/test_b18_deterministic_domain_signal.py",
+    "tests/unit/test_b18_ingestion_public_safety.py"
+  ],
+  "report_files": [
+    "reports/B18_REAL_CONTENT_EXTRACTION_DOMAIN_SIGNAL_MILESTONE.md",
+    "reports/b18_real_content_extraction_domain_signal_summary.json"
+  ],
+  "delivered": [
+    "A1 ContentExtractor deterministic public-safe local-text extraction",
+    "A2 DomainClassifier deterministic public-safe domain signal"
+  ],
+  "completion_classification": "full_gap_closed_A1_A2_public_safe_deterministic_scope_only",
+  "deferred_to_b19": [
+    "A3 HubDetector deterministic public-safe hub detection",
+    "A4 TagClassifier deterministic public-safe tag classification"
+  ],
+  "validation": {
+    "post_push_fresh_clone": true,
+    "fresh_clone_head": "c83508fed28901ee3d332ed86b5be97dcf865d8d",
+    "fresh_clone_origin_main": "c83508fed28901ee3d332ed86b5be97dcf865d8d",
+    "fresh_clone_ahead_behind": "0/0",
+    "fresh_clone_worktree_clean": true,
+    "b18_targeted_tests": "24 passed",
+    "b17_noop_regression_tests": "33 passed",
+    "full_unit_suite": "526 passed, 9 skipped",
+    "public_safe_scan": "CLEAN",
+    "forbidden_patterns": "PASS",
+    "hub_tag_deferred": "PASS"
+  },
+  "non_claims": [
+    "no provider-backed semantic extraction",
+    "no DB/private Context Brain integration",
+    "no URL/HTTP extraction",
+    "no live embeddings/KNN",
+    "no hub/tag classification",
+    "no wrappers/MCP/GPT Actions",
+    "no API wiring",
+    "no production readiness",
+    "no Full Context Brain readiness",
+    "no private Context Brain parity"
+  ],
+  "next_gate": "GO_B19_GAP_CONTRACT_HUB_DETECTION_TAG_CLASSIFICATION"
+}
