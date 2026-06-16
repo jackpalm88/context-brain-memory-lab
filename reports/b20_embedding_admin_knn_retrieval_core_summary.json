@@ -1,0 +1,83 @@
+{
+  "already_closed": [
+    "B18 A1/A2 public-safe deterministic extraction/domain signal.",
+    "B19 A3/A4 public-safe deterministic hub/tag signals."
+  ],
+  "branch": "main",
+  "changed_files": [
+    "memory_lab/ingestion/embedding_admin.py",
+    "memory_lab/retrieval/__init__.py",
+    "memory_lab/retrieval/knn.py",
+    "tests/unit/test_b20_deterministic_knn_retrieval.py",
+    "tests/unit/test_b20_embedding_admin_planner.py",
+    "tests/unit/test_b20_embedding_knn_public_safety.py"
+  ],
+  "completion_classification": "full_gap_closed_B1_B2_public_safe_deterministic_scope_only",
+  "delivered": [
+    "B1 public-safe embedding admin/status/planning abstraction over supplied rows.",
+    "B2 deterministic provider-free in-memory KNN retrieval core over supplied vectors."
+  ],
+  "fresh_clone": {
+    "branch": "main",
+    "head": "42624065ea84a1b3cef10e185deb44c6c6a4cfab",
+    "parent": "dd490f7d985ffe72304b36dbc48c6fde46baa47e",
+    "path": "/tmp/context-brain-memory-lab-b20-postpush-verify",
+    "pycache_after_cleanup": 0,
+    "staged": 0,
+    "tracked_diff": 0,
+    "untracked_after_pycache_cleanup": 0
+  },
+  "gate": "GO_B20_MILESTONE_REPORT_AND_CB_SAVE_ONCE_EMBEDDING_ADMIN_KNN_RETRIEVAL_CORE",
+  "milestone": "B20",
+  "next_gate": "GO_B21_GAP_CONTRACT_INGESTION_SCORING_TIER_ROUTING_CIRCUIT_BREAKER",
+  "not_ad_hoc_cleanup": true,
+  "original_gap": [
+    "Public repo had B17 read-only embedding health scaffold.",
+    "Public repo lacked public-safe embedding admin planning abstraction.",
+    "Public repo lacked standalone deterministic provider-free KNN retrieval core."
+  ],
+  "parent_before_b20": "dd490f7d985ffe72304b36dbc48c6fde46baa47e",
+  "path_clarification": {
+    "correct_package_initializer": "memory_lab/retrieval/__init__.py",
+    "incorrect_non_dunder_path": "memory_lab/retrieval/init.py",
+    "incorrect_non_dunder_path_present": false
+  },
+  "public_code_commit": "42624065ea84a1b3cef10e185deb44c6c6a4cfab",
+  "public_repo": "git@github.com:jackpalm88/context-brain-memory-lab.git",
+  "public_safe_boundaries": {
+    "db_private_cb_imports": false,
+    "knn_caller_supplied_vectors_only": true,
+    "live_embed_backfill_reextract_admin_mutation_behavior": false,
+    "network_http_imports": false,
+    "provider_imports": false,
+    "vector_store_imports": false
+  },
+  "public_version": "0.1.0b17",
+  "readiness_framing": "Not production readiness and not Full Context Brain readiness; bounded public-safe deterministic B20 milestone only.",
+  "remaining_non_claims": [
+    "no live provider embedding generation",
+    "no provider-backed semantic retrieval",
+    "no real vector DB integration",
+    "no private DB/private CB access",
+    "no live backfill/reextract/embed-one mutation",
+    "no production admin endpoint exposure",
+    "no KNN over private data",
+    "no API/router wiring",
+    "no wrappers/MCP/GPT Actions",
+    "no production readiness",
+    "no Full Context Brain readiness",
+    "no private CB parity",
+    "no semantic/vector production parity"
+  ],
+  "source": "GSD gap-first plan",
+  "title": "Embedding Admin + KNN Retrieval Core",
+  "validation": {
+    "b17_embedding_regression": "37 passed",
+    "b18_regression": "24 passed",
+    "b19_regression": "21 passed",
+    "b20_targeted": "25 passed",
+    "fresh_clone_verification": "PASS",
+    "full_unit_suite": "572 passed, 9 skipped",
+    "public_safe_ast_scan": "PASS"
+  }
+}
