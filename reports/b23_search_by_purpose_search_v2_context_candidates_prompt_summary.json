@@ -1,0 +1,79 @@
+{
+  "already_closed": [
+    "B18 A1/A2 public-safe deterministic extraction/domain signal",
+    "B19 A3/A4 public-safe deterministic hub/tag signals",
+    "B20 B1/B2 public-safe embedding admin planning and deterministic KNN core",
+    "B21 C1/C2/C3 public-safe scoring, tier routing plan, and provider-neutral circuit breaker",
+    "B22 D1/D2/D3 public-safe LLM executor contract, structured validator, and supplied circuit boundary"
+  ],
+  "branch": "main",
+  "caveats": {
+    "git_identity": "root <root@vmi2728022.contaboserver.net>",
+    "local_b17_report_residue": "50 source-worktree-only files absent from fresh public clone"
+  },
+  "completion_classification": "full_gap_closed_public_safe_deterministic_context_candidate_prompt_scope_only",
+  "delivered": {
+    "E1": "deterministic search-by-purpose ranking over caller-supplied records only",
+    "E2": "deterministic context candidate packaging with stable evidence IDs, dedupe, budgeting, metadata, rationale, limitations",
+    "E3": "provider-neutral prompt/context package compatible with B22 LLMExecutionRequest and StructuredValidator"
+  },
+  "fresh_clone": {
+    "ahead_behind": "0/0",
+    "head": "0b40e2d55a242623ec0fd735a48be0068fb68749",
+    "origin_main": "0b40e2d55a242623ec0fd735a48be0068fb68749",
+    "path": "/tmp/context-brain-memory-lab_b23_post_push_verify",
+    "pycache_after_cleanup": 0,
+    "staged": 0,
+    "tracked_diff": 0,
+    "untracked_after_cleanup": 0
+  },
+  "gate": "GO_B23_MILESTONE_REPORT_AND_CB_SAVE_ONCE_SEARCH_BY_PURPOSE_SEARCH_V2_CONTEXT_CANDIDATES_PROMPT",
+  "milestone": "B23",
+  "next_gate": "GO_B24_GAP_CONTRACT_HONEST_MCP_TOOLS_GPT_ACTIONS_WRAPPERS",
+  "non_claims": [
+    "not live search capability",
+    "not private search parity",
+    "not provider-backed semantic search",
+    "not production readiness",
+    "not Full Context Brain readiness",
+    "no DB/private Context Brain retrieval",
+    "no embedding generation",
+    "no vector DB/KNN mutation",
+    "no live LLM execution",
+    "no API/router/wrapper/MCP/GPT Actions wiring",
+    "no private Context Brain parity"
+  ],
+  "not_ad_hoc_cleanup": true,
+  "parent_before_b23": "c5e057b88af0c88ad798e8bf9b844fb399151f4c",
+  "public_code_commit": "0b40e2d55a242623ec0fd735a48be0068fb68749",
+  "public_repo": "git@github.com:jackpalm88/context-brain-memory-lab.git",
+  "public_safety": {
+    "forbidden_import_hits": 0,
+    "forbidden_runtime_call_hits": 0,
+    "private_prompt_fragment_hits": 0,
+    "private_prompt_scan": "PASS",
+    "strict_scoped_scan": "PASS"
+  },
+  "public_version": "0.1.0b17",
+  "pushed_commit_files": [
+    "memory_lab/reasoning/prompt_package.py",
+    "memory_lab/retrieval/context_candidates.py",
+    "memory_lab/retrieval/search_by_purpose.py",
+    "tests/unit/test_b23_context_candidates.py",
+    "tests/unit/test_b23_prompt_package.py",
+    "tests/unit/test_b23_public_safety.py",
+    "tests/unit/test_b23_search_by_purpose.py"
+  ],
+  "source": "GSD gap-first plan",
+  "status": "report_created_pending_review_commit_push_cb_save",
+  "title": "Search-by-Purpose / Search-v2 + Context Candidates/Prompt",
+  "validation": {
+    "b20_regression": "11 passed",
+    "b21_regression": "24 passed",
+    "b22_regression": "20 passed",
+    "b23_targeted": "19 passed",
+    "compile": "PASS",
+    "fresh_clone_verification": "PASS",
+    "full_unit_suite": "635 passed, 9 skipped"
+  }
+}
