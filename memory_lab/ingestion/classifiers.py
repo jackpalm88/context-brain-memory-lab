@@ -42,6 +42,24 @@ DETERMINISTIC_DOMAIN_SIGNAL_LIMITATIONS: Sequence[str] = DEFAULT_LIMITATIONS + (
     "no semantic understanding claim",
 )
 
+DETERMINISTIC_HUB_SIGNAL_MODE = "deterministic_hub_signal_v1"
+DETERMINISTIC_TAG_SIGNAL_MODE = "deterministic_tag_signal_v1"
+
+DETERMINISTIC_HUB_TAG_SIGNAL_LIMITATIONS: Sequence[str] = DEFAULT_LIMITATIONS + (
+    "deterministic public-safe signal only",
+    "caller-supplied title text and metadata only",
+    "small public taxonomy only",
+    "no learned private taxonomy",
+    "no external service calls",
+    "no stored-record access",
+    "no vector operation",
+    "no mutation methods",
+    "no semantic understanding claim",
+)
+
+MAX_HUB_CANDIDATES = 3
+MAX_TAGS = 10
+
 DOMAIN_TAXONOMY: Sequence[str] = (
     "planning",
     "operations",
@@ -181,6 +199,114 @@ def _confidence_for(score: float, ambiguous: bool) -> float:
     return round(confidence, 2)
 
 
+_SLUG_RE = re.compile(r"[^a-z0-9_]+")
+
+
+def _safe_scalar_text(value: object) -> str:
+    if isinstance(value, (str, int, float, bool)):
+        return str(value)
+    if isinstance(value, Mapping):
+        return " ".join(_safe_scalar_text(v) for v in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        return " ".join(_safe_scalar_text(v) for v in value)
+    return ""
+
+
+def _public_metadata_text(metadata: Mapping[str, object]) -> str:
+    return " ".join(_safe_scalar_text(value) for key, value in metadata.items() if key != "hub_candidates")
+
+
+def _normalize_text(value: str) -> str:
+    return " ".join(_TOKEN_RE.findall(value.lower()))
+
+
+def _slug(value: str) -> str:
+    normalized = _normalize_text(value).replace(" ", "_")
+    normalized = _SLUG_RE.sub("_", normalized).strip("_")
+    return normalized
+
+
+def _safe_tokens(value: str) -> set[str]:
+    return {token for token in _TOKEN_RE.findall(value.lower()) if len(token) >= 4}
+
+
+def _contains_phrase(scoring_text: str, phrase: str) -> bool:
+    normalized = _normalize_text(phrase)
+    return bool(normalized and normalized in scoring_text)
+
+
+def _candidate_rows(metadata: Mapping[str, object]) -> tuple[tuple[str, tuple[str, ...], tuple[str, ...], str], bool]:
+    raw = metadata.get("hub_candidates")
+    if raw in (None, ""):
+        return (), False
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes, bytearray)):
+        return (), True
+    rows: list[tuple[str, tuple[str, ...], tuple[str, ...], str]] = []
+    malformed = False
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            malformed = True
+            continue
+        title = str(entry.get("title") or entry.get("name") or "").strip()
+        if not title:
+            malformed = True
+            continue
+        aliases_raw = entry.get("aliases") or ()
+        related_raw = entry.get("related_terms") or entry.get("terms") or ()
+        aliases = tuple(str(v).strip() for v in aliases_raw if isinstance(v, (str, int, float, bool)) and str(v).strip()) if isinstance(aliases_raw, Sequence) and not isinstance(aliases_raw, (str, bytes, bytearray)) else ()
+        related = tuple(str(v).strip() for v in related_raw if isinstance(v, (str, int, float, bool)) and str(v).strip()) if isinstance(related_raw, Sequence) and not isinstance(related_raw, (str, bytes, bytearray)) else ()
+        candidate_slug = _slug(str(entry.get("slug") or title))
+        if not candidate_slug:
+            malformed = True
+            continue
+        rows.append((title, aliases, related, candidate_slug))
+    return tuple(rows), malformed
+
+
+def _bounded_signal_confidence(score: float, ambiguous: bool = False) -> float:
+    if score <= 0:
+        return 0.0
+    confidence = max(0.35, min(0.84, 0.31 + (score / 10.0)))
+    if ambiguous:
+        confidence = min(confidence, 0.55)
+    return round(confidence, 2)
+
+
+TAG_KEYWORDS: Mapping[str, Mapping[str, float]] = {
+    "governance": {"governance": 3.0, "gate": 1.8, "approval": 1.4, "policy": 1.4, "evidence": 1.2},
+    "planning": {"planning": 3.0, "roadmap": 1.8, "plan": 1.4, "checklist": 1.2, "sprint": 1.0},
+    "operations": {"operations": 3.0, "handoff": 1.6, "cadence": 1.4, "workflow": 1.2, "process": 1.0},
+    "documentation": {"documentation": 3.0, "readme": 2.0, "docs": 1.7, "guide": 1.4, "section": 1.0},
+    "quality": {"quality": 3.0, "test": 1.2, "tests": 1.2, "verify": 1.4, "verified": 1.4},
+    "software": {"software": 2.5, "repository": 1.6, "api": 1.6, "version": 1.2, "code": 1.0},
+    "knowledge_management": {"knowledge base": 3.0, "knowledge": 1.8, "records": 1.4, "notes": 1.1, "source text": 1.1},
+    "public_safe": {"public-safe": 5.0, "public safe": 5.0, "public": 0.8, "safe": 0.8},
+    "boundary_check": {"boundary": 4.0, "boundaries": 3.6, "non-claim": 1.4, "non claim": 1.4},
+    "scorecard": {"scorecard": 3.0, "score": 1.0},
+    "testing": {"testing": 3.0, "tests": 1.8, "pytest": 1.4, "validation": 1.0},
+    "release": {"release": 3.0, "version": 1.2, "commit": 1.0, "tag": 0.8},
+    "implementation": {"implementation": 3.0, "implement": 1.8, "implemented": 1.8, "scaffold": 1.0},
+    "review": {"review": 3.0, "audit": 1.4, "inspect": 1.0},
+    "validation": {"validation": 3.0, "verified": 1.6, "evidence": 1.4, "bounded": 0.8},
+}
+
+UNSAFE_TAG_TERMS = {
+    "http", "https", "www", "com", "login", "logout", "cookie", "cookies", "privacy", "terms",
+    "subscribe", "click", "share", "navbar", "navigation", "footer", "header", "sign", "tools", "mode",
+}
+
+
+def _safe_tag(value: str) -> str:
+    tag = _slug(value.replace("-", "_"))
+    if len(tag) < 4 or tag in UNSAFE_TAG_TERMS:
+        return ""
+    if any(part in UNSAFE_TAG_TERMS for part in tag.split("_")):
+        return ""
+    if not re.fullmatch(r"[a-z0-9_]+", tag):
+        return ""
+    return tag
+
+
 @dataclass(frozen=True)
 class NoopDomainClassifier:
     """Deterministic noop domain classifier retained for B17 regressions."""
@@ -273,6 +399,97 @@ class NoopHubDetector:
         )
 
 
+
+@dataclass(frozen=True)
+class DeterministicHubSignalDetector:
+    """Public-safe deterministic hub candidate signal detector."""
+    mode: str = DETERMINISTIC_HUB_SIGNAL_MODE
+    data_source: str = SYNTHETIC_DATA_SOURCE
+    limitations: Sequence[str] = DETERMINISTIC_HUB_TAG_SIGNAL_LIMITATIONS
+
+    def detect_hubs(self, item: IngestionTextInput) -> HubDetectionResult:
+        scoring_text = _normalize_text(" ".join((item.title, item.text, _public_metadata_text(item.metadata))))
+        if not scoring_text:
+            return HubDetectionResult(hub_candidates=(), confidence=0.0, rationale="deterministic public-safe hub signal found no usable caller-supplied text", mode=self.mode, data_source=item.data_source or self.data_source, degraded=True, limitations=self.limitations)
+        rows, malformed = _candidate_rows(item.metadata)
+        if malformed:
+            return HubDetectionResult(hub_candidates=(), confidence=0.0, rationale="deterministic public-safe hub signal received malformed caller-supplied candidates", mode=self.mode, data_source=item.data_source or self.data_source, degraded=True, limitations=self.limitations)
+        if not rows:
+            return HubDetectionResult(hub_candidates=(), confidence=0.0, rationale="deterministic public-safe hub signal had no caller-supplied candidate definitions", mode=self.mode, data_source=item.data_source or self.data_source, degraded=False, limitations=self.limitations)
+        supplied_domain = str(item.metadata.get("domain") or "").strip().lower()
+        scored: list[tuple[float, str]] = []
+        scoring_tokens = _safe_tokens(scoring_text)
+        for title, aliases, related_terms, candidate_slug in rows:
+            score = 0.0
+            title_norm = _normalize_text(title)
+            if title_norm and title_norm in scoring_text:
+                score += 4.0
+            for alias in aliases:
+                if _contains_phrase(scoring_text, alias):
+                    score += 3.0
+            for term in related_terms:
+                if _contains_phrase(scoring_text, term):
+                    score += 2.0
+            title_tokens = _safe_tokens(title)
+            if title_tokens:
+                score += min(1.5, len(title_tokens.intersection(scoring_tokens)) * 0.5)
+            if supplied_domain and supplied_domain in title_norm:
+                score += 0.75
+            if score >= 2.0:
+                scored.append((round(score, 4), candidate_slug))
+        if not scored:
+            return HubDetectionResult(hub_candidates=(), confidence=0.0, rationale="deterministic public-safe hub signal found no bounded candidate match", mode=self.mode, data_source=item.data_source or self.data_source, degraded=False, limitations=self.limitations)
+        scored = sorted(scored, key=lambda row: (-row[0], row[1]))
+        top_score = scored[0][0]
+        ambiguous = len(scored) > 1 and (top_score - scored[1][0]) <= 0.5
+        rationale = "deterministic public-safe hub candidate signal matched caller-supplied public definitions"
+        if ambiguous:
+            rationale = "deterministic public-safe hub candidate signal found close bounded candidate matches"
+        return HubDetectionResult(hub_candidates=tuple(slug for _, slug in scored[:MAX_HUB_CANDIDATES]), confidence=_bounded_signal_confidence(top_score, ambiguous), rationale=rationale, mode=self.mode, data_source=item.data_source or self.data_source, degraded=False, limitations=self.limitations)
+
+
+@dataclass(frozen=True)
+class DeterministicTagSignalClassifier:
+    """Public-safe deterministic sanitized tag signal classifier."""
+    mode: str = DETERMINISTIC_TAG_SIGNAL_MODE
+    data_source: str = SYNTHETIC_DATA_SOURCE
+    limitations: Sequence[str] = DETERMINISTIC_HUB_TAG_SIGNAL_LIMITATIONS
+
+    def classify_tags(self, item: IngestionTextInput) -> TagClassificationResult:
+        scoring_text = _normalize_text(" ".join((item.title, item.text, _public_metadata_text(item.metadata))))
+        if not scoring_text:
+            return TagClassificationResult(tags=(), confidence=0.0, rationale="deterministic public-safe tag signal found no usable caller-supplied text", mode=self.mode, data_source=item.data_source or self.data_source, degraded=True, limitations=self.limitations)
+        scores: dict[str, float] = {}
+        tokens = _TOKEN_RE.findall(scoring_text)
+        for tag, keywords in TAG_KEYWORDS.items():
+            score = 0.0
+            for phrase, weight in keywords.items():
+                phrase_norm = _normalize_text(phrase)
+                if " " in phrase_norm:
+                    if phrase_norm in scoring_text:
+                        score += weight
+                else:
+                    score += tokens.count(phrase_norm) * weight
+            if score > 0:
+                safe = _safe_tag(tag)
+                if safe:
+                    scores[safe] = scores.get(safe, 0.0) + score
+        supplied_domain = _safe_tag(str(item.metadata.get("domain") or ""))
+        if supplied_domain in TAG_KEYWORDS:
+            scores[supplied_domain] = scores.get(supplied_domain, 0.0) + 1.25
+        for token in _safe_tokens(scoring_text):
+            safe = _safe_tag(token)
+            if safe in TAG_KEYWORDS:
+                scores[safe] = scores.get(safe, 0.0) + 0.5
+        ranked = sorted(scores.items(), key=lambda row: (-row[1], row[0]))
+        tags = tuple(tag for tag, score in ranked if score >= 1.2)[:MAX_TAGS]
+        if not tags:
+            return TagClassificationResult(tags=(), confidence=0.0, rationale="deterministic public-safe tag signal found no bounded sanitized tags", mode=self.mode, data_source=item.data_source or self.data_source, degraded=False, limitations=self.limitations)
+        top_score = ranked[0][1]
+        ambiguous = len(ranked) > 1 and (ranked[0][1] - ranked[1][1]) <= 0.5
+        return TagClassificationResult(tags=tags, confidence=_bounded_signal_confidence(top_score, ambiguous), rationale="deterministic public-safe sanitized tag signal from public taxonomy and caller-supplied text", mode=self.mode, data_source=item.data_source or self.data_source, degraded=False, limitations=self.limitations)
+
+
 @dataclass(frozen=True)
 class NoopTagClassifier:
     """Deterministic noop tag classifier.
@@ -313,6 +530,14 @@ class DeterministicDomainSignalClassifierSet(NamedTuple):
     tag_classifier: NoopTagClassifier
 
 
+class DeterministicIngestionSignalClassifierSet(NamedTuple):
+    """B19 bundle: deterministic domain, hub candidate, and tag signals."""
+
+    domain_classifier: DeterministicDomainSignalClassifier
+    hub_detector: DeterministicHubSignalDetector
+    tag_classifier: DeterministicTagSignalClassifier
+
+
 def make_noop_classifiers(
     *,
     mode: str = NOOP_CLASSIFIER_MODE,
@@ -340,4 +565,22 @@ def make_deterministic_domain_signal_classifiers(
         domain_classifier=DeterministicDomainSignalClassifier(mode=mode, data_source=data_source, limitations=limitations),
         hub_detector=NoopHubDetector(),
         tag_classifier=NoopTagClassifier(),
+    )
+
+
+def make_deterministic_ingestion_signal_classifiers(
+    *,
+    domain_mode: str = DETERMINISTIC_DOMAIN_SIGNAL_MODE,
+    hub_mode: str = DETERMINISTIC_HUB_SIGNAL_MODE,
+    tag_mode: str = DETERMINISTIC_TAG_SIGNAL_MODE,
+    data_source: str = SYNTHETIC_DATA_SOURCE,
+    domain_limitations: Sequence[str] = DETERMINISTIC_DOMAIN_SIGNAL_LIMITATIONS,
+    signal_limitations: Sequence[str] = DETERMINISTIC_HUB_TAG_SIGNAL_LIMITATIONS,
+) -> DeterministicIngestionSignalClassifierSet:
+    """Create the B19 deterministic public-safe ingestion signal bundle."""
+
+    return DeterministicIngestionSignalClassifierSet(
+        domain_classifier=DeterministicDomainSignalClassifier(mode=domain_mode, data_source=data_source, limitations=domain_limitations),
+        hub_detector=DeterministicHubSignalDetector(mode=hub_mode, data_source=data_source, limitations=signal_limitations),
+        tag_classifier=DeterministicTagSignalClassifier(mode=tag_mode, data_source=data_source, limitations=signal_limitations),
     )

@@ -1,0 +1,95 @@
+{
+  "fixtures": [
+    {
+      "case": "exact hub title match",
+      "id": "b19-hub-001",
+      "title": "Governance Evidence Pack",
+      "text": "The Governance Evidence Pack records public-safe scorecard evidence and boundary checks.",
+      "metadata": {
+        "domain": "governance",
+        "hub_candidates": [
+          {"title": "Governance Evidence Pack", "aliases": ["evidence pack"], "related_terms": ["scorecard", "boundary"]}
+        ]
+      },
+      "expected_hubs": ["governance_evidence_pack"],
+      "expected_tags_any": ["governance", "public_safe", "scorecard", "boundary_check"]
+    },
+    {
+      "case": "alias hub match",
+      "id": "b19-hub-002",
+      "title": "Review note",
+      "text": "This note uses release evidence as the short name for the public package review.",
+      "metadata": {
+        "hub_candidates": [
+          {"title": "Public Release Evidence", "aliases": ["release evidence"], "related_terms": ["package review"]}
+        ]
+      },
+      "expected_hubs": ["public_release_evidence"]
+    },
+    {
+      "case": "related term hub match",
+      "id": "b19-hub-003",
+      "title": "Boundary note",
+      "text": "The scorecard remains parseable and bounded for validation.",
+      "metadata": {
+        "hub_candidates": [
+          {"title": "Scorecard Governance", "aliases": [], "related_terms": ["parseable", "bounded"]}
+        ]
+      },
+      "expected_hubs": ["scorecard_governance"]
+    },
+    {
+      "case": "multiple close candidates",
+      "id": "b19-hub-004",
+      "title": "Operations Review",
+      "text": "Operations review cadence and governance review evidence are both present.",
+      "metadata": {
+        "hub_candidates": [
+          {"title": "Operations Review", "aliases": ["review cadence"], "related_terms": ["handoff"]},
+          {"title": "Governance Review", "aliases": ["review evidence"], "related_terms": ["approval"]},
+          {"title": "Documentation Review", "aliases": ["docs review"], "related_terms": ["guide"]},
+          {"title": "Quality Review", "aliases": ["test review"], "related_terms": ["validation"]}
+        ]
+      },
+      "expected_max_hubs": 3
+    },
+    {
+      "case": "low signal",
+      "id": "b19-low-001",
+      "title": "Placeholder",
+      "text": "Maybe something later without enough bounded signal.",
+      "metadata": {"hub_candidates": [{"title": "Governance Evidence Pack", "aliases": ["evidence pack"], "related_terms": ["scorecard"]}]},
+      "expected_hubs": [],
+      "expected_tags": []
+    },
+    {
+      "case": "software testing tags",
+      "id": "b19-tag-001",
+      "title": "Repository implementation validation",
+      "text": "The software repository implementation includes pytest tests, version checks, and release validation.",
+      "metadata": {"domain": "software"},
+      "expected_tags_any": ["software", "testing", "implementation", "release", "validation"]
+    },
+    {
+      "case": "unsafe terms rejected",
+      "id": "b19-tag-002",
+      "title": "Navigation cleanup",
+      "text": "Ignore https www com login cookie privacy terms click share navigation footer header subscribe.",
+      "metadata": {},
+      "forbidden_tags": ["https", "login", "cookie", "privacy", "navigation", "footer", "header", "subscribe"]
+    },
+    {
+      "case": "b18 composability metadata",
+      "id": "b19-compose-001",
+      "title": "Extracted governance validation",
+      "text": "Caller-supplied extracted fields mention public-safe governance, scorecard validation, and boundary evidence.",
+      "metadata": {
+        "domain": "governance",
+        "extracted_fields": {"heading": "Boundary evidence", "bullet": "scorecard validation"},
+        "hub_candidates": [{"title": "Governance Validation", "aliases": ["boundary evidence"], "related_terms": ["scorecard validation"]}]
+      },
+      "expected_hubs": ["governance_validation"],
+      "expected_tags_any": ["governance", "validation", "scorecard", "boundary_check", "public_safe"]
+    }
+  ]
+}
