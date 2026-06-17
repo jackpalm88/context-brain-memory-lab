@@ -21,7 +21,11 @@ git clone https://github.com/jackpalm88/context-brain-memory-lab.git
 cd context-brain-memory-lab
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e .
+# Install runtime plus test dependencies
+python -m pip install -e ".[test]"
+
+# Or install runtime plus developer tooling
+python -m pip install -e ".[dev]"
 ```
 
 ---
@@ -110,12 +114,13 @@ This is expected behaviour — not an error.
 ## 8. Run tests
 
 ```bash
-pytest
+python -m pytest tests/unit -q
 ```
 
-Expected approximate result: **59 PASS, ~12 SKIP, 0 FAIL**
+Latest B24 unit-suite evidence is approximately **644 passed, 9 skipped, 0 failed**.
+Exact counts may change as public-beta tests are added; failures should be investigated before packaging or release gates.
 
-Skips are expected when the database is unavailable or a provider key is absent. This is normal.
+Skips are expected when database-backed or provider-backed checks are not configured. This is normal for local public-beta development.
 
 ---
 

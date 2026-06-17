@@ -69,7 +69,7 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 git clone https://github.com/jackpalm88/context-brain-memory-lab.git
 cd context-brain-memory-lab
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+python -m pip install -e ".[test]"
 ```
 
 For local setup, see [docs/INSTALL.md](docs/INSTALL.md).
