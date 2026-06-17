@@ -24,7 +24,7 @@
 - Graph health beta: read-only Graph Health Score, Hub Recall Health, and Alias Hygiene candidate reporting over deterministic/sample graph-health data
 - Migrations: PostgreSQL schema `000..030`
 
-**Version**: `0.1.0b17` · Python ≥ 3.12 · PostgreSQL required for runtime
+**Version**: `0.1.0b24` · Python ≥ 3.12 · PostgreSQL required for runtime
 
 ---
 
@@ -110,7 +110,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, retrieval evidence, classify/current-state metadata, and graph/governance support. B10 through B15 add classify/current-state helpers, computed conflict/counterfinding discovery, context-pack packaging, deterministic reasoning traversal/explanation, answer-candidate assembly, and read-only graph-health diagnostics without durable conflict/context-pack/reasoning/answer-trace/graph-health tables. B16 through B24 are primarily public-safe runtime, contract, and helper layers: workspace propagation hardening, ingestion/extraction/domain and hub/tag signal scaffolds, embedding-admin planning with deterministic KNN over supplied vectors, scoring/tier/circuit helpers, structured LLM executor contracts, supplied-input context/prompt packaging, and bounded wrapper descriptors. These later gates do not change the public version in this docs-alignment gate and do not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, retrieval evidence, classify/current-state metadata, and graph/governance support. B10 through B15 add classify/current-state helpers, computed conflict/counterfinding discovery, context-pack packaging, deterministic reasoning traversal/explanation, answer-candidate assembly, and read-only graph-health diagnostics without durable conflict/context-pack/reasoning/answer-trace/graph-health tables. B16 through B24 are primarily public-safe runtime, contract, and helper layers: workspace propagation hardening, ingestion/extraction/domain and hub/tag signal scaffolds, embedding-admin planning with deterministic KNN over supplied vectors, scoring/tier/circuit helpers, structured LLM executor contracts, supplied-input context/prompt packaging, and bounded wrapper descriptors. The public package version is now aligned to `0.1.0b24` for beta version hygiene; this does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
 
 ### Start the API runtime
 
@@ -643,7 +643,7 @@ Treat B15 output as deterministic review assistance for graph-health diagnostics
 
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. The package version remains `0.1.0b17`, while the repository now includes public-safe B18-B24 skeletons and contracts that extend the earlier B10-B17 foundation without changing the release version in this gate.
+This is a public beta of Context Brain Memory Lab. The package version is `0.1.0b24`, aligned with the public-safe B18-B24 skeletons and contracts that extend the earlier B10-B17 foundation. This beta version alignment is release hygiene only; it does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
 
 The current implemented capability spine is:
 
@@ -664,7 +664,7 @@ See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for the compact capability and 
 - **No live memory retrieval by default in B18-B24 helpers** — the newer helpers and wrappers operate on caller-supplied input, fixtures, or deterministic local structures unless a separate API surface explicitly documents otherwise.
 - **No provider-backed semantic search by default** — provider-backed embeddings and LLM synthesis are optional/configured paths only; the baseline public package remains provider-neutral.
 - **No production MCP/GPT Actions readiness claim** — B24 wrappers are bounded honest contracts/descriptors/examples, not a deployed production integration.
-- **Public beta API** — `0.1.0b17` may still introduce breaking changes before `1.0`.
+- **Public beta API** — `0.1.0b24` may still introduce breaking changes before `1.0`.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL where runtime DB paths are used.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters remain future work.
 
@@ -735,7 +735,7 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | Provider calls required | NO |
 | Disposable teardown | PASS in B9/B10 public-style evidence |
 
-Wheel target after version alignment: `context_brain_memory_lab-0.1.0b17-py3-none-any.whl`
+Wheel target after version alignment: `context_brain_memory_lab-0.1.0b24-py3-none-any.whl`
 
 ---
 

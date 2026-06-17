@@ -2,7 +2,7 @@
 
 This document summarizes the public-safe capability spine for Context Brain Memory Lab after the B18-B24 implementation gates. It is a documentation alignment aid; it does not change the package version, runtime behavior, or release status.
 
-Current public package version: `0.1.0b17`.
+Current public package version: `0.1.0b24`.
 
 ## What is implemented
 
