@@ -1,7 +1,7 @@
 # Local Developer Setup
 
-This guide covers installing and running Context Brain Memory Lab locally for development.
-It does **not** cover production deployment, Docker, or reverse-proxy setup.
+This guide covers installing and running the public Context Brain Memory Lab package locally for development.
+It does **not** cover production deployment, Docker, reverse-proxy setup, private Context Brain parity, or production MCP/GPT Actions deployment.
 
 ---
 
@@ -57,7 +57,7 @@ Adjust the PostgreSQL user and password to match your local setup.
 bash scripts/dev_migrate.sh
 ```
 
-This applies `migrations/000_base_schema.sql` through `016_add_governance_events.sql` in sorted order.
+This applies the available public beta migrations in sorted order. The current public schema range is `000..030`; later B18-B24 helper/contract gates do not add production/private-CB deployment requirements.
 
 Alternatively, apply manually:
 

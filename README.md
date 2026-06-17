@@ -51,7 +51,16 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - Read-only graph-health reporting via API endpoints for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates, using the existing `hubs.read` permission and deterministic/sample data in this beta
 - B16 centralized `workspace_id` propagation across evidence surface, reasoning endpoints, classification pipeline, and retrieval evidence contract wiring, plus `/v1/inspect/consistency` restriction to admin/scorer roles only
 - B17 public-safe ingestion foundation with deterministic provider-free content chunking, mechanical chunk scoring, read-only embedding health over supplied rows, and deterministic noop classifiers (domain, hub, tag) — a local, provider-neutral, DB-free, mutation-free ingestion scaffold with synthetic fixture-driven tests and no claims to real extraction intelligence
+- B18 extraction/domain signal skeleton for caller-supplied content: deterministic, public-safe extraction contracts without private Context Brain access
+- B19 hub/tag signal skeleton for caller-supplied evidence: bounded tagging/grouping signals without live memory retrieval
+- B20 embedding admin planning plus deterministic KNN core for supplied vectors/fixtures; no vector database or provider-backed semantic search is required by default
+- B21 scoring, tier-routing, and circuit-state helpers for supplied ingestion signals
+- B22 LLM executor contract and structured-response validator with honest degraded/no-provider behavior
+- B23 supplied-input search/context-candidate/prompt-package helpers for deterministic packaging, not live Context Brain search
+- B24 bounded honest wrapper contracts for selected MCP/GPT Actions-style adapters over supplied input only; descriptors are static contracts, not deployed production integrations
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
+
+For a concise capability/non-claim map, see [docs/CAPABILITIES.md](docs/CAPABILITIES.md).
 
 ---
 
@@ -101,7 +110,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, and retrieval evidence. v0.1.0b10 adds the classify pipeline, discovered-domain metadata, retrieval memory-type filtering support, and current-state anchor schema used by the B10 beta helpers. v0.1.0b11 adds computed-only conflict/counterfinding discovery over existing public-beta memory signals; it adds no B11 migrations and no durable conflict table. v0.1.0b12 adds a computed/read-only context-pack API over existing B10/B11 signals; it adds no B12 migrations, no durable context-pack table, and no DB mutation path. v0.1.0b13 adds a deterministic/read-only reasoning layer over B12 context packs via `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain`; it adds no B13 migrations, no durable reasoning table, and no DB mutation path. v0.1.0b14 adds `POST /v1/reasoning/answer` as an evidence-grounded answer-candidate endpoint over the same public-beta reasoning/context-pack layer; it adds no B14 migrations, no durable answer trace table, and no DB mutation path. v0.1.0b15 adds read-only B15 graph-health reporting for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates over deterministic/sample beta data; it adds no B15 migrations, no durable graph-health table, no live repository read requirement yet, and no graph mutation path.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, retrieval evidence, classify/current-state metadata, and graph/governance support. B10 through B15 add classify/current-state helpers, computed conflict/counterfinding discovery, context-pack packaging, deterministic reasoning traversal/explanation, answer-candidate assembly, and read-only graph-health diagnostics without durable conflict/context-pack/reasoning/answer-trace/graph-health tables. B16 through B24 are primarily public-safe runtime, contract, and helper layers: workspace propagation hardening, ingestion/extraction/domain and hub/tag signal scaffolds, embedding-admin planning with deterministic KNN over supplied vectors, scoring/tier/circuit helpers, structured LLM executor contracts, supplied-input context/prompt packaging, and bounded wrapper descriptors. These later gates do not change the public version in this docs-alignment gate and do not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
 
 ### Start the API runtime
 
@@ -634,34 +643,42 @@ Treat B15 output as deterministic review assistance for graph-health diagnostics
 
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. It includes the memory/runtime foundation, workspace isolation, API/MCP auth/RBAC, governance, graph/hub/decision primitives, deterministic retrieval paths, a minimal/noop public ask layer, B10 classify ingest wiring, retrieval memory filters, current-state resolver beta helpers, a dry-run-first classify catchup helper, B11 conflict discovery / counterfinding surfacing, B12 context packaging / evidence object layering, B13 deterministic reasoning traversal/explanation over B12 context packs, B14 evidence-grounded answer-candidate assembly via `POST /v1/reasoning/answer`, and B15 read-only graph-health diagnostics for Graph Health Score, Hub Recall Health, and Alias Hygiene candidates.
+This is a public beta of Context Brain Memory Lab. The package version remains `0.1.0b17`, while the repository now includes public-safe B18-B24 skeletons and contracts that extend the earlier B10-B17 foundation without changing the release version in this gate.
 
-It is intentionally scoped: the public package exposes the foundation now, while the broader Context Brain layers continue to move through explicit public boundary and extraction gates.
+The current implemented capability spine is:
+
+- **B18 extraction/domain signals** — deterministic helpers over caller-supplied content; no private memory access or provider intelligence is implied.
+- **B19 hub/tag signals** — bounded hub/tag signal helpers over supplied evidence; no live Context Brain search is performed.
+- **B20 embedding admin planning + deterministic KNN core** — planning and supplied-vector fixture logic; no vector database or embedding provider is required by default.
+- **B21 scoring/tier/circuit** — deterministic helpers for supplied ingestion scores, tier routing, and circuit-state evaluation.
+- **B22 LLM executor contract + structured validator** — honest response contracts that preserve degraded/no-provider behavior and validate caller-supplied structured output.
+- **B23 search/context/prompt package helpers** — deterministic supplied-input ranking and prompt-package assembly; not live memory retrieval.
+- **B24 bounded honest wrapper contracts** — static MCP/GPT Actions-style descriptors and examples for selected supplied-input tools; not deployed production wrappers.
+
+See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for the compact capability and boundary matrix.
 
 ### Safety boundaries
 
-- **Not production multi-user tenancy yet** — auth/RBAC is implemented for local and public beta use, but hosted production tenancy still requires additional hardening, deployment guidance, and operational proof.
-- **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL.
+- **Not production-ready software** — auth/RBAC and workspace isolation are implemented for local/public-beta evaluation, but hosted production tenancy still requires additional hardening, deployment guidance, monitoring, and operational proof.
+- **Not the full private Context Brain** — this public package does not claim private Context Brain parity, private `ask_v2` parity, or access to private operational memory.
+- **No live memory retrieval by default in B18-B24 helpers** — the newer helpers and wrappers operate on caller-supplied input, fixtures, or deterministic local structures unless a separate API surface explicitly documents otherwise.
+- **No provider-backed semantic search by default** — provider-backed embeddings and LLM synthesis are optional/configured paths only; the baseline public package remains provider-neutral.
+- **No production MCP/GPT Actions readiness claim** — B24 wrappers are bounded honest contracts/descriptors/examples, not a deployed production integration.
 - **Public beta API** — `0.1.0b17` may still introduce breaking changes before `1.0`.
-- **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters are a future track.
-- **Bounded public Memory Lab beta** — this package is not the complete private Context Brain product. Provider-backed reasoning by default, production tenancy/billing, automatic contradiction resolution, human resolution workflow, wrapper SDK/client libraries, private ask_v2 parity, and `1.0` API stability remain outside this public-beta package. B14 includes `POST /v1/reasoning/answer` only as a deterministic/read-only, evidence-grounded `answer_candidate` endpoint; graph-health diagnostics remain deterministic/read-only only. These are not a private ask_v2 port, truth arbiter, conflict resolver, production reasoning quality claim, production graph quality claim, graph repair engine, automatic entity merge, provider dependency, or Full Context Brain claim.
+- **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL where runtime DB paths are used.
+- **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters remain future work.
 
-### Coming next / planned Context Brain layers
+### Next direction
 
-- **Reasoning over context packs** — B13 adds `POST /v1/reasoning/traverse` and `POST /v1/reasoning/explain` over B12 context packs. B14 adds `POST /v1/reasoning/answer`, which returns `answer_candidate` (not top-level `answer`) while preserving evidence refs, traversal steps, conflict warnings, limitations, and `non_claims`. The default path is deterministic/read-only, `LLM_PROVIDER=none` remains valid/default, provider-backed synthesis is opt-in only via `enable_provider_synthesis=true`, private ask_v2 parity is not claimed, and B14 does not perform truth arbitration or conflict resolution. The existing minimal/noop public ask layer via `POST /v1/ask` remains separate and is not rewritten.
-- **Graph health diagnostics** — B15 adds read-only Graph Health Score, Hub Recall Health, and Alias Hygiene candidate endpoints using `hubs.read`. The B15 API uses deterministic/static sample data in this beta; live repository reads are deferred. It does not mutate the graph, merge aliases/entities, perform graph repair, claim production graph quality, call providers, arbitrate truth, resolve conflicts, or port private CB/ask_v2 behavior.
-- **Classify / embed / store pipeline** — B10 includes deterministic classify ingest wiring and catchup support. Provider-backed embeddings remain optional and are not required by default.
-- **Conflict discovery vs resolution** — B11 surfaces computed counterfinding and contradiction candidates, but contradiction escalation workflows, truth arbitration, automatic contradiction resolution, and human resolution loops remain outside this public beta.
-- **Context packaging vs reasoning** — B12 exposes a context packaging / evidence object layer via `POST /v1/context-packs/build`; B13 adds reasoning traversal/explanation over those B12 context packs; B14 adds evidence-grounded answer-candidate assembly. These are not Full Context Brain, not a private ask_v2 port, not truth arbitration, not production reasoning quality claims, and not automatic conflict resolution.
-- **Current-state and agent packaging** — B10 includes resolver helpers for current-state anchors; B12 can package current-state signals and stale/superseded items, but the package is still not Full Context Brain and does not claim production agent-context orchestration.
-- **Chunk search v2** — not included in this beta.
-- **Additional public schema** — B10 public migration chain is `000..030`, including classify pipeline metadata, discovered-domain support, and current-state anchors. B11 adds no migrations and no durable conflict table. B12 adds no migrations and no durable context-pack table. B13 adds no migrations and no durable reasoning table. B14 adds no migrations and no durable answer trace table. B15 adds no migrations and no durable graph-health table.
+- **Repo/release hygiene** — keep package metadata, installation docs, proof evidence, and public boundaries aligned before any release/tag/PyPI step.
+- **B25 governance state model + workspace boundary** — next substantive implementation direction, still expected to preserve explicit public/private and workspace boundaries.
+- **Production transition remains future work** — deployment hardening, production MCP/GPT Actions proof, tenancy/billing, provider-key operations, and private Context Brain parity are not part of the current public-beta claim.
 
 ### Current integration limits
 
 - **Provider-backed embeddings and LLM calls are optional** — deterministic/no-key paths work by default; provider-backed behavior requires explicit configuration.
-- **MCP proof level** — current public proof covers MCP wrapper/tool-level auth and workspace propagation. Protocol-level MCP transport proof can be published separately.
-- **External integrations are conservative** — GPT Actions and similar external integrations should be treated as read-oriented unless a write surface is explicitly documented and authorized.
+- **MCP proof level** — current public proof covers MCP wrapper/tool-level auth/workspace propagation and B24 static wrapper contracts. Protocol-level MCP transport proof and production wrapper deployment can be published separately.
+- **External integrations are conservative** — GPT Actions and similar external integrations should be treated as read-oriented/static-contract examples unless a write surface is explicitly documented, deployed, and authorized.
 
 ---
 
@@ -671,8 +688,8 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 
 | Check | Result |
 |---|---|
-| `pip install -e .` | PASS in prior public package gates; rerun required for v0.1.0b17 final proof |
-| `py_compile` / import smoke | Required in final package proof |
+| `python -m pip install -e ".[test]"` | PASS in B24 packaging hygiene and public fresh-clone smoke (`644 passed, 9 skipped`) |
+| `py_compile` wrapper smoke | PASS in B24 packaging hygiene gates |
 | `python -m build` wheel + sdist | Required after version alignment |
 | `twine check` | Required after build |
 | API workspace context propagation smoke | PASS in Prestage 3 evidence |
