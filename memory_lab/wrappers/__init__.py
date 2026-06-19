@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from .bounded_tools import (
     build_supplied_prompt_package,
+    build_supplied_text_prompt_package,
+    build_supplied_text_prompt_request_shape,
     evaluate_supplied_circuit_state,
     rank_supplied_context_candidates,
     score_supplied_ingestion_signals,
@@ -21,4 +23,6 @@ __all__ = [
     "evaluate_supplied_circuit_state",
     "rank_supplied_context_candidates",
     "build_supplied_prompt_package",
+    "build_supplied_text_prompt_package",
+    "build_supplied_text_prompt_request_shape",
 ]

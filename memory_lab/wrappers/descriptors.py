@@ -1,7 +1,7 @@
 """Static B24 descriptor contracts for bounded wrappers.
 
 Descriptors are contract metadata and sample schema only: not deployed, no
-server URL, no auth block, caller-supplied input only, no live backend.
+network endpoint, no auth block, caller-supplied input only, no live backend.
 """
 from __future__ import annotations
 from typing import Any
@@ -13,6 +13,8 @@ _DESCRIPTION_BY_TOOL={
 "evaluate_supplied_circuit_state":"contract descriptor; sample schema; not deployed; caller-supplied input only; no live backend; source-neutral circuit evaluation adapter",
 "rank_supplied_context_candidates":"contract descriptor; sample schema; not deployed; caller-supplied input only; no live backend; deterministic ranking adapter over supplied candidates",
 "build_supplied_prompt_package":"contract descriptor; sample schema; not deployed; caller-supplied input only; no live backend; provider-neutral prompt package adapter over supplied candidates",
+"build_supplied_text_prompt_package":"contract descriptor; sample schema; not deployed; caller-supplied input only; no live backend; B30 supplied-text prompt package wrapper; no runtime wiring",
+"build_supplied_text_prompt_request_shape":"contract descriptor; sample schema; not deployed; caller-supplied input only; no live backend; B30 supplied-text B22 request-shape wrapper; no LLM execution",
 }
 def mcp_style_descriptors() -> list[dict[str, Any]]:
     schemas=all_wrapper_schemas()

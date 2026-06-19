@@ -9,6 +9,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, Mapping, Sequence
 from memory_lab.governance.circuit_breaker import CircuitBreakerConfig, CircuitBreakerEvent, evaluate_circuit_state
 from memory_lab.ingestion.ingestion_scoring import IngestionSignalInput, score_ingestion_signals
+from memory_lab.reasoning.ingestion_prompt_flow import SuppliedTextPromptFlowRequest, build_prompt_package_from_supplied_text, build_prompt_request_from_supplied_text
 from memory_lab.reasoning.prompt_package import PromptPackageRequest, build_prompt_package
 from memory_lab.reasoning.structured_validation import validate_structured_response
 from memory_lab.retrieval.context_candidates import ContextCandidateBuildRequest, build_context_candidates
@@ -45,7 +46,43 @@ def build_supplied_prompt_package(payload: Mapping[str, Any]) -> dict[str, Any]:
     degraded_reason="no_supplied_evidence" if not context_package.evidence else None
     return attach_metadata({"tool_name":"build_supplied_prompt_package","ranked_candidates":_rank_payload(ranked_response,"rank_supplied_context_candidates"),"context_package":{"query":context_package.query,"evidence":[_to_plain(ref) for ref in context_package.evidence],"context_text":context_package.context_text,"total_context_chars":context_package.total_context_chars,"truncated":context_package.truncated,"limitations":list(context_package.limitations),"non_claims":list(context_package.non_claims),"scope":context_package.scope},"prompt_package":{"prompt":prompt_package.prompt,"system":prompt_package.system,"expected_schema":dict(prompt_package.expected_schema),"evidence_ids":list(prompt_package.evidence_ids),"limitations":list(prompt_package.limitations),"non_claims":list(prompt_package.non_claims),"scope":prompt_package.scope}}, "build_supplied_prompt_package", degraded_reason)
 
+def build_supplied_text_prompt_package(payload: Mapping[str, Any]) -> dict[str, Any]:
+    request, error = _b30_request(payload, "build_supplied_text_prompt_package")
+    if error is not None:
+        return attach_metadata(error, "build_supplied_text_prompt_package", error["degraded_reason"])
+    result = build_prompt_package_from_supplied_text(request)
+    degraded_reason = None if result.ok else "b30_prompt_package_failed"
+    return attach_metadata(_b30_payload(result, "build_supplied_text_prompt_package"), "build_supplied_text_prompt_package", degraded_reason)
+
+def build_supplied_text_prompt_request_shape(payload: Mapping[str, Any]) -> dict[str, Any]:
+    request, error = _b30_request(payload, "build_supplied_text_prompt_request_shape")
+    if error is not None:
+        return attach_metadata(error, "build_supplied_text_prompt_request_shape", error["degraded_reason"])
+    result = build_prompt_request_from_supplied_text(request)
+    degraded_reason = None if result.ok else "b30_prompt_request_shape_failed"
+    return attach_metadata(_b30_payload(result, "build_supplied_text_prompt_request_shape"), "build_supplied_text_prompt_request_shape", degraded_reason)
+
 def selected_tool_names() -> tuple[str, ...]: return TOOL_NAMES
+
+def _b30_request(payload: Mapping[str, Any], tool_name: str) -> tuple[SuppliedTextPromptFlowRequest | None, dict[str, Any] | None]:
+    data=dict(payload or {})
+    missing=tuple(name for name in ("workspace_id","content_id","text") if not str(data.get(name) or "").strip())
+    if missing:
+        return None, {"tool_name":tool_name,"ok":False,"status":"missing_required_fields","errors":[{"code":"missing_required_field","field":name,"message":f"{name} is required for the B30 supplied-text prompt flow wrapper"} for name in missing],"warnings":[],"limitations":["caller_supplied_text_only","contract_wrapper_only","no_backend_object_accepted","no_llm_execution","no_api_or_mcp_runtime"],"non_claims":["not_llm_execution","not_provider_backed_reasoning","not_db_backed_retrieval","not_private_context_brain_parity","not_full_context_brain_parity","not_mcp_or_gpt_actions_production_ready"],"degraded_reason":"missing_required_fields"}
+    request=SuppliedTextPromptFlowRequest(workspace_id=str(data.get("workspace_id") or ""),content_id=str(data.get("content_id") or ""),text=str(data.get("text") or ""),title=str(data.get("title") or ""),source_ref=str(data["source_ref"]) if data.get("source_ref") is not None else None,metadata=_mapping(data.get("metadata")),hub_candidates=tuple(_mapping(item) for item in _list(data.get("hub_candidates"))),tag_candidates=_tuple_str(data.get("tag_candidates")),circuit_events=tuple(_mapping(item) for item in _list(data.get("circuit_events"))),circuit_now=_float(data.get("circuit_now"),0.0),backend=None,use_supplied_backend=False,persist_to_supplied_backend=False,query=str(data.get("query") or ""),purpose=str(data.get("purpose") or "answer"),instructions=str(data.get("instructions") or "Answer only from the supplied evidence. If evidence is insufficient, return no_context."),limit=_int(data.get("limit"),10),max_candidates=_int(data.get("max_candidates"),8),max_context_chars=_int(data.get("max_context_chars"),4000),snippet_chars=_int(data.get("snippet_chars"),600),max_tokens=_int(data.get("max_tokens"),512),temperature=_float(data.get("temperature"),0.0),circuit_state=str(data.get("circuit_state") or "unknown"))
+    return request, None
+
+def _b30_payload(result: Any, tool_name: str) -> dict[str, Any]:
+    return {"tool_name":tool_name,"ok":bool(result.ok),"status":result.status,"request_id":result.request_id,"workspace_id":result.workspace_id,"content_id":result.content_id,"mode":result.mode,"prompt_package":_prompt_package_plain(result.prompt_package),"llm_request":_llm_request_plain(result.llm_request),"ingestion_result":{"present":result.ingestion_result is not None,"mode":getattr(result.ingestion_result,"mode",None),"ok":getattr(result.ingestion_result,"ok",None),"status":getattr(result.ingestion_result,"status",None)} if result.ingestion_result is not None else None,"persistence_record":_to_plain(result.persistence_record),"prompt_handoff":{"present":result.prompt_handoff is not None,"mode":getattr(result.prompt_handoff,"mode",None),"ok":getattr(result.prompt_handoff,"ok",None),"status":getattr(result.prompt_handoff,"status",None)} if result.prompt_handoff is not None else None,"errors":[_to_plain(error) for error in result.errors],"warnings":list(result.warnings),"limitations":list(result.limitations),"non_claims":list(result.non_claims)}
+
+def _prompt_package_plain(package: Any) -> dict[str, Any] | None:
+    if package is None: return None
+    return {"prompt":package.prompt,"system":package.system,"expected_schema":dict(package.expected_schema),"evidence_ids":list(package.evidence_ids),"limitations":list(package.limitations),"non_claims":list(package.non_claims),"scope":package.scope}
+
+def _llm_request_plain(request: Any) -> dict[str, Any] | None:
+    if request is None: return None
+    metadata=_mapping(getattr(request,"metadata",{}))
+    return {"prompt":request.prompt,"system":request.system,"expected_schema":dict(request.expected_schema or {}),"evidence_count":request.evidence_count,"max_tokens":request.max_tokens,"temperature":request.temperature,"circuit_state":request.circuit_state,"live_mode_enabled":request.live_mode_enabled,"backend_name":request.backend_name,"allow_fake_backend":request.allow_fake_backend,"limitations":list(metadata.get("limitations", ())),"non_claims":list(metadata.get("non_claims", ())),"mode":metadata.get("mode")}
 
 def _rank_response(payload: Mapping[str, Any]):
     payload=dict(payload or {}); candidates=tuple(_candidate(item) for item in _list(payload.get("candidates")))

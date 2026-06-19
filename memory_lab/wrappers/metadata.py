@@ -39,6 +39,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "evaluate_supplied_circuit_state",
     "rank_supplied_context_candidates",
     "build_supplied_prompt_package",
+    "build_supplied_text_prompt_package",
+    "build_supplied_text_prompt_request_shape",
 )
 
 
@@ -55,6 +57,10 @@ def capability_metadata(capability: str, degraded_reason: str | None = None) -> 
         "uses_embeddings": False,
         "uses_vector_db": False,
         "mutates_state": False,
+        "executes_llm": False,
+        "production_runtime": False,
+        "api_runtime": False,
+        "mcp_runtime": False,
         "limitations": list(SHARED_LIMITATIONS),
         "non_claims": list(SHARED_NON_CLAIMS),
         "degraded_reason": degraded_reason,
