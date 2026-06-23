@@ -57,7 +57,7 @@ Adjust the PostgreSQL user and password to match your local setup.
 bash scripts/dev_migrate.sh
 ```
 
-This applies the available public beta migrations in sorted order. The current public schema range is `000..030`; later B18-B24 helper/contract gates do not add production/private-CB deployment requirements.
+This applies the available public beta migrations in sorted order. The current public schema range is `000..030`; later B18-B31 helper/contract gates do not add production/private-CB deployment requirements.
 
 Alternatively, apply manually:
 
@@ -117,7 +117,7 @@ This is expected behaviour — not an error.
 python -m pytest tests/unit -q
 ```
 
-Latest B24 unit-suite evidence is approximately **644 passed, 9 skipped, 0 failed**.
+Historical B24 unit-suite evidence was approximately **644 passed, 9 skipped, 0 failed**. Later B25-B31 evidence in the milestone reports is targeted public-safe contract evidence, not a new release/build claim from this install guide.
 Exact counts may change as public-beta tests are added; failures should be investigated before packaging or release gates.
 
 Skips are expected when database-backed or provider-backed checks are not configured. This is normal for local public-beta development.
@@ -138,7 +138,23 @@ python -m memory_lab.mcp.server
 bash scripts/dev_smoke_imports.sh
 ```
 
-Should output `OK:` for all 7 modules plus the `constitutionrules.yaml` asset check.
+Should output `OK:` for the configured import-smoke modules plus the `constitutionrules.yaml` asset check. Treat any exact module count as version-specific; B25-B31 added public-safe contract/helper surfaces without changing the package version, production status, or provider/DB requirements.
+
+---
+
+## B25-B31 public-safe docs note
+
+The package version remains `0.1.0b24`, but the public docs now recognize the completed B25-B31 contract milestones:
+
+- B25 governance state model + workspace boundary contract.
+- B26 in-memory persistence backend contract.
+- B27 public-safe ingestion pipeline contract.
+- B28 persistence-to-retrieval handoff contract.
+- B29 persisted-record-to-prompt-package handoff contract.
+- B30 supplied-text-to-prompt-request flow contract.
+- B31 bounded wrapper exposure for supplied-text prompt flow, including `build_supplied_text_prompt_package` and `build_supplied_text_prompt_request_shape`.
+
+These are public-safe contract/helper layers. They do not claim runtime API/MCP/GPT Actions deployment, production readiness, live LLM execution, provider-backed answer generation, DB/private Context Brain access, live memory retrieval by default, embeddings/vector DB execution, Full/private Context Brain parity, or any release/tag/PyPI/build/export completion.
 
 ---
 

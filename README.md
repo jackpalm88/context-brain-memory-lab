@@ -58,6 +58,13 @@ Context Brain Memory Lab is not a generic vector memory store. Its focus is **go
 - B22 LLM executor contract and structured-response validator with honest degraded/no-provider behavior
 - B23 supplied-input search/context-candidate/prompt-package helpers for deterministic packaging, not live Context Brain search
 - B24 bounded honest wrapper contracts for selected MCP/GPT Actions-style adapters over supplied input only; descriptors are static contracts, not deployed production integrations
+- B25 governance state model + workspace boundary contract over supplied public-safe records/events
+- B26 in-memory persistence backend contract; not DB-backed production persistence
+- B27 public-safe ingestion pipeline contract over caller-supplied input
+- B28 persistence-to-retrieval handoff contract for supplied persistence-shaped records
+- B29 persisted-record-to-prompt-package handoff contract without LLM execution
+- B30 supplied-text-to-prompt-request flow contract without provider execution
+- B31 bounded wrapper exposure for supplied-text prompt flow: `build_supplied_text_prompt_package` and `build_supplied_text_prompt_request_shape`
 - **Provider-neutral by default**: no OpenAI, Anthropic, or any LLM key required for the baseline runtime
 
 For a concise capability/non-claim map, see [docs/CAPABILITIES.md](docs/CAPABILITIES.md).
@@ -110,7 +117,7 @@ export OPENAI_API_KEY=***
 for f in migrations/00*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, retrieval evidence, classify/current-state metadata, and graph/governance support. B10 through B15 add classify/current-state helpers, computed conflict/counterfinding discovery, context-pack packaging, deterministic reasoning traversal/explanation, answer-candidate assembly, and read-only graph-health diagnostics without durable conflict/context-pack/reasoning/answer-trace/graph-health tables. B16 through B24 are primarily public-safe runtime, contract, and helper layers: workspace propagation hardening, ingestion/extraction/domain and hub/tag signal scaffolds, embedding-admin planning with deterministic KNN over supplied vectors, scoring/tier/circuit helpers, structured LLM executor contracts, supplied-input context/prompt packaging, and bounded wrapper descriptors. The public package version is now aligned to `0.1.0b24` for beta version hygiene; this does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
+The public beta schema includes migrations `000..030`. Earlier beta migrations cover workspace foundation, auth/RBAC, ask, retrieval evidence, classify/current-state metadata, and graph/governance support. B10 through B15 add classify/current-state helpers, computed conflict/counterfinding discovery, context-pack packaging, deterministic reasoning traversal/explanation, answer-candidate assembly, and read-only graph-health diagnostics without durable conflict/context-pack/reasoning/answer-trace/graph-health tables. B16 through B24 are primarily public-safe runtime, contract, and helper layers: workspace propagation hardening, ingestion/extraction/domain and hub/tag signal scaffolds, embedding-admin planning with deterministic KNN over supplied vectors, scoring/tier/circuit helpers, structured LLM executor contracts, supplied-input context/prompt packaging, and bounded wrapper descriptors. B25 through B31 add public-safe contract layers for governance state/workspace boundaries, in-memory persistence, supplied-text ingestion orchestration, persistence-to-retrieval handoff, persisted-record prompt packaging, supplied-text prompt-request shaping, and static bounded wrapper exposure for that supplied-text prompt flow. The public package version remains `0.1.0b24`; this does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, runtime API/MCP/GPT Actions deployment, or release/tag/PyPI/build/export completion.
 
 ### Start the API runtime
 
@@ -163,6 +170,8 @@ memory_lab/
   current_state/ beta current-state resolver helpers
   conflicts/     public-beta computed conflict/counterfinding discovery helpers
   context_packs/  public-beta computed/read-only context packaging helpers
+  persistence/    public-safe persistence backend contracts and in-memory backend
+  wrappers/       bounded supplied-input wrapper descriptors and tools
 migrations/
   000_base_schema.sql .. 030_add_current_state_anchors.sql
 pyproject.toml
@@ -643,7 +652,7 @@ Treat B15 output as deterministic review assistance for graph-health diagnostics
 
 ## Public beta boundaries and roadmap
 
-This is a public beta of Context Brain Memory Lab. The package version is `0.1.0b24`, aligned with the public-safe B18-B24 skeletons and contracts that extend the earlier B10-B17 foundation. This beta version alignment is release hygiene only; it does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, or production MCP/GPT Actions readiness.
+This is a public beta of Context Brain Memory Lab. The package version remains `0.1.0b24`, with docs aligned through the public-safe B25-B31 contract milestones that extend the earlier B10-B24 foundation. This docs alignment is release hygiene only; it does not imply production readiness, live private Context Brain retrieval, provider-backed semantic search by default, runtime API/MCP/GPT Actions deployment, or release/tag/PyPI/build/export completion.
 
 The current implemented capability spine is:
 
@@ -654,6 +663,13 @@ The current implemented capability spine is:
 - **B22 LLM executor contract + structured validator** — honest response contracts that preserve degraded/no-provider behavior and validate caller-supplied structured output.
 - **B23 search/context/prompt package helpers** — deterministic supplied-input ranking and prompt-package assembly; not live memory retrieval.
 - **B24 bounded honest wrapper contracts** — static MCP/GPT Actions-style descriptors and examples for selected supplied-input tools; not deployed production wrappers.
+- **B25 governance state model + workspace boundary contract** — public-safe governance state and workspace-boundary primitives for supplied records/events only; not a live governance runtime.
+- **B26 in-memory persistence backend contract** — deterministic persistence interfaces and in-memory backend behavior; not DB-backed production persistence.
+- **B27 public-safe ingestion pipeline contract** — deterministic supplied-text ingestion orchestration; no live DB, provider, private CB access, or production ingestion runtime.
+- **B28 persistence-to-retrieval handoff contract** — supplied persistence-shaped records to B23-compatible retrieval/context candidates; no live retrieval, embeddings, vector DB, or provider behavior.
+- **B29 persisted-record-to-prompt-package handoff contract** — prompt package and B22-compatible request-shape construction from supplied records; no LLM execution.
+- **B30 supplied-text-to-prompt-request flow contract** — caller-supplied text to prompt-package / prompt-request structures; no provider execution.
+- **B31 bounded wrapper exposure for supplied-text prompt flow** — static bounded wrapper descriptors/tools for `build_supplied_text_prompt_package` and `build_supplied_text_prompt_request_shape`; no runtime API/MCP/GPT Actions deployment.
 
 See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for the compact capability and boundary matrix.
 
@@ -661,17 +677,17 @@ See [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for the compact capability and 
 
 - **Not production-ready software** — auth/RBAC and workspace isolation are implemented for local/public-beta evaluation, but hosted production tenancy still requires additional hardening, deployment guidance, monitoring, and operational proof.
 - **Not the full private Context Brain** — this public package does not claim private Context Brain parity, private `ask_v2` parity, or access to private operational memory.
-- **No live memory retrieval by default in B18-B24 helpers** — the newer helpers and wrappers operate on caller-supplied input, fixtures, or deterministic local structures unless a separate API surface explicitly documents otherwise.
+- **No live memory retrieval by default in B18-B31 helpers** — the newer helpers and wrappers operate on caller-supplied input, fixtures, or deterministic local structures unless a separate API surface explicitly documents otherwise.
 - **No provider-backed semantic search by default** — provider-backed embeddings and LLM synthesis are optional/configured paths only; the baseline public package remains provider-neutral.
-- **No production MCP/GPT Actions readiness claim** — B24 wrappers are bounded honest contracts/descriptors/examples, not a deployed production integration.
-- **Public beta API** — `0.1.0b24` may still introduce breaking changes before `1.0`.
+- **No production MCP/GPT Actions readiness claim** — B24/B31 wrappers are bounded honest contracts/descriptors/examples, not a deployed production integration.
+- **Public beta API** — `0.1.0b24` may still introduce breaking changes before `1.0`; B25-B31 docs alignment does not change the version.
 - **Not a hosted service** — this is a self-hosted package; bring your own PostgreSQL where runtime DB paths are used.
 - **No OIDC/SSO or password login yet** — current authentication uses hashed API keys. External identity adapters remain future work.
 
 ### Next direction
 
 - **Repo/release hygiene** — keep package metadata, installation docs, proof evidence, and public boundaries aligned before any release/tag/PyPI step.
-- **B25 governance state model + workspace boundary** — next substantive implementation direction, still expected to preserve explicit public/private and workspace boundaries.
+- **Post-B31 review discipline** — any future production transition, runtime deployment, provider-backed behavior, or release action requires a separate proof gate.
 - **Production transition remains future work** — deployment hardening, production MCP/GPT Actions proof, tenancy/billing, provider-key operations, and private Context Brain parity are not part of the current public-beta claim.
 
 ### Current integration limits
@@ -731,6 +747,18 @@ Package readiness and workspace foundation behavior were verified in staging (`p
 | B15 graph mutation / automatic alias merge | NO |
 | B15 truth arbitration or conflict resolution | NO |
 | B15 provider calls required | NO |
+| B25 governance state/workspace boundary contract | PASS in milestone evidence (`23 passed`; full unit suite evidence `667 passed, 9 skipped`) |
+| B26 in-memory persistence backend contract | PASS in milestone evidence (`22 passed`; full unit suite evidence `689 passed, 9 skipped`) |
+| B27 public-safe ingestion pipeline contract | PASS in milestone evidence (`19 passed`; full unit suite evidence `708 passed, 9 skipped`) |
+| B28 persistence-to-retrieval handoff contract | PASS_WITH_CAVEATS in milestone evidence (`18 passed`; full unit suite evidence `726 passed, 9 skipped`) |
+| B29 persisted-record-to-prompt-package handoff contract | PASS_WITH_CAVEATS in targeted evidence (`21 passed`; full suite skipped because `psycopg2` missing; no dependency install) |
+| B30 supplied-text-to-prompt-request flow contract | PASS_WITH_CAVEATS in targeted evidence (`24 passed`; full suite skipped because `psycopg2` missing; no dependency install) |
+| B31 bounded wrapper exposure for supplied-text prompt flow | PASS_WITH_CAVEATS in targeted evidence (`141 passed`; static bounded wrapper/descriptor contract only) |
+| B31 wrapper functions | `build_supplied_text_prompt_package`; `build_supplied_text_prompt_request_shape` |
+| B25-B31 runtime/API/MCP/GPT Actions deployment claim | NO |
+| B25-B31 provider/LLM execution required | NO |
+| B25-B31 DB/private CB access claim | NO |
+| B25-B31 build/export/release/tag/PyPI action | NO |
 | Ask provider calls required | NO |
 | Provider calls required | NO |
 | Disposable teardown | PASS in B9/B10 public-style evidence |
