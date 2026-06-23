@@ -90,6 +90,16 @@ python -m pip install -e ".[test]"
 
 For local setup, see [docs/INSTALL.md](docs/INSTALL.md).
 
+### Public-safe wrapper example
+
+To run the B34 public-safe, caller-supplied-text, bounded B30/B31 wrapper flow example:
+
+```bash
+python examples/b31_supplied_text_prompt_flow_smoke.py
+```
+
+The example uses caller-supplied sample text and bounded wrapper functions only. It does not perform live LLM execution, provider-backed answer generation, DB/private Context Brain access, live memory retrieval by default, API/MCP/GPT Actions runtime deployment, or build/export/release/PyPI work.
+
 ### Configure
 
 ```bash

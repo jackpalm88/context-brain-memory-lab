@@ -142,6 +142,16 @@ Should output `OK:` for the configured import-smoke modules plus the `constituti
 
 ---
 
+## 11. Run the public-safe B30/B31 wrapper example
+
+```bash
+python examples/b31_supplied_text_prompt_flow_smoke.py
+```
+
+This B34 example is a public-safe, caller-supplied-text, bounded B30/B31 wrapper flow smoke. It does not perform live LLM execution, provider-backed answer generation, DB/private Context Brain access, live memory retrieval by default, API/MCP/GPT Actions runtime deployment, or build/export/release/PyPI work.
+
+---
+
 ## B25-B31 public-safe docs note
 
 The package version remains `0.1.0b24`, but the public docs now recognize the completed B25-B31 contract milestones:
