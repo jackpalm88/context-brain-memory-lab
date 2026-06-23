@@ -1,12 +1,14 @@
 import os
 
-import psycopg2
 import pytest
-from fastapi.testclient import TestClient
 
-from memory_lab.api.auth_context import AuthContext
-from memory_lab.api.dependencies.auth import require_permission
-from memory_lab.api.main import create_app
+
+def _psycopg2():
+    return pytest.importorskip(
+        "psycopg2",
+        reason="SKIPPED_OPTIONAL_PSYCOPG2_UNAVAILABLE — install psycopg2-binary to run DB integration tests.",
+    )
+
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db, pytest.mark.public_safe]
 
@@ -23,6 +25,12 @@ def _db_url():
 
 
 def _client(workspace_id=WS1):
+    _psycopg2()
+    from fastapi.testclient import TestClient
+    from memory_lab.api.auth_context import AuthContext
+    from memory_lab.api.dependencies.auth import require_permission
+    from memory_lab.api.main import create_app
+
     app = create_app()
 
     def override():
@@ -51,7 +59,7 @@ def _client(workspace_id=WS1):
 @pytest.fixture
 def conn(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", _db_url())
-    with psycopg2.connect(_db_url()) as c:
+    with _psycopg2().connect(_db_url()) as c:
         yield c
         c.rollback()
         with c.cursor() as cur:

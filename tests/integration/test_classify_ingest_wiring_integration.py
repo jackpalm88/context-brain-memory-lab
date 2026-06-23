@@ -32,10 +32,26 @@ import time
 import uuid
 from urllib.parse import urlparse, urlunparse
 
-import psycopg2
-import psycopg2.extensions
 import pytest
-from psycopg2.extras import RealDictCursor
+
+
+def _psycopg2():
+    module = pytest.importorskip(
+        "psycopg2",
+        reason="SKIPPED_OPTIONAL_PSYCOPG2_UNAVAILABLE — install psycopg2-binary to run DB integration tests.",
+    )
+    __import__("psycopg2.extensions")
+    return module
+
+
+def _real_dict_cursor():
+    pytest.importorskip(
+        "psycopg2",
+        reason="SKIPPED_OPTIONAL_PSYCOPG2_UNAVAILABLE — install psycopg2-binary to run DB integration tests.",
+    )
+    from psycopg2.extras import RealDictCursor
+
+    return RealDictCursor
 
 # ---------------------------------------------------------------------------
 # DSN guard — refuse unrelated / production / n8n deployment markers
@@ -126,8 +142,8 @@ def test_dsn():
 
     # Create disposable DB via admin connection
     try:
-        admin_conn = psycopg2.connect(_ADMIN_DSN)
-        admin_conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        admin_conn = _psycopg2().connect(_ADMIN_DSN)
+        admin_conn.set_isolation_level(_psycopg2().extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         with admin_conn.cursor() as cur:
             cur.execute(f'CREATE DATABASE "{disposable_db}";')
         admin_conn.close()
@@ -139,8 +155,8 @@ def test_dsn():
     db_dsn = urlunparse(parts._replace(path=f"/{disposable_db}"))
 
     # Apply migrations via psycopg2 (no docker exec)
-    db_conn = psycopg2.connect(db_dsn)
-    db_conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    db_conn = _psycopg2().connect(db_dsn)
+    db_conn.set_isolation_level(_psycopg2().extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     try:
         for mig_path in sorted(glob.glob(os.path.join(_MIGRATIONS_DIR, "*.sql"))):
             migration_id = os.path.basename(mig_path).split("_")[0]
@@ -169,8 +185,8 @@ def test_dsn():
 
 def _drop_disposable_db(db_name: str) -> None:
     try:
-        admin_conn = psycopg2.connect(_ADMIN_DSN)
-        admin_conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        admin_conn = _psycopg2().connect(_ADMIN_DSN)
+        admin_conn.set_isolation_level(_psycopg2().extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         with admin_conn.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
@@ -185,7 +201,7 @@ def _drop_disposable_db(db_name: str) -> None:
 
 @pytest.fixture
 def conn(test_dsn):
-    c = psycopg2.connect(test_dsn)
+    c = _psycopg2().connect(test_dsn)
     c.autocommit = False
     yield c
     c.rollback()
@@ -273,7 +289,7 @@ def test_classify_happy_path(test_dsn, conn):
     assert resp["created"] is True
     cid = resp["content_id"]
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT memory_type, classify_confidence, classified_at FROM content_items WHERE content_id = %s::uuid",
             (cid,),
@@ -284,7 +300,7 @@ def test_classify_happy_path(test_dsn, conn):
     assert row["classify_confidence"] > 0
     assert row["classified_at"] is not None
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT * FROM cb_classification_history WHERE content_id = %s::uuid AND is_active_classification = TRUE",
             (cid,),
@@ -310,7 +326,7 @@ def test_reclassify_deactivates_prior_active(test_dsn, conn):
         content_id=cid, workspace_id=ws_id, tier="transient", composite_score=0.4,
     )
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT is_active_classification FROM cb_classification_history WHERE content_id = %s::uuid ORDER BY classified_at",
             (cid,),
@@ -347,11 +363,11 @@ def test_domain_upsert_and_link_high_confidence(test_dsn, conn):
             workspace_id=ws_id, tier="transient", composite_score=0.5,
         )
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute("SELECT domain_id FROM content_items WHERE content_id = %s::uuid", (cid,))
         assert cur.fetchone()["domain_id"] is not None
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT domain_name FROM cb_discovered_domains WHERE workspace_id = %s::uuid AND domain_name = 'governance'",
             (ws_id,),
@@ -384,7 +400,7 @@ def test_low_confidence_leaves_domain_null(test_dsn, conn):
             workspace_id=ws_id, tier="transient", composite_score=0.3,
         )
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute("SELECT domain_id FROM content_items WHERE content_id = %s::uuid", (cid,))
         assert cur.fetchone()["domain_id"] is None
 
@@ -419,7 +435,7 @@ def test_discard_tier_no_classify_write(test_dsn, conn):
     assert "memory_type" not in resp
     assert "classify_status" not in resp
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute("SELECT COUNT(*) AS n FROM content_items WHERE workspace_id = %s::uuid", (ws_id,))
         assert cur.fetchone()["n"] == 0
 
@@ -434,7 +450,7 @@ def test_t3_failure_does_not_rollback_content_save(test_dsn, conn):
         resp = adapter.create_content_minimal(content="gate pass v0.1.0b9 smoke", workspace_id=ws_id)
 
     assert resp["created"] is True
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT tier FROM content_items WHERE content_id = %s::uuid", (resp["content_id"],)
         )
@@ -460,7 +476,7 @@ def test_low_confidence_no_current_state_writes(test_dsn, conn):
         )
 
     assert "current_state_status" not in resp
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT is_current, current_state_scope, cs_supersedes_content_id "
             "FROM content_items WHERE content_id = %s::uuid",
@@ -500,7 +516,7 @@ def test_retry_dedup_no_duplicate_history_row(test_dsn, conn):
     assert result2 is not None
     assert result2.get("dedup") is True
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT COUNT(*) as n FROM cb_classification_history "
             "WHERE content_id = %s::uuid AND is_active_classification = TRUE",
@@ -547,7 +563,7 @@ def test_high_confidence_current_state_anchor_written(test_dsn, conn):
     assert resp["current_state_status"] == "active"
     assert resp["current_state_scope"] == "b10-candidate"
     cid = resp["content_id"]
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT is_current, current_state_scope, cs_supersedes_content_id FROM content_items WHERE content_id = %s::uuid",
             (cid,),
@@ -593,7 +609,7 @@ def test_second_current_state_supersedes_previous_anchor(test_dsn, conn):
     second_id = second["content_id"]
     assert second["cs_supersedes_content_id"] == first_id
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT content_id::text AS content_id, is_current, current_state_scope, cs_supersedes_content_id::text AS supersedes "
             "FROM content_items WHERE content_id IN (%s::uuid, %s::uuid) ORDER BY content_id::text",

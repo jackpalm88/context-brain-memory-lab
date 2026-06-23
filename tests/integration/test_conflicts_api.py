@@ -1,14 +1,15 @@
 import os
 import uuid
 
-import psycopg2
 import pytest
-from fastapi.testclient import TestClient
 
-from memory_lab.api.auth_context import AuthContext
-from memory_lab.api.dependencies.auth import require_permission
-from memory_lab.api.main import create_app
-from memory_lab.conflicts.models import ConflictSearchResponse
+
+def _psycopg2():
+    return pytest.importorskip(
+        "psycopg2",
+        reason="SKIPPED_OPTIONAL_PSYCOPG2_UNAVAILABLE — install psycopg2-binary to run DB integration tests.",
+    )
+
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db, pytest.mark.public_safe]
 
@@ -24,6 +25,12 @@ def _db_url():
 
 
 def _client(workspace_id=WS1):
+    _psycopg2()
+    from fastapi.testclient import TestClient
+    from memory_lab.api.auth_context import AuthContext
+    from memory_lab.api.dependencies.auth import require_permission
+    from memory_lab.api.main import create_app
+
     app = create_app()
 
     def override():
@@ -60,7 +67,9 @@ class _DummyConn:
 
 
 def test_conflicts_endpoint_result_shape_without_provider_or_db_side_effects(monkeypatch):
+    _psycopg2()
     from memory_lab.api.routers import conflicts as conflicts_router
+    from memory_lab.conflicts.models import ConflictSearchResponse
 
     def fake_connect(_database_url):
         return _DummyConn()
@@ -113,7 +122,7 @@ def _insert_content(
 
 @pytest.fixture
 def conn():
-    with psycopg2.connect(_db_url()) as c:
+    with _psycopg2().connect(_db_url()) as c:
         yield c
         with c.cursor() as cur:
             cur.execute("DELETE FROM content_chunks WHERE workspace_id IN (%s::uuid, %s::uuid)", (WS1, WS2))
