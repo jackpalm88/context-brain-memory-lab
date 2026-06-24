@@ -11,7 +11,7 @@ from fastapi import Depends, Header, HTTPException
 from psycopg2.extras import Json, RealDictCursor
 
 from memory_lab.api.auth_context import AuthContext
-from memory_lab.api.config import get_settings
+from memory_lab.api.config import database_required, get_settings
 from memory_lab.api.workspace_context import WorkspaceContext, get_workspace_context
 
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
@@ -60,7 +60,7 @@ def _bool_env(name: str, default: str = "false") -> bool:
 
 
 def _conn():
-    return psycopg2.connect(get_settings().database_url)
+    return psycopg2.connect(database_required())
 
 
 def _write_audit_event(
@@ -261,6 +261,20 @@ def _auth_from_api_key(permission: str, workspace: WorkspaceContext, authorizati
 
 
 def resolve_auth_context(permission: str, workspace: WorkspaceContext, authorization: Optional[str]) -> AuthContext:
+    if not os.environ.get("DATABASE_URL", ""):
+        read_permissions = {perm for perm in ROLE_PERMISSIONS if perm.endswith(".read")}
+        if permission in ADMIN_PERMISSIONS or permission not in read_permissions:
+            raise HTTPException(status_code=503, detail="DATABASE_URL required for this operation")
+        return AuthContext(
+            auth_subject_id="00000000-0000-0000-0000-000000000000",
+            subject_type="user",
+            workspace_id="00000000-0000-0000-0000-000000000000",
+            role="reader",
+            auth_method="local_dev_deterministic",
+            is_local_dev_bypass=True,
+            workspace=workspace,
+        )
+
     auth_mode = os.environ.get("MEMORY_LAB_AUTH_MODE", "api_key").strip().lower() or "api_key"
     if auth_mode == "local_dev_bypass":
         ctx = _auth_from_local_dev(permission, workspace)

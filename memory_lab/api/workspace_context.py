@@ -10,6 +10,9 @@ from psycopg2.extras import RealDictCursor
 from fastapi import Header, HTTPException
 
 
+DEFAULT_LOCAL_WORKSPACE = "00000000-0000-0000-0000-000000000000"
+
+
 @dataclass(frozen=True)
 class WorkspaceContext:
     workspace_id: str
@@ -24,7 +27,7 @@ class WorkspaceContext:
 def _database_url() -> str:
     database_url = os.environ.get("DATABASE_URL", "")
     if not database_url:
-        raise HTTPException(status_code=500, detail="DATABASE_URL is required")
+        raise HTTPException(status_code=503, detail="DATABASE_URL required for this operation")
     return database_url
 
 
@@ -74,6 +77,14 @@ def resolve_workspace_context(x_workspace_id: Optional[str] = None) -> Workspace
     X-Workspace-ID is a selector, not authentication or authorization.
     No header falls back to MEMORY_LAB_DEFAULT_WORKSPACE_ID, then cb_workspaces default.
     """
+    if not os.environ.get("DATABASE_URL", ""):
+        return WorkspaceContext(
+            workspace_id=DEFAULT_LOCAL_WORKSPACE,
+            source="env",
+            is_default=True,
+            local_dev_default_used=True,
+        )
+
     database_url = _database_url()
     if x_workspace_id:
         workspace_id = _parse_workspace_uuid(x_workspace_id)
