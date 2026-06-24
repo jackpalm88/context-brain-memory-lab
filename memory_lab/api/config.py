@@ -32,7 +32,7 @@ def ensure_legacy_flat_app_routes() -> None:
     preserves the older flat app.routes behavior for unprefixed includes used by
     this API without changing request handling semantics.
     """
-    from fastapi.routing import APIRouter
+    from fastapi.routing import APIRouter, request_response
 
     original = APIRouter.include_router
     if getattr(original, "_memory_lab_flat_routes", False):
@@ -45,7 +45,13 @@ def ensure_legacy_flat_app_routes() -> None:
         if len(appended) == 1 and type(appended[0]).__name__ == "_IncludedRouter":
             context = getattr(appended[0], "include_context", None)
             if context is not None and getattr(context, "prefix", "") == "":
-                self.routes[before:] = list(getattr(router, "routes", ()))
+                flattened_routes = list(getattr(router, "routes", ()))
+                for route in flattened_routes:
+                    if hasattr(route, "dependency_overrides_provider"):
+                        route.dependency_overrides_provider = getattr(self, "dependency_overrides_provider", self)
+                        if hasattr(route, "get_route_handler"):
+                            route.app = request_response(route.get_route_handler())
+                self.routes[before:] = flattened_routes
         return None
 
     include_router_flat._memory_lab_flat_routes = True

@@ -7,12 +7,12 @@ from typing import Any, Callable, Dict, Optional, Set
 from uuid import UUID
 
 import psycopg2
-from fastapi import Depends, Header, HTTPException
+from fastapi import Header, HTTPException
 from psycopg2.extras import Json, RealDictCursor
 
 from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import database_required, get_settings
-from memory_lab.api.workspace_context import WorkspaceContext, get_workspace_context
+from memory_lab.api.workspace_context import WorkspaceContext, resolve_workspace_context
 
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     "content.create": {"owner", "admin", "writer", "service_agent"},
@@ -307,9 +307,10 @@ def resolve_auth_context(permission: str, workspace: WorkspaceContext, authoriza
 
 def require_permission(permission: str) -> Callable[..., AuthContext]:
     def _dependency(
-        workspace: WorkspaceContext = Depends(get_workspace_context),
+        x_workspace_id: Optional[str] = Header(None, alias="X-Workspace-ID"),
         authorization: Optional[str] = Header(None, alias="Authorization"),
     ) -> AuthContext:
+        workspace = resolve_workspace_context(x_workspace_id)
         return resolve_auth_context(permission, workspace, authorization)
 
     return _dependency
