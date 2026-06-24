@@ -22,6 +22,7 @@ dependencies = [
     "httpx-sse>=0.4",
     "sse-starlette>=3.0",
     "requests>=2.31",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
