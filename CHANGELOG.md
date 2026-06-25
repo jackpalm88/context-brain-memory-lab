@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0a1 — M2
+
+- Added `PostgresPersistenceBackend` for opt-in DB-backed content and governance persistence.
+- Enabled explicit Postgres selection through `DATABASE_URL` / `CB_TEST_DATABASE_URL` while preserving deterministic empty-env behavior.
+- Kept `InMemoryPersistenceBackend` as the empty-env fallback and explicit no-DB seam.
+- Verified live throwaway Postgres round-trip coverage for content save→load, governance state save→load, and governance event append→list.
+- Added migration `031_add_m2_persistence_roundtrip.sql` for the M2 persistence round-trip schema support.
+
 ## 0.2.0a1 — M1
 
 - Froze the B-scheme milestone baseline for Context Brain Memory Lab.
