@@ -49,5 +49,6 @@ def answer(req: ReasoningRequest, auth: AuthContext = Depends(require_permission
         request=req,
         workspace_id=auth.workspace_id,
         workspace_source=auth.workspace_source,
+        provider_synthesis_enabled=settings.reasoning_provider_synthesis_enabled,
     )
     return response.model_dump()

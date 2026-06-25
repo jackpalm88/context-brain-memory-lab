@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from memory_lab.context_packs.models import ContextPackBuildResponse
@@ -11,6 +12,7 @@ from memory_lab.reasoning.traverse import build_traversal_steps, collect_evidenc
 
 FORBIDDEN_PUBLIC_FIELD_NAMES = {"verdict", "truth_decision", "resolution", "winner", "canonical_truth"}
 FORBIDDEN_PROVIDER_TERMS = {"verdict", "truth decision", "resolution", "winner", "canonical truth"}
+EVIDENCE_ID_PATTERN = re.compile(r"\bev_[A-Za-z0-9_-]+\b")
 
 ANSWER_LIMITATIONS = [
     "B14 returns an evidence-grounded answer candidate only.",
@@ -121,6 +123,16 @@ def _provider_text_allowed(text: str) -> bool:
     return bool(text.strip()) and not any(term in lowered for term in FORBIDDEN_PROVIDER_TERMS)
 
 
+def _evidence_id(ref: dict[str, Any]) -> str:
+    return str(ref.get("evidence_id") or "").strip()
+
+
+def _provider_citations_allowed(text: str, evidence_refs: list[dict[str, Any]]) -> bool:
+    allowed = {_evidence_id(ref) for ref in evidence_refs if _evidence_id(ref)}
+    cited = set(EVIDENCE_ID_PATTERN.findall(text))
+    return cited <= allowed
+
+
 def provider_synthesize_answer_candidate(
     *,
     request: ReasoningRequest,
@@ -128,10 +140,14 @@ def provider_synthesize_answer_candidate(
     evidence_refs: list[dict[str, Any]],
     conflict_warnings: list[str],
     backend: Optional[LLMBackend] = None,
+    provider_synthesis_enabled: bool = True,
 ) -> tuple[str, ReasoningProviderMetadata, Optional[str], str]:
     """Try explicitly opted-in provider wording through the public LLMBackend ABC only."""
     if not request.enable_provider_synthesis:
         return deterministic_candidate, _provider_metadata_without_call(), None, "deterministic"
+    if not provider_synthesis_enabled:
+        metadata = ReasoningProviderMetadata(provider="none", attempted=False, configured=False, degraded=True, failure_reason="provider_disabled")
+        return deterministic_candidate, metadata, "provider_disabled", "degraded"
 
     llm = backend or NoopLLMBackend()
     metadata = ReasoningProviderMetadata(
@@ -140,9 +156,12 @@ def provider_synthesize_answer_candidate(
         configured=llm.is_configured,
         degraded=False,
     )
+    citation_ids = [_evidence_id(ref) for ref in evidence_refs if _evidence_id(ref)]
     prompt = (
         "Produce a concise evidence-grounded answer_candidate from these evidence snippets only. "
-        "Do not decide truth. Do not choose a winner. Do not resolve conflicts.\n\n"
+        "Do not decide truth. Do not choose a winner. Do not resolve conflicts. "
+        "If citing evidence, cite only these evidence_id values exactly: "
+        f"{citation_ids[:5]}.\n\n"
         f"Deterministic candidate:\n{deterministic_candidate}\n\n"
         f"Evidence refs:\n{evidence_refs[:5]}\n\n"
         f"Warnings:\n{conflict_warnings}"
@@ -161,7 +180,7 @@ def provider_synthesize_answer_candidate(
         metadata.failure_reason = _provider_failure_reason(response)
         return deterministic_candidate, metadata, metadata.failure_reason, "degraded"
     text = str(response.text or "").strip()
-    if not _provider_text_allowed(text):
+    if not _provider_text_allowed(text) or not _provider_citations_allowed(text, evidence_refs):
         metadata.degraded = True
         metadata.failure_reason = "provider_output_rejected"
         return deterministic_candidate, metadata, metadata.failure_reason, "degraded"
@@ -173,6 +192,7 @@ def answer_context_pack(
     context_pack: ContextPackBuildResponse,
     request: ReasoningRequest,
     backend: Optional[LLMBackend] = None,
+    provider_synthesis_enabled: bool = True,
 ) -> ReasoningAnswerResponse:
     steps = build_traversal_steps(context_pack, request)
     evidence_refs = collect_evidence_refs(context_pack)
@@ -195,6 +215,7 @@ def answer_context_pack(
             evidence_refs=evidence_refs,
             conflict_warnings=conflict_warnings,
             backend=backend,
+            provider_synthesis_enabled=provider_synthesis_enabled,
         )
         degraded_reason = provider_degraded_reason
 

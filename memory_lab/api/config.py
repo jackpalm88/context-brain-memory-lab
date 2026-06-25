@@ -9,6 +9,7 @@ class Settings:
     provider_embeddings_enabled: bool = False
     vector_embeddings_enabled: bool = False
     pgvector_retrieval_enabled: bool = False
+    reasoning_provider_synthesis_enabled: bool = False
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -22,6 +23,7 @@ def get_settings() -> Settings:
     provider_embeddings_enabled = _env_bool("MEMORY_LAB_PROVIDER_EMBEDDINGS_ENABLED", False)
     vector_embeddings_enabled = _env_bool("MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED", False) or provider_embeddings_enabled
     pgvector_retrieval_enabled = _env_bool("MEMORY_LAB_PGVECTOR_RETRIEVAL_ENABLED", False)
+    reasoning_provider_synthesis_enabled = _env_bool("MEMORY_LAB_REASONING_PROVIDER_SYNTHESIS_ENABLED", False)
     deterministic_retrieval_only = not pgvector_retrieval_enabled
     return Settings(
         database_url=os.environ.get("DATABASE_URL", ""),
@@ -29,6 +31,7 @@ def get_settings() -> Settings:
         provider_embeddings_enabled=provider_embeddings_enabled,
         vector_embeddings_enabled=vector_embeddings_enabled,
         pgvector_retrieval_enabled=pgvector_retrieval_enabled,
+        reasoning_provider_synthesis_enabled=reasoning_provider_synthesis_enabled,
     )
 
 

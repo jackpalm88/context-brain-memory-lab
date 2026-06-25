@@ -4,6 +4,7 @@ from memory_lab.context_packs.builder import build_context_pack
 from memory_lab.context_packs.models import ContextPackBuildRequest
 from memory_lab.providers.fake import FakeLLMBackend
 from memory_lab.providers.failure import FailureCode
+from memory_lab.providers.llm_backend import LLMResponse
 from memory_lab.reasoning.answer import answer_context_pack
 from memory_lab.reasoning.models import ReasoningRequest
 
@@ -159,3 +160,67 @@ def test_answer_candidate_cites_only_existing_evidence_ids():
     assert bracketed
     assert bracketed <= evidence_ids
     assert "[1]" not in response.answer_candidate
+
+
+def test_global_provider_disabled_returns_deterministic_candidate_without_call():
+    backend = FakeLLMBackend()
+    body = answer_context_pack(
+        context_pack=_pack(),
+        request=ReasoningRequest(query="x", enable_provider_synthesis=True),
+        backend=backend,
+        provider_synthesis_enabled=False,
+    )
+    assert backend.summarize_calls == 0
+    assert body.mode == "degraded"
+    assert body.provider_metadata.attempted is False
+    assert body.provider_metadata.failure_reason == "provider_disabled"
+    assert body.degraded_reason == "provider_disabled"
+    assert "fake_summary" not in body.answer_candidate
+    assert body.evidence_refs
+
+
+def test_provider_output_with_invented_citation_is_rejected_to_fallback():
+    backend = FakeLLMBackend(preset_response=LLMResponse(text="Provider cites ev_missing", provider="fake"))
+    body = answer_context_pack(
+        context_pack=_pack(),
+        request=ReasoningRequest(query="x", enable_provider_synthesis=True),
+        backend=backend,
+    )
+    assert backend.summarize_calls == 1
+    assert body.mode == "degraded"
+    assert body.provider_metadata.failure_reason == "provider_output_rejected"
+    assert body.degraded_reason == "provider_output_rejected"
+    assert "ev_missing" not in body.answer_candidate
+    assert "[ev_support]" in body.answer_candidate
+
+
+def test_provider_output_with_forbidden_term_is_rejected_to_fallback():
+    backend = FakeLLMBackend(preset_response=LLMResponse(text="The verdict is supported by ev_support", provider="fake"))
+    body = answer_context_pack(
+        context_pack=_pack(),
+        request=ReasoningRequest(query="x", enable_provider_synthesis=True),
+        backend=backend,
+    )
+    assert backend.summarize_calls == 1
+    assert body.mode == "degraded"
+    assert body.provider_metadata.failure_reason == "provider_output_rejected"
+    assert body.degraded_reason == "provider_output_rejected"
+    assert "verdict" not in body.answer_candidate.lower()
+    _assert_no_forbidden_fields(body.model_dump())
+
+
+def test_provider_prompt_includes_candidate_evidence_ids_and_constraints():
+    backend = FakeLLMBackend(preset_response=LLMResponse(text="Provider wording cites ev_support", provider="fake"))
+    body = answer_context_pack(
+        context_pack=_pack(),
+        request=ReasoningRequest(query="x", enable_provider_synthesis=True),
+        backend=backend,
+    )
+    assert body.mode == "provider_backed"
+    assert backend.last_request is not None
+    prompt = backend.last_request.prompt
+    assert "Deterministic candidate" in prompt
+    assert "ev_support" in prompt
+    assert "Do not decide truth" in prompt
+    assert "Do not choose a winner" in prompt
+    assert "Do not resolve conflicts" in prompt

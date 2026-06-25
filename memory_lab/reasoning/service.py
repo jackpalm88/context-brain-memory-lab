@@ -12,6 +12,19 @@ from memory_lab.reasoning.models import ReasoningAnswerResponse, ReasoningProvid
 from memory_lab.reasoning.traverse import build_traversal_steps, collect_evidence_refs
 
 
+def get_reasoning_llm_backend() -> LLMBackend:
+    """Return configured reasoning LLM backend, or Noop without raising."""
+    try:
+        from memory_lab.providers.anthropic import AnthropicLLMBackend
+
+        backend = AnthropicLLMBackend()
+        if backend.is_configured:
+            return backend
+    except Exception:
+        pass
+    return NoopLLMBackend()
+
+
 def _context_pack_request(req: ReasoningRequest) -> ContextPackBuildRequest:
     return ContextPackBuildRequest(
         workspace_id=req.workspace_id,
@@ -160,6 +173,7 @@ def answer_for_request(
     workspace_id: str,
     workspace_source: Optional[str] = None,
     backend: Optional[LLMBackend] = None,
+    provider_synthesis_enabled: bool = True,
 ) -> ReasoningAnswerResponse:
     cp_req = _context_pack_request(request)
     context_pack = build_context_pack_for_request(
@@ -168,4 +182,12 @@ def answer_for_request(
         workspace_id=workspace_id,
         workspace_source=workspace_source,
     )
-    return answer_context_pack(context_pack=context_pack, request=request, backend=backend)
+    resolved_backend = backend
+    if resolved_backend is None and request.enable_provider_synthesis and provider_synthesis_enabled:
+        resolved_backend = get_reasoning_llm_backend()
+    return answer_context_pack(
+        context_pack=context_pack,
+        request=request,
+        backend=resolved_backend,
+        provider_synthesis_enabled=provider_synthesis_enabled,
+    )

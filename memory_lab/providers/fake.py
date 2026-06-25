@@ -20,6 +20,8 @@ class FakeLLMBackend(LLMBackend):
     preset_json: dict[str, Any] | None = None
     invalid_json_text: str | None = None
     schema_mismatch_json: dict[str, Any] | None = None
+    summarize_calls: int = 0
+    last_request: LLMRequest | None = None
 
     @property
     def provider_name(self) -> str:
@@ -53,8 +55,12 @@ class FakeLLMBackend(LLMBackend):
         return LLMResponse(text=labels[0] if labels else "", provider="fake")
 
     def summarize(self, request: LLMRequest) -> LLMResponse:
+        self.summarize_calls += 1
+        self.last_request = request
         if self.preset_failure:
             return LLMResponse(degraded=True, failure_reason=self.preset_failure, provider="fake")
+        if self.preset_response:
+            return self.preset_response
         return LLMResponse(text="fake_summary", provider="fake")
 
 
