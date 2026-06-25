@@ -7,10 +7,29 @@ class Settings:
     database_url: str
     deterministic_retrieval_only: bool = True
     provider_embeddings_enabled: bool = False
+    vector_embeddings_enabled: bool = False
+    pgvector_retrieval_enabled: bool = False
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_settings() -> Settings:
-    return Settings(database_url=os.environ.get("DATABASE_URL", ""))
+    provider_embeddings_enabled = _env_bool("MEMORY_LAB_PROVIDER_EMBEDDINGS_ENABLED", False)
+    vector_embeddings_enabled = _env_bool("MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED", False) or provider_embeddings_enabled
+    pgvector_retrieval_enabled = _env_bool("MEMORY_LAB_PGVECTOR_RETRIEVAL_ENABLED", False)
+    deterministic_retrieval_only = not pgvector_retrieval_enabled
+    return Settings(
+        database_url=os.environ.get("DATABASE_URL", ""),
+        deterministic_retrieval_only=deterministic_retrieval_only,
+        provider_embeddings_enabled=provider_embeddings_enabled,
+        vector_embeddings_enabled=vector_embeddings_enabled,
+        pgvector_retrieval_enabled=pgvector_retrieval_enabled,
+    )
 
 
 def database_required() -> str:

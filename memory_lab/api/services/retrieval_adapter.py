@@ -6,13 +6,16 @@ from psycopg2.extras import RealDictCursor
 from memory_lab.graph.adapter import CBGraphAdapter
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.store import GraphStore
+from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
 
 
 class RetrievalAdapter:
     """Provider-neutral retrieval adapter with deterministic workspace-scoped DB defaults."""
 
-    def __init__(self, database_url: str):
+    def __init__(self, database_url: str, embedding_backend: EmbeddingBackend | None = None, pgvector_retrieval_enabled: bool | None = None):
         self.database_url = database_url
+        self.embedding_backend = embedding_backend
+        self.pgvector_retrieval_enabled = _pgvector_retrieval_enabled() if pgvector_retrieval_enabled is None else bool(pgvector_retrieval_enabled)
         self.graph_store = GraphStore(database_url)
         self.hub_store = HubStore(database_url)
         self.vector_search_fn: Callable[[str], List[Dict[str, Any]]] = self._deterministic_vector_search
@@ -138,6 +141,79 @@ class RetrievalAdapter:
     def _deterministic_rerank(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return sorted(results, key=lambda x: x.get("score", 0), reverse=True)
 
+    def _embedding_backend(self) -> EmbeddingBackend | None:
+        if self.embedding_backend is not None:
+            return self.embedding_backend
+        if not self.pgvector_retrieval_enabled:
+            return None
+        from memory_lab.providers.openai_embedding import OpenAIEmbeddingBackend
+
+        self.embedding_backend = OpenAIEmbeddingBackend()
+        return self.embedding_backend
+
+    def _query_embedding(self, query: str) -> tuple[List[float] | None, str | None]:
+        if not self.database_url or not self.pgvector_retrieval_enabled:
+            return None, "provider_disabled"
+        backend = self._embedding_backend()
+        if backend is None or not backend.is_configured:
+            return None, "provider_disabled"
+        response = backend.embed_text(EmbeddingRequest(text=query))
+        if not response.is_ok or response.dimensions != 1536:
+            reason = response.failure_reason.value if response.failure_reason is not None else "embedding_degraded"
+            return None, reason
+        return response.vector, None
+
+    def _pgvector_knn_search(self, query: str, query_vector: List[float], workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        where_parts = ["ch.embedding IS NOT NULL"]
+        where_params: List[Any] = []
+        if workspace_id:
+            where_parts.append("c.workspace_id = %s::uuid")
+            where_params.append(workspace_id)
+        if memory_types:
+            where_parts.append("c.memory_type = ANY(%s::text[])")
+            where_params.append(list(memory_types))
+        query_vector_literal = _vector_literal(query_vector)
+        params: List[Any] = [query_vector_literal, *where_params, query_vector_literal]
+        where = " AND ".join(where_parts)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT
+                        c.content_id::text AS content_id,
+                        ch.chunk_id::text AS chunk_id,
+                        c.workspace_id::text AS workspace_id,
+                        ch.chunk_text AS text,
+                        ch.chunk_index,
+                        (ch.embedding <=> %s::vector) AS distance
+                    FROM content_chunks ch
+                    JOIN content_items c ON c.content_id = ch.content_id
+                    WHERE {where}
+                    ORDER BY ch.embedding <=> %s::vector ASC, ch.chunk_index ASC
+                    LIMIT 25
+                    """,
+                    tuple(params),
+                )
+                rows = [dict(r) for r in cur.fetchall()]
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            distance = float(row.get("distance") or 0.0)
+            results.append(
+                {
+                    "id": row["content_id"],
+                    "content_id": row["content_id"],
+                    "chunk_id": row["chunk_id"],
+                    "workspace_id": row["workspace_id"],
+                    "score": 1.0 / (1.0 + distance),
+                    "text": row["text"],
+                    "distance": distance,
+                    "retrieval_path": "pgvector_knn",
+                    "retrieval_mode": "pgvector_knn",
+                    "embedding_status": "ok",
+                }
+            )
+        return results
+
     def search(
         self,
         query: str,
@@ -147,7 +223,11 @@ class RetrievalAdapter:
         workspace_id: Optional[str] = None,
         memory_types: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types)
+        query_vector, embedding_degraded = self._query_embedding(query)
+        if query_vector is not None:
+            vector_search = lambda q: self._pgvector_knn_search(q, query_vector, workspace_id=workspace_id, memory_types=memory_types)
+        else:
+            vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types)
         results = self.adapter.search(
             query=query,
             max_hops=max_hops,
@@ -156,6 +236,12 @@ class RetrievalAdapter:
             workspace_id=workspace_id,
             vector_search_fn=vector_search,
         )
+        fallback_mode = "deterministic_fallback" if query_vector is None else "pgvector_knn"
+        for result in results:
+            result.setdefault("retrieval_mode", fallback_mode)
+            if query_vector is None:
+                result.setdefault("retrieval_path", "deterministic_fallback")
+                result.setdefault("embedding_status", embedding_degraded or "provider_disabled")
         seen = {str(r.get("content_id") or r.get("id")) for r in results}
         for row in self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types):
             rid = str(row.get("content_id") or row.get("id"))
@@ -163,3 +249,20 @@ class RetrievalAdapter:
                 seen.add(rid)
                 results.append(row)
         return self._deterministic_rerank(results)
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    import os
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _pgvector_retrieval_enabled() -> bool:
+    return _env_bool("MEMORY_LAB_PGVECTOR_RETRIEVAL_ENABLED", False)
+
+
+def _vector_literal(vector: List[float]) -> str:
+    return "[" + ",".join(str(float(v)) for v in vector) + "]"

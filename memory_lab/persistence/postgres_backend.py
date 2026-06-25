@@ -14,6 +14,8 @@ import json
 import uuid
 from typing import Any, Mapping
 
+from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
+
 from memory_lab.governance.state import (
     GovernanceProvenance,
     GovernanceRecordRef,
@@ -36,17 +38,17 @@ from memory_lab.persistence.results import (
 M2_POSTGRES_MODE = "m2_postgres_persistence_roundtrip_v1"
 
 
-def _postgres_metadata() -> PersistenceOperationMetadata:
+def _postgres_metadata(uses_embeddings: bool = False, uses_vector_db: bool = False, degraded_reason: str | None = None) -> PersistenceOperationMetadata:
     return PersistenceOperationMetadata(
         capability="m2_postgres_persistence_backend",
         mode=M2_POSTGRES_MODE,
         input_scope="caller_supplied_values_with_explicit_database_url",
         live_backend_used=True,
         requires_db=True,
-        requires_provider=False,
+        requires_provider=uses_embeddings,
         requires_private_context_brain=False,
-        uses_embeddings=False,
-        uses_vector_db=False,
+        uses_embeddings=uses_embeddings,
+        uses_vector_db=uses_vector_db,
         mutates_external_state=True,
         limitations=(
             "explicit_database_url_required",
@@ -62,15 +64,17 @@ def _postgres_metadata() -> PersistenceOperationMetadata:
             "not_vector_retrieval",
             "not_llm_reasoning",
         ),
-        degraded_reason=None,
+        degraded_reason=degraded_reason,
     )
 
 
 class PostgresPersistenceBackend:
     """Explicit DB-backed persistence backend for M2 save/load round-trips."""
 
-    def __init__(self, database_url: str):
+    def __init__(self, database_url: str, embedding_backend: EmbeddingBackend | None = None, vector_embeddings_enabled: bool | None = None):
         self.database_url = (database_url or "").strip()
+        self.embedding_backend = embedding_backend
+        self.vector_embeddings_enabled = _vector_embeddings_enabled() if vector_embeddings_enabled is None else bool(vector_embeddings_enabled)
 
     def put_content_record(self, record: ContentPersistenceRecord | Any) -> PersistenceResult:
         operation = "put_content_record"
@@ -79,6 +83,8 @@ class PostgresPersistenceBackend:
             check = _validate_required_id(value, field_name, operation) or _validate_uuid(value, field_name, operation)
             if check is not None:
                 return check
+
+        operation_state: dict[str, Any] = {"uses_embeddings": False, "uses_vector_db": False, "warnings": []}
 
         def work(conn: Any) -> ContentPersistenceRecord:
             with conn.cursor() as cur:
@@ -113,13 +119,30 @@ class PostgresPersistenceBackend:
                         """
                         INSERT INTO content_chunks (content_id, workspace_id, chunk_index, chunk_text, word_count)
                         VALUES (%s::uuid, %s::uuid, 0, %s, %s)
+                        RETURNING chunk_id::text
                         """,
                         (normalized.content_id, normalized.workspace_id, normalized.text, len(normalized.text.split())),
                     )
+                    chunk_row = cur.fetchone()
+                    warning = self._maybe_store_chunk_embedding(cur, chunk_row[0], normalized.text)
+                    if warning is None and self.vector_embeddings_enabled:
+                        operation_state["uses_embeddings"] = True
+                        operation_state["uses_vector_db"] = True
+                    elif warning and warning != "provider_disabled":
+                        operation_state["warnings"].append(warning)
             conn.commit()
             return normalized
 
-        return self._run(operation, work)
+        return self._run(
+            operation,
+            work,
+            metadata=lambda: _postgres_metadata(
+                uses_embeddings=bool(operation_state["uses_embeddings"]),
+                uses_vector_db=bool(operation_state["uses_vector_db"]),
+                degraded_reason=(operation_state["warnings"][0] if operation_state["warnings"] else None),
+            ),
+            warnings=lambda: tuple(operation_state["warnings"]),
+        )
 
     def get_content_record(self, workspace_id: str, content_id: str) -> PersistenceResult:
         operation = "get_content_record"
@@ -385,7 +408,43 @@ class PostgresPersistenceBackend:
 
         return self._run(operation, work)
 
-    def _run(self, operation: str, work: Any) -> PersistenceResult:
+    def _embedding_backend(self) -> EmbeddingBackend | None:
+        if self.embedding_backend is not None:
+            return self.embedding_backend
+        if not self.vector_embeddings_enabled:
+            return None
+        from memory_lab.providers.openai_embedding import OpenAIEmbeddingBackend
+
+        self.embedding_backend = OpenAIEmbeddingBackend()
+        return self.embedding_backend
+
+    def _maybe_store_chunk_embedding(self, cur: Any, chunk_id: str, text: str) -> str | None:
+        if not self.vector_embeddings_enabled:
+            return "provider_disabled"
+        backend = self._embedding_backend()
+        if backend is None or not backend.is_configured:
+            return "provider_disabled"
+        response = backend.embed_text(EmbeddingRequest(text=text))
+        if not response.is_ok or response.dimensions != 1536:
+            reason = response.failure_reason.value if response.failure_reason is not None else "embedding_degraded"
+            return reason
+        cur.execute(
+            """
+            UPDATE content_chunks
+               SET embedding = %s::vector,
+                   embedding_provider = %s,
+                   embedding_model = %s,
+                   embedding_dimensions = %s,
+                   embedded_at = NOW(),
+                   embedding_status = 'embedded',
+                   embedding_failure_reason = NULL
+             WHERE chunk_id = %s::uuid
+            """,
+            (_vector_literal(response.vector), backend.provider_name, _embedding_model_label(backend), response.dimensions, chunk_id),
+        )
+        return None
+
+    def _run(self, operation: str, work: Any, metadata: Any = _postgres_metadata, warnings: Any = tuple) -> PersistenceResult:
         if not self.database_url:
             return _failure(operation, "database_url_required", "DATABASE_URL is required for PostgresPersistenceBackend operations.", "database_url")
         try:
@@ -398,7 +457,7 @@ class PostgresPersistenceBackend:
             except Exception:
                 conn.rollback()
                 raise
-            return PersistenceResult(ok=True, operation=operation, value=value, metadata=_postgres_metadata())
+            return PersistenceResult(ok=True, operation=operation, value=value, metadata=metadata(), warnings=warnings())
         except Exception as exc:
             return _failure(operation, "postgres_operation_failed", f"Postgres operation failed: {exc}")
         finally:
@@ -555,3 +614,30 @@ def _governance_event_from_mapping(payload: Mapping[str, Any]) -> GovernanceStat
         non_claims=tuple(payload.get("non_claims") or ()),
         mode=str(payload.get("mode") or ""),
     )
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    import os
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _vector_embeddings_enabled() -> bool:
+    return _env_bool("MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED", False) or _env_bool("MEMORY_LAB_PROVIDER_EMBEDDINGS_ENABLED", False)
+
+
+def _vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(str(float(v)) for v in vector) + "]"
+
+
+def _embedding_model_label(backend: EmbeddingBackend) -> str:
+    getter = getattr(backend, "_get_model", None)
+    if callable(getter):
+        try:
+            return str(getter())
+        except Exception:
+            return backend.provider_name
+    return backend.provider_name
