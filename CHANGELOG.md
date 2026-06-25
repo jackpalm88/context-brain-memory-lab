@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0a1 — M4
+
+- Hardened reasoning answer citation/provenance behavior for `/v1/reasoning/answer`.
+- Stabilized public evidence-ID citations so answer candidates cite supplied evidence refs rather than ordinal placeholders.
+- Added opt-in provider-backed `/v1/reasoning/answer` synthesis behind `MEMORY_LAB_REASONING_PROVIDER_SYNTHESIS_ENABLED` and request-level `enable_provider_synthesis`.
+- Kept provider-backed synthesis disabled by default with deterministic evidence-grounded fallback behavior.
+- Preserved safe fallback on disabled, missing, degraded, or rejected provider output, including invented citations and forbidden truth/verdict/resolution language.
+- Added endpoint-level stub verification for provider-disabled, request opt-in, fake-provider success, invented-citation rejection, and forbidden-term rejection paths.
+
 ## 0.2.0a1 — M3
 
 - Added gated pgvector retrieval path for opt-in vector KNN search.
