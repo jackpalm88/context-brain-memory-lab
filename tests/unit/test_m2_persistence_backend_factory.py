@@ -45,11 +45,20 @@ def test_empty_env_path_does_not_import_psycopg2_or_open_connection(monkeypatch)
     assert isinstance(backend, InMemoryPersistenceBackend)
 
 
-def test_postgres_backend_skeleton_fails_without_fake_success():
+def test_postgres_backend_validates_inputs_before_db_connection():
     backend = PostgresPersistenceBackend("postgresql://example/test")
     result = backend.get_content_record("ws1", "c1")
     assert result.ok is False
-    assert result.error.code == "postgres_sql_persistence_not_implemented"
+    assert result.error.code == "invalid_workspace_id"
     assert result.metadata.requires_db is True
-    assert result.metadata.live_backend_used is False
-    assert "no fake/noop persistence" in result.error.message
+    assert result.metadata.live_backend_used is True
+    assert result.error.field == "workspace_id"
+
+
+def test_postgres_backend_no_fake_success_on_unreachable_db():
+    backend = PostgresPersistenceBackend("postgresql://example/test")
+    result = backend.get_content_record("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002")
+    assert result.ok is False
+    assert result.error.code == "postgres_connection_failed"
+    assert result.metadata.requires_db is True
+    assert result.metadata.live_backend_used is True
