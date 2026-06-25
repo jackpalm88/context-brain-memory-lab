@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0a1 — M3
+
+- Added gated pgvector retrieval path for opt-in vector KNN search.
+- Added embedding write seam to `PostgresPersistenceBackend` after chunk insert.
+- Preserved deterministic retrieval fallback as the default and degraded/no-key path.
+- Added migration `032_add_m3_pgvector_knn_index.sql` for the M3 pgvector KNN index and embedding metadata.
+- Added live pgvector stub test coverage proving vector similarity ranking over recency ordering.
+
 ## 0.2.0a1 — M2
 
 - Added `PostgresPersistenceBackend` for opt-in DB-backed content and governance persistence.
