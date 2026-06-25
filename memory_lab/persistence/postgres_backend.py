@@ -82,6 +82,7 @@ class PostgresPersistenceBackend:
 
         def work(conn: Any) -> ContentPersistenceRecord:
             with conn.cursor() as cur:
+                _ensure_workspace(cur, normalized.workspace_id)
                 cur.execute(
                     """
                     INSERT INTO content_items (
@@ -209,6 +210,7 @@ class PostgresPersistenceBackend:
 
         def work(conn: Any) -> GovernanceState:
             with conn.cursor() as cur:
+                _ensure_workspace(cur, state.record_ref.workspace_id)
                 cur.execute(
                     """
                     INSERT INTO cb_governance_states (
@@ -318,6 +320,7 @@ class PostgresPersistenceBackend:
 
         def work(conn: Any) -> GovernanceStateEventContract:
             with conn.cursor() as cur:
+                _ensure_workspace(cur, event.workspace_id)
                 cur.execute(
                     """
                     INSERT INTO cb_governance_events (
@@ -417,6 +420,18 @@ def _failure(operation: str, code: str, message: str, field: str | None = None) 
         operation=operation,
         error=PersistenceError(code=code, message=message, field=field, metadata=metadata),
         metadata=metadata,
+    )
+
+
+def _ensure_workspace(cur: Any, workspace_id: str) -> None:
+    slug = f"m2-persistence-{workspace_id}"
+    cur.execute(
+        """
+        INSERT INTO cb_workspaces (workspace_id, slug, title, status, is_default, created_by_subject)
+        VALUES (%s::uuid, %s, %s, %s, FALSE, %s)
+        ON CONFLICT (workspace_id) DO NOTHING
+        """,
+        (workspace_id, slug, f"M2 Persistence Workspace {workspace_id}", "active", "m2-postgres-persistence-backend"),
     )
 
 
