@@ -148,3 +148,14 @@ def test_insufficient_evidence_is_degraded_without_provider_call():
     assert body["provider_metadata"]["attempted"] is False
     assert body["evidence_refs"] == []
     _assert_no_forbidden_fields(body)
+
+
+def test_answer_candidate_cites_only_existing_evidence_ids():
+    response = answer_context_pack(context_pack=_pack(), request=ReasoningRequest(query="b14 answer"))
+    evidence_ids = {str(ref["evidence_id"]) for ref in response.evidence_refs}
+
+    bracketed = {part.split("]", 1)[0][1:] for part in response.answer_candidate.split() if part.startswith("[ev_") and "]" in part}
+
+    assert bracketed
+    assert bracketed <= evidence_ids
+    assert "[1]" not in response.answer_candidate

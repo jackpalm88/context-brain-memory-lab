@@ -39,9 +39,28 @@ def _clean_str(value: Any) -> Optional[str]:
     return value or None
 
 
+PROVENANCE_METADATA_KEYS = (
+    "retrieval_mode",
+    "retrieval_path",
+    "embedding_status",
+    "distance",
+    "score_kind",
+)
+
+
+def _attach_provenance_metadata(row: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Any]:
+    enriched = dict(meta)
+    for key in PROVENANCE_METADATA_KEYS:
+        value = row.get(key)
+        if value is not None:
+            enriched[key] = value
+    return enriched
+
+
 def evidence_from_item(item: EvidenceItem | Dict[str, Any], metadata: Optional[Dict[str, Any]] = None, *, role: Optional[str] = None) -> ContextPackEvidenceRef:
     row = _model_or_dict(item)
     meta = dict(row.get("metadata") or {})
+    meta = _attach_provenance_metadata(row, meta)
     if metadata:
         meta.update({k: v for k, v in metadata.items() if v is not None})
     content_id = str(row.get("content_id") or "").strip()

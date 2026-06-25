@@ -316,3 +316,55 @@ class TestCitationContract:
         )
         assert len(response.citations) == 1
         assert response.citations[0].evidence_id == evidence[0].evidence_id
+
+
+# ---------------------------------------------------------------------------
+# Retrieval provenance metadata
+# ---------------------------------------------------------------------------
+
+class TestRetrievalProvenanceMetadata:
+    def test_normalized_evidence_preserves_retrieval_provenance(self):
+        rows = [
+            _row(
+                "cid-pgv",
+                "chk-pgv",
+                "pgvector-backed workspace evidence",
+                score=0.91,
+                retrieval_path="pgvector_knn",
+            ) | {
+                "retrieval_mode": "pgvector_knn",
+                "embedding_status": "ok",
+                "distance": 0.123,
+                "score_kind": "vector_similarity",
+            }
+        ]
+
+        evidence = normalize_evidence(rows)
+
+        assert evidence[0].score_kind == "vector_similarity"
+        assert evidence[0].retrieval_path == "pgvector_knn"
+        assert evidence[0].metadata == {
+            "retrieval_mode": "pgvector_knn",
+            "retrieval_path": "pgvector_knn",
+            "embedding_status": "ok",
+            "distance": 0.123,
+            "score_kind": "vector_similarity",
+        }
+
+    def test_normalized_evidence_preserves_existing_metadata(self):
+        rows = [
+            _row("cid-fallback", "chk-fallback", "fallback evidence")
+            | {
+                "retrieval_mode": "deterministic_fallback",
+                "embedding_status": "provider_disabled",
+                "metadata": {"existing": "kept"},
+            }
+        ]
+
+        evidence = normalize_evidence(rows)
+
+        assert evidence[0].metadata["existing"] == "kept"
+        assert evidence[0].metadata["retrieval_mode"] == "deterministic_fallback"
+        assert evidence[0].metadata["retrieval_path"] == "content_chunk_workspace_scoped"
+        assert evidence[0].metadata["embedding_status"] == "provider_disabled"
+        assert evidence[0].metadata["score_kind"] == "chunk_text_match"

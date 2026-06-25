@@ -60,6 +60,23 @@ def _has_usable_evidence(evidence_refs: list[dict[str, Any]]) -> bool:
     return any(_snippet(ref) for ref in evidence_refs)
 
 
+def _usable_refs(evidence_refs: list[dict[str, Any]], roles: set[str | None] | None = None) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for ref in evidence_refs:
+        if roles is not None and ref.get("role") not in roles:
+            continue
+        if _snippet(ref):
+            refs.append(ref)
+    return refs
+
+
+def _cited_snippet(ref: dict[str, Any]) -> str:
+    evidence_id = str(ref.get("evidence_id") or "").strip()
+    if not evidence_id:
+        return _snippet(ref)
+    return f"[{evidence_id}] {_snippet(ref)}"
+
+
 def build_answer_candidate(
     *,
     context_pack: ContextPackBuildResponse,
@@ -73,14 +90,14 @@ def build_answer_candidate(
             "insufficient_evidence",
         )
 
-    support = [_snippet(ref) for ref in evidence_refs if (ref.get("role") in {"support", None}) and _snippet(ref)]
-    current = [_snippet(ref) for ref in evidence_refs if ref.get("role") == "current_state" and _snippet(ref)]
-    counter = [_snippet(ref) for ref in evidence_refs if ref.get("role") in {"counterfinding", "contradicting"} and _snippet(ref)]
-    stale = [_snippet(ref) for ref in evidence_refs if ref.get("is_current") is False or ref.get("cs_supersedes_content_id")]
+    support = _usable_refs(evidence_refs, {"support", None})
+    current = _usable_refs(evidence_refs, {"current_state"})
+    counter = _usable_refs(evidence_refs, {"counterfinding", "contradicting"})
+    stale = [ref for ref in evidence_refs if (ref.get("is_current") is False or ref.get("cs_supersedes_content_id")) and _snippet(ref)]
 
     parts: list[str] = ["Based on the public evidence refs in this context pack, the answer candidate is:"]
     selected = (support or current or counter or stale)[:3]
-    parts.append(" ".join(f"[{idx}] {snippet}" for idx, snippet in enumerate(selected, 1)))
+    parts.append(" ".join(_cited_snippet(ref) for ref in selected))
     if current:
         parts.append("Current-state signals are included as evidence signals, not as automatic proof that other evidence is false.")
     if counter or stale or conflict_warnings:

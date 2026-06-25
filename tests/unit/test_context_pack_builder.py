@@ -109,3 +109,31 @@ def test_no_truth_arbitration_fields():
     payload = build_context_pack(workspace_id=WS, request=_req()).model_dump()
     forbidden = {"answer", "verdict", "resolution", "truth", "winner", "resolved_answer"}
     assert forbidden.isdisjoint(payload.keys())
+
+
+def test_supporting_evidence_preserves_retrieval_provenance_metadata():
+    evidence = EvidenceItem(
+        evidence_id="ev_prov_chunk",
+        rank=1,
+        content_id="prov",
+        chunk_id="chunk",
+        snippet="provenance support text",
+        score=0.88,
+        score_kind="vector_similarity",
+        retrieval_path="pgvector_knn",
+        metadata={
+            "retrieval_mode": "pgvector_knn",
+            "embedding_status": "ok",
+            "distance": 0.42,
+        },
+    )
+
+    pack = build_context_pack(workspace_id=WS, request=_req(), supporting_evidence=[evidence])
+    ref = pack.supporting_evidence[0]
+
+    assert ref.source == "pgvector_knn"
+    assert ref.metadata["retrieval_mode"] == "pgvector_knn"
+    assert ref.metadata["retrieval_path"] == "pgvector_knn"
+    assert ref.metadata["embedding_status"] == "ok"
+    assert ref.metadata["distance"] == 0.42
+    assert ref.metadata["score_kind"] == "vector_similarity"
