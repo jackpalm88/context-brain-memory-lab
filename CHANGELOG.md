@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0a1 — M6 release readiness
+
+- Aligned README, capabilities, install, and state docs with M1-M5 release-candidate truth.
+- Replaced stale pre-M artifacts with rebuilt `0.2.0a1` wheel/sdist during release-readiness proof.
+- Added clean-install artifact proof expectation: import package from built artifact, verify installed metadata version, and run deterministic smoke without editable install.
+- Release actions remain gated: no push, tag, PyPI publish, public announcement, or CB milestone completion without separate human GO.
+
 ## 0.2.0a1 — M5
 
 - Added opt-in live end-to-end smoke `scripts/m5_live_smoke.py` proving the full real engine: real OpenAI embeddings + real Anthropic synthesis + pgvector KNN retrieval + grounded provider-backed answer over freshly-ingested content.

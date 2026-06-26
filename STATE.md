@@ -3,9 +3,10 @@
 canonical_working_tree: /opt/cbml
 authoritative_plan: ROADMAP.md + M1.md
 milestone_scheme: M1-M6 (B-scheme FROZEN, do not extend)
-current_milestone: M5 (DONE pending human gate)
-current_task: M5 Task 2 — live E2E smoke (real providers + pgvector) and parity audit
-last_green_gate_commit: 4ff6a7d
+current_milestone: M6 — Release readiness
+current_task: M6 Task 2 — release readiness implementation + artifact proof
+closed_milestones: M1, M2, M3, M4, M5
+last_accepted_commit: 8dae3f0e63366d10406488f77a32b995e589101a
 real_version: 0.2.0a1
-m5_live_evidence: scripts/m5_live_smoke.py -> PASS (real OpenAI+Anthropic+pgvector, grounded provider_backed answer)
-deprecated_docs: OPEN_SOURCE_*.md, OSR-P*.yaml, EXECUTION_STATE.md (in /opt/contentingestor)
+m5_live_evidence: scripts/m5_live_smoke.py -> PASS (real OpenAI+Anthropic+pgvector, grounded provider-backed answer)
+release_boundaries: no push, no tag, no PyPI publish, no public announcement, no CB milestone_completion without separate human GO

@@ -1,179 +1,141 @@
-# Local Developer Setup
+# Local developer setup
 
-This guide covers installing and running the public Context Brain Memory Lab package locally for development.
-It does **not** cover production deployment, Docker, reverse-proxy setup, private Context Brain parity, or production MCP/GPT Actions deployment.
-
----
+This guide covers installing and running Context Brain Memory Lab `0.2.0a1` locally. It does not cover hosted production deployment, private Context Brain parity, push/tag/PyPI publication, or public release announcements.
 
 ## Prerequisites
 
-- **Python >= 3.12**
-- **PostgreSQL** (local instance running)
-- **psql** client (for DB creation and verification)
-- **pip**
+Required for deterministic baseline:
 
----
+- Python >= 3.12
+- pip
 
-## 1. Clone and install
+Optional runtime paths:
+
+- PostgreSQL client/server for DB-backed persistence
+- pgvector-enabled PostgreSQL for vector KNN retrieval
+- Docker for the opt-in M5 live smoke throwaway pgvector DB
+- runtime provider keys for opt-in OpenAI/Anthropic paths
+
+## 1. Clone and install for development
 
 ```bash
 git clone https://github.com/jackpalm88/context-brain-memory-lab.git
 cd context-brain-memory-lab
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-# Install runtime plus test dependencies
+source .venv/bin/activate        # Windows: .venv\\Scripts\\activate
 python -m pip install -e ".[test]"
+```
 
-# Or install runtime plus developer tooling
+Developer/build tooling:
+
+```bash
 python -m pip install -e ".[dev]"
 ```
 
----
+## 2. Deterministic empty-env defaults
 
-## 2. Configure environment
+No provider key and no database are required for the deterministic baseline.
 
 ```bash
-cp .env.example .env
+export LLM_PROVIDER=none
+export EMBEDDING_PROVIDER=none
+unset OPENAI_API_KEY
+unset ANTHROPIC_API_KEY
+unset DATABASE_URL
 ```
 
-Edit `.env` if your PostgreSQL credentials differ from the defaults.
-`LLM_PROVIDER=none` and `EMBEDDING_PROVIDER=none` are safe defaults — provider keys are optional.
-
----
-
-## 3. Create local database
+## 3. Optional Postgres runtime
 
 ```bash
-psql -U postgres -c "CREATE DATABASE memory_lab;"
-```
-
-Adjust the PostgreSQL user and password to match your local setup.
-
----
-
-## 4. Run migrations
-
-```bash
-bash scripts/dev_migrate.sh
-```
-
-This applies the available public beta migrations in sorted order. The current public schema range is `000..030`; later B18-B31 helper/contract gates do not add production/private-CB deployment requirements.
-
-Alternatively, apply manually:
-
-```bash
+export DATABASE_URL="postgresql://<user>:<password>@<host>:5432/<database>"
 for f in $(ls migrations/*.sql | sort); do
   echo "Applying $f..."
   psql "$DATABASE_URL" -f "$f"
 done
 ```
 
----
+The current migration range includes `000` through `032`, covering the base public schema plus M2 Postgres persistence and M3 pgvector KNN support.
+
+## 4. Optional provider/vector runtime
+
+Provider-backed embeddings, pgvector retrieval, and provider-backed answer synthesis are opt-in only.
+
+```bash
+python -m pip install -e ".[openai,anthropic,pgvector]"
+export MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED=true
+export MEMORY_LAB_PGVECTOR_RETRIEVAL_ENABLED=true
+export MEMORY_LAB_REASONING_PROVIDER_SYNTHESIS_ENABLED=true
+export EMBEDDING_PROVIDER=openai
+export LLM_PROVIDER=anthropic
+export OPENAI_API_KEY="...runtime only..."
+export ANTHROPIC_API_KEY="...runtime only..."
+```
+
+Do not commit `.env` files, provider keys, database passwords, or DSNs.
 
 ## 5. Start the API
 
 ```bash
-bash scripts/dev_run_api.sh
+python -m uvicorn memory_lab.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-Or directly:
-
-```bash
-uvicorn memory_lab.api.main:app --host 127.0.0.1 --port 8000
-```
-
----
-
-## 6. Health check
+Health check:
 
 ```bash
 curl http://127.0.0.1:8000/health
 # Expected: {"status":"ok"}
 ```
 
----
+## 6. Run tests
 
-## 7. Create content (no provider key required)
-
-```bash
-curl -X POST http://127.0.0.1:8000/content \
-  -H "Content-Type: application/json" \
-  -d '{"content":"Test content for onboarding smoke.","save_purpose":"onboarding test"}'
-```
-
-With no API key set, the response will include fallback scoring fields:
-
-- `fallback_reason`: `no_api_key`
-- `scores.composite`: `0.30`
-- `tier`: `transient`
-
-This is expected behaviour — not an error.
-
----
-
-## 8. Run tests
+Source hermetic gate:
 
 ```bash
-python -m pytest tests/unit -q
+bash scripts/hermetic_test.sh
 ```
 
-Historical B24 unit-suite evidence was approximately **644 passed, 9 skipped, 0 failed**. Later B25-B31 evidence in the milestone reports is targeted public-safe contract evidence, not a new release/build claim from this install guide.
-Exact counts may change as public-beta tests are added; failures should be investigated before packaging or release gates.
+This gate creates a fresh isolated venv and runs deterministic tests from the source tree. It is separate from release artifact proof.
 
-Skips are expected when database-backed or provider-backed checks are not configured. This is normal for local public-beta development.
-
----
-
-## 9. Start MCP server
+## 7. Build release artifacts
 
 ```bash
-python -m memory_lab.mcp.server
+rm -rf dist
+python -m build
 ```
 
----
+Expected artifacts for `0.2.0a1`:
 
-## 10. Import smoke (no DB, no provider needed)
+- `dist/context_brain_memory_lab-0.2.0a1-py3-none-any.whl`
+- `dist/context_brain_memory_lab-0.2.0a1.tar.gz`
+
+## 8. Clean install from built artifact
 
 ```bash
-bash scripts/dev_smoke_imports.sh
+tmpvenv="$(mktemp -d /tmp/cbml-artifact-venv.XXXXXX)"
+python -m venv "$tmpvenv"
+"$tmpvenv/bin/python" -m pip install --upgrade pip
+"$tmpvenv/bin/python" -m pip install "dist/context_brain_memory_lab-0.2.0a1-py3-none-any.whl[test]"
+"$tmpvenv/bin/python" - <<'PY'
+import importlib.metadata as metadata
+import memory_lab
+from memory_lab.api.main import app
+assert metadata.version("context-brain-memory-lab") == "0.2.0a1"
+assert app is not None
+print("artifact import smoke PASS", metadata.version("context-brain-memory-lab"))
+PY
 ```
 
-Should output `OK:` for the configured import-smoke modules plus the `constitutionrules.yaml` asset check. Treat any exact module count as version-specific; B25-B31 added public-safe contract/helper surfaces without changing the package version, production status, or provider/DB requirements.
-
----
-
-## 11. Run the public-safe B30/B31 wrapper example
+## 9. Opt-in M5 live smoke
 
 ```bash
-python examples/b31_supplied_text_prompt_flow_smoke.py
+python scripts/m5_live_smoke.py
 ```
 
-This B34 example is a public-safe, caller-supplied-text, bounded B30/B31 wrapper flow smoke. It does not perform live LLM execution, provider-backed answer generation, DB/private Context Brain access, live memory retrieval by default, API/MCP/GPT Actions runtime deployment, or build/export/release/PyPI work.
-
----
-
-## B25-B31 public-safe docs note
-
-The package version remains `0.1.0b24`, but the public docs now recognize the completed B25-B31 contract milestones:
-
-- B25 governance state model + workspace boundary contract.
-- B26 in-memory persistence backend contract.
-- B27 public-safe ingestion pipeline contract.
-- B28 persistence-to-retrieval handoff contract.
-- B29 persisted-record-to-prompt-package handoff contract.
-- B30 supplied-text-to-prompt-request flow contract.
-- B31 bounded wrapper exposure for supplied-text prompt flow, including `build_supplied_text_prompt_package` and `build_supplied_text_prompt_request_shape`.
-
-These are public-safe contract/helper layers. They do not claim runtime API/MCP/GPT Actions deployment, production readiness, live LLM execution, provider-backed answer generation, DB/private Context Brain access, live memory retrieval by default, embeddings/vector DB execution, Full/private Context Brain parity, or any release/tag/PyPI/build/export completion.
-
----
+The live smoke uses a throwaway pgvector DB and runtime-only provider keys. It proves the real provider/vector path but is not part of the default deterministic gate.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `psql: command not found` | psql not installed | Install PostgreSQL client tools |
-| `DATABASE_URL not set` | `.env` missing or not sourced | `cp .env.example .env`, then re-run |
-| `FATAL: password authentication failed` | Wrong PG credentials | Edit `DATABASE_URL` in `.env` |
-| `Address already in use :8000` | Port taken | `PORT=8001 bash scripts/dev_run_api.sh` or kill conflicting process |
-| `ANTHROPIC_API_KEY not set` warnings | Provider key absent | **Not an error.** No-key fallback scoring is active by default. |
+- Missing provider key: expected for baseline; provider paths degrade or remain disabled.
+- Missing `DATABASE_URL`: expected for empty-env core; DB-backed runtime paths require explicit configuration.
+- `psql` missing: install PostgreSQL client tools before applying migrations manually.
+- Build backend missing: install `build`/`hatchling` or run `python -m pip install -e ".[dev]"`.
