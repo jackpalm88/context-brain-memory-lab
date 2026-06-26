@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0a1 — M5
+
+- Added opt-in live end-to-end smoke `scripts/m5_live_smoke.py` proving the full real engine: real OpenAI embeddings + real Anthropic synthesis + pgvector KNN retrieval + grounded provider-backed answer over freshly-ingested content.
+- Added `PARITY_AUDIT.md` mapping every original /opt/contentingestor capability to its memory_lab status (ported / opt-in / intentionally dropped / post-1.0) with no unknown rows.
+- Live smoke is opt-in (requires a live DB + provider keys) and is not part of the hermetic deterministic gate.
+
 ## 0.2.0a1 — M4
 
 - Hardened reasoning answer citation/provenance behavior for `/v1/reasoning/answer`.
