@@ -87,8 +87,8 @@ class DecisionStore:
                 cur.execute(
                     f"""
                     SELECT
-                        a.decision_id AS a_id, a.title AS a_title, a.decision_status AS a_status, a.created_at AS a_created,
-                        b.decision_id AS b_id, b.title AS b_title, b.decision_status AS b_status, b.created_at AS b_created,
+                        a.decision_id AS a_id, a.title AS a_title, a.decision_status AS a_status, a.created_at AS a_created, a.created_by_subject AS a_created_by,
+                        b.decision_id AS b_id, b.title AS b_title, b.decision_status AS b_status, b.created_at AS b_created, b.created_by_subject AS b_created_by,
                         'Same hub_id: ' || h::text AS conflict_reason
                     FROM cb_decision_nodes a
                     JOIN cb_decision_nodes b ON a.decision_id < b.decision_id
@@ -99,8 +99,8 @@ class DecisionStore:
                       {ws_clause}
                     UNION ALL
                     SELECT
-                        a.decision_id, a.title, a.decision_status, a.created_at,
-                        b.decision_id, b.title, b.decision_status, b.created_at,
+                        a.decision_id, a.title, a.decision_status, a.created_at, a.created_by_subject,
+                        b.decision_id, b.title, b.decision_status, b.created_at, b.created_by_subject,
                         'Same tag: ' || t AS conflict_reason
                     FROM cb_decision_nodes a
                     JOIN cb_decision_nodes b ON a.decision_id < b.decision_id
@@ -116,8 +116,8 @@ class DecisionStore:
                 rows = cur.fetchall()
         conflicts = [
             ConflictPair(
-                decision_a=LineageNode(decision_id=str(r["a_id"]), title=r["a_title"], decision_status=r["a_status"], created_at=r["a_created"]),
-                decision_b=LineageNode(decision_id=str(r["b_id"]), title=r["b_title"], decision_status=r["b_status"], created_at=r["b_created"]),
+                decision_a=LineageNode(decision_id=str(r["a_id"]), title=r["a_title"], decision_status=r["a_status"], created_by_subject=r.get("a_created_by"), created_at=r["a_created"]),
+                decision_b=LineageNode(decision_id=str(r["b_id"]), title=r["b_title"], decision_status=r["b_status"], created_by_subject=r.get("b_created_by"), created_at=r["b_created"]),
                 conflict_reason=r["conflict_reason"],
             )
             for r in rows
