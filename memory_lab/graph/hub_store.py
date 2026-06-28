@@ -102,7 +102,7 @@ class HubStore:
                         """
                         SELECT hub_id::text, title, type, description, aliases, related_terms,
                                status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
-                               created_at, updated_at
+                               created_by_subject, created_at, updated_at
                         FROM cb_hubs WHERE status = %s AND workspace_uuid = %s::uuid
                         ORDER BY created_at DESC
                         """,
@@ -113,7 +113,7 @@ class HubStore:
                         """
                         SELECT hub_id::text, title, type, description, aliases, related_terms,
                                status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
-                               created_at, updated_at
+                               created_by_subject, created_at, updated_at
                         FROM cb_hubs WHERE status = %s
                         ORDER BY created_at DESC
                         """,

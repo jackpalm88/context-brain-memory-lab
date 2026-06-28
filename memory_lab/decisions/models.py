@@ -59,6 +59,7 @@ class DecisionFull(BaseModel):
     contradicting_evidence: Optional[str] = None
     confidence_level: str = "medium"
     decision_tags: List[str] = Field(default_factory=list)
+    created_by_subject: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

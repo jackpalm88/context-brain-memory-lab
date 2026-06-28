@@ -76,6 +76,7 @@ def _metadata_row(domain="governance", word_count=42):
         "memory_type": "anchor",
         "domain": domain,
         "word_count": word_count,
+        "created_by_subject": SUBJECT,
         "created_at": CREATED.isoformat(),
         "updated_at": UPDATED.isoformat(),
     }
@@ -160,6 +161,7 @@ def test_api_adapter_get_content_metadata_aggregates_word_count_and_joins_domain
         "memory_type": "anchor",
         "domain": "governance",
         "word_count": 42,
+        "created_by_subject": SUBJECT,
         "created_at": CREATED,
         "updated_at": UPDATED,
     })
@@ -173,6 +175,7 @@ def test_api_adapter_get_content_metadata_aggregates_word_count_and_joins_domain
         "memory_type": "anchor",
         "domain": "governance",
         "word_count": 42,
+        "created_by_subject": SUBJECT,
         "created_at": CREATED.isoformat(),
         "updated_at": UPDATED.isoformat(),
     }

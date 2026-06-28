@@ -42,6 +42,7 @@ class HubResponse(BaseModel):
     aliases: List[str] = Field(default_factory=list)
     related_terms: List[str] = Field(default_factory=list)
     status: str
+    created_by_subject: Optional[str] = None
     owner_defined: bool
     workspace_uuid: Optional[str] = None
     linked_content_ids: List[str] = Field(default_factory=list)

@@ -61,6 +61,7 @@ class DecisionStore:
             contradicting_evidence=row.get("contradicting_evidence"),
             confidence_level=row.get("confidence_level") or "medium",
             decision_tags=list(row.get("decision_tags") or []),
+            created_by_subject=row.get("created_by_subject"),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

@@ -399,13 +399,14 @@ class ApiAdapter:
                            ci.memory_type,
                            dd.domain_name AS domain,
                            COALESCE(sum(ch.word_count), 0)::int AS word_count,
+                           ci.created_by_subject,
                            ci.created_at,
                            ci.updated_at
                       FROM content_items ci
                       LEFT JOIN cb_discovered_domains dd ON dd.domain_id = ci.domain_id
                       LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id
                      WHERE {' AND '.join(conditions)}
-                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary, ci.memory_type, dd.domain_name, ci.created_at, ci.updated_at
+                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary, ci.memory_type, dd.domain_name, ci.created_by_subject, ci.created_at, ci.updated_at
                     """,
                     tuple(params),
                 )
@@ -420,6 +421,7 @@ class ApiAdapter:
             "memory_type": row.get("memory_type"),
             "domain": row.get("domain"),
             "word_count": row.get("word_count") or 0,
+            "created_by_subject": row.get("created_by_subject"),
             "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
             "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
         }
@@ -436,6 +438,7 @@ class ApiAdapter:
                     f"""
                     SELECT content_id::text AS content_id,
                            workspace_id::text AS workspace_id,
+                           created_by_subject,
                            created_at, updated_at,
                            tier::text AS tier,
                            tier_assigned_at,
@@ -464,6 +467,7 @@ class ApiAdapter:
         return {
             "content_id": row["content_id"],
             "workspace_id": row.get("workspace_id"),
+            "created_by_subject": row.get("created_by_subject"),
             "created_at": _iso(row.get("created_at")),
             "updated_at": _iso(row.get("updated_at")),
             "tier": row.get("tier"),
