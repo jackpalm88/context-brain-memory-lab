@@ -53,7 +53,7 @@ class HubResponse(BaseModel):
 def create_hub(req: HubCreateRequest, auth: AuthContext = Depends(require_permission("hubs.create"))) -> dict:
     settings = get_settings()
     adapter = ApiAdapter(settings.database_url)
-    return adapter.create_hub(req.model_dump(), workspace_id=auth.workspace_id, workspace_source=auth.workspace_source)
+    return adapter.create_hub(req.model_dump(), workspace_id=auth.workspace_id, workspace_source=auth.workspace_source, created_by_subject=auth.auth_subject_id)
 
 
 @router.get("", response_model=List[HubResponse])
@@ -98,7 +98,7 @@ def link_content(hub_id: str, req: HubLinkRequest, auth: AuthContext = Depends(r
     settings = get_settings()
     adapter = ApiAdapter(settings.database_url)
     try:
-        return adapter.link_content(hub_id, req.content_id, workspace_id=auth.workspace_id)
+        return adapter.link_content(hub_id, req.content_id, workspace_id=auth.workspace_id, created_by_subject=auth.auth_subject_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

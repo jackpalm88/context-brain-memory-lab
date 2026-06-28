@@ -174,7 +174,7 @@ class DecisionStore:
                 rows = cur.fetchall()
         return DecisionListResponse(decisions=[self._row_to_summary(r) for r in rows], count=len(rows))
 
-    def create_decision(self, payload: DecisionCreate, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def create_decision(self, payload: DecisionCreate, workspace_id: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if payload.supersedes_decision_id:
@@ -192,13 +192,13 @@ class DecisionStore:
                         source_content_ids, linked_hub_ids,
                         supersedes_decision_id,
                         alternatives_considered, contradicting_evidence,
-                        confidence_level, decision_tags
+                        confidence_level, decision_tags, created_by_subject
                     ) VALUES (
                         %s::uuid, %s, %s, %s, %s, %s, %s,
                         %s::uuid[], %s::uuid[],
                         %s::uuid,
                         %s::jsonb, %s,
-                        %s, %s::text[]
+                        %s, %s::text[], %s
                     )
                     RETURNING decision_id::text AS decision_id, title, decision_status, created_at
                     """,
@@ -208,7 +208,7 @@ class DecisionStore:
                      [str(u) for u in payload.linked_hub_ids] or None,
                      str(payload.supersedes_decision_id) if payload.supersedes_decision_id else None,
                      Json([a.model_dump() for a in payload.alternatives_considered] or []),
-                     payload.contradicting_evidence, payload.confidence_level, payload.decision_tags or None),
+                     payload.contradicting_evidence, payload.confidence_level, payload.decision_tags or None, created_by_subject),
                 )
                 row = cur.fetchone()
                 new_id = row["decision_id"]

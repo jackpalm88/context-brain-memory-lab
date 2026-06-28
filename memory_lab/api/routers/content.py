@@ -38,6 +38,7 @@ def create_content(req: ContentCreateRequest, auth: AuthContext = Depends(requir
         content=req.content,
         workspace_id=auth.workspace_id,
         workspace_source=auth.workspace_source,
+        created_by_subject=auth.auth_subject_id,
     )
 
 

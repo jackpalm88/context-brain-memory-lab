@@ -55,7 +55,7 @@ def list_decisions(
 @router.post("/", response_model=DecisionCreateResponse, status_code=201)
 def create_decision_memory(payload: DecisionCreate, auth: AuthContext = Depends(require_permission("decisions.create"))):
     try:
-        row = _store().create_decision(payload, workspace_id=auth.workspace_id)
+        row = _store().create_decision(payload, workspace_id=auth.workspace_id, created_by_subject=auth.auth_subject_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return DecisionCreateResponse(

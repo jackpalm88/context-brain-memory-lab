@@ -26,19 +26,20 @@ class HubStore:
         workspace_id: Optional[str] = None,
         workspace_uuid: Optional[str] = None,
         owner_defined: bool = True,
+        created_by_subject: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
                     INSERT INTO cb_hubs
-                        (title, type, description, aliases, related_terms, workspace_id, workspace_uuid, owner_defined)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s::uuid, %s)
+                        (title, type, description, aliases, related_terms, workspace_id, workspace_uuid, owner_defined, created_by_subject)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::uuid, %s, %s)
                     RETURNING hub_id::text, title, type, description, aliases, related_terms,
                               status, owner_defined, workspace_id, workspace_uuid::text AS workspace_uuid,
                               created_at, updated_at
                     """,
-                    (title, type, description, aliases or [], related_terms or [], workspace_id, workspace_uuid, owner_defined),
+                    (title, type, description, aliases or [], related_terms or [], workspace_id, workspace_uuid, owner_defined, created_by_subject),
                 )
                 conn.commit()
                 return dict(cur.fetchone())
@@ -55,7 +56,7 @@ class HubStore:
                     f"""
                     SELECT h.hub_id::text, h.title, h.type, h.description, h.aliases, h.related_terms,
                            h.status, h.owner_defined, h.workspace_id, h.workspace_uuid::text AS workspace_uuid,
-                           h.created_at, h.updated_at,
+                           h.created_by_subject, h.created_at, h.updated_at,
                            COALESCE(ARRAY_AGG(hc.content_id) FILTER (WHERE hc.content_id IS NOT NULL), '{{}}') AS linked_content_ids
                     FROM cb_hubs h
                     LEFT JOIN cb_hub_content hc ON hc.hub_id = h.hub_id
@@ -120,7 +121,7 @@ class HubStore:
                     )
                 return [dict(r) for r in cur.fetchall()]
 
-    def link_content(self, hub_id: str, content_id: str, workspace_id: Optional[str] = None) -> bool:
+    def link_content(self, hub_id: str, content_id: str, workspace_id: Optional[str] = None, created_by_subject: Optional[str] = None) -> bool:
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if workspace_id:
@@ -138,11 +139,11 @@ class HubStore:
                         raise KeyError("content not found in workspace")
                 cur.execute(
                     """
-                    INSERT INTO cb_hub_content (hub_id, content_id, workspace_id)
-                    VALUES (%s::uuid, %s::uuid, %s::uuid)
+                    INSERT INTO cb_hub_content (hub_id, content_id, workspace_id, created_by_subject)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid, %s)
                     ON CONFLICT DO NOTHING
                     """,
-                    (hub_id, content_id, workspace_id),
+                    (hub_id, content_id, workspace_id, created_by_subject),
                 )
                 conn.commit()
                 return True

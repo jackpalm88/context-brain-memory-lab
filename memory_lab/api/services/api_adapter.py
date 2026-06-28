@@ -64,6 +64,7 @@ class ApiAdapter:
         content: Optional[str] = None,
         workspace_id: Optional[str] = None,
         workspace_source: Optional[str] = None,
+        created_by_subject: Optional[str] = None,
     ) -> Dict[str, Any]:
         event = score_content(content or "")
         tier_decision = tier_route(
@@ -110,11 +111,11 @@ class ApiAdapter:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
-                    INSERT INTO content_items (workspace_id)
-                    VALUES (%s::uuid)
+                    INSERT INTO content_items (workspace_id, created_by_subject)
+                    VALUES (%s::uuid, %s)
                     RETURNING content_id::text AS content_id
                     """,
-                    (workspace_id,),
+                    (workspace_id, created_by_subject),
                 )
                 row = cur.fetchone()
                 conn.commit()
@@ -478,7 +479,7 @@ class ApiAdapter:
             "last_retrieved_at": _iso(row.get("last_retrieved_at")),
         }
 
-    def create_hub(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, workspace_source: Optional[str] = None) -> Dict[str, Any]:
+    def create_hub(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, workspace_source: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         hub = self.hub_store.create_hub(
             title=payload["title"],
             type=payload.get("hub_type", "topic"),
@@ -486,6 +487,7 @@ class ApiAdapter:
             aliases=payload.get("aliases") or [],
             related_terms=payload.get("related_terms") or [],
             workspace_uuid=workspace_id,
+            created_by_subject=created_by_subject,
         )
         hub.update(self._workspace_meta(workspace_id, workspace_source))
         return hub
@@ -493,14 +495,14 @@ class ApiAdapter:
     def get_hub(self, hub_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         return self.hub_store.get_hub(hub_id, workspace_id=workspace_id)
 
-    def link_content(self, hub_id: str, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-        self.hub_store.link_content(hub_id, content_id, workspace_id=workspace_id)
+    def link_content(self, hub_id: str, content_id: str, workspace_id: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
+        self.hub_store.link_content(hub_id, content_id, workspace_id=workspace_id, created_by_subject=created_by_subject)
         result = {"hub_id": hub_id, "content_id": content_id, "linked": True}
         if workspace_id:
             result["workspace_id"] = workspace_id
         return result
 
-    def create_edge(self, payload: Dict[str, Any], workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def create_edge(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, created_by: Optional[str] = None) -> Dict[str, Any]:
         return self.hub_edge_store.create_edge(
             source_hub_id=payload["source_hub_id"],
             target_hub_id=payload["target_hub_id"],
@@ -510,6 +512,7 @@ class ApiAdapter:
             confidence=payload.get("confidence"),
             reason=payload.get("reason"),
             note=payload.get("note"),
+            created_by=created_by,
             workspace_id=workspace_id,
         )
 
@@ -539,6 +542,7 @@ class ApiAdapter:
         confidence: Optional[float] = None,
         note: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self.hub_edge_store.approve_inferred_edge(
             source_hub_id=source_hub_id,
@@ -547,6 +551,7 @@ class ApiAdapter:
             reason=reason,
             confidence=confidence,
             note=note,
+            created_by=created_by,
             workspace_id=workspace_id,
         )
 
@@ -558,6 +563,7 @@ class ApiAdapter:
         reason: Optional[str] = None,
         note: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self.hub_edge_store.reject_inferred_edge(
             source_hub_id=source_hub_id,
@@ -565,6 +571,7 @@ class ApiAdapter:
             edge_type=edge_type,
             reason=reason,
             note=note,
+            created_by=created_by,
             workspace_id=workspace_id,
         )
 

@@ -45,7 +45,7 @@ def create_edge(req: EdgeCreateRequest, auth: AuthContext = Depends(require_perm
     settings = get_settings()
     adapter = ApiAdapter(settings.database_url)
     try:
-        return adapter.create_edge(req.model_dump(), workspace_id=auth.workspace_id)
+        return adapter.create_edge(req.model_dump(), workspace_id=auth.workspace_id, created_by=auth.auth_subject_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -114,6 +114,7 @@ def approve_inferred_edge(req: InferredEdgeReviewRequest, auth: AuthContext = De
             confidence=req.confidence,
             note=req.note,
             workspace_id=auth.workspace_id,
+            created_by=auth.auth_subject_id,
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -132,6 +133,7 @@ def reject_inferred_edge(req: InferredEdgeReviewRequest, auth: AuthContext = Dep
             reason=req.reason,
             note=req.note,
             workspace_id=auth.workspace_id,
+            created_by=auth.auth_subject_id,
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
