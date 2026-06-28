@@ -255,11 +255,13 @@ def save_and_link_to_hub(
 
 
 def get_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    """Full graph snapshot: hub nodes + edges, filterable by origin class.
+    """Full graph snapshot: hub nodes + relationship edges, filterable by edge class.
 
     PUBLIC IMPROVEMENT over production (where include_inferred is a documented no-op):
-    include_inferred toggles machine-suggested edges (origin inferred_approved/ai_suggested),
-    include_curated toggles human edges. Both default True; both False yields no edges.
+    include_inferred returns machine-generated relationships; include_curated returns
+    human-curated relationships. Both default True (full graph, backward compatible);
+    both False yields no edges. (Which concrete edge origins count as machine-generated
+    is an internal implementation detail, intentionally not part of this contract.)
     """
     return _call_api(
         _client().graph_snapshot,

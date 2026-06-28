@@ -81,10 +81,12 @@ Decision (Ritvars): real filters + keep alias. Implemented in commit (M8D2).
 - `get_graph_snapshot(include_inferred, include_curated)` — **now functional**, and an
   INTENTIONAL PUBLIC IMPROVEMENT over production. Production accepts `include_inferred`
   but treats it as a documented no-op ("signals intent ... currently returns only
-  curated"). Public honors both flags via edge `origin`: inferred = `{inferred_approved,
-  ai_suggested}` (machine-suggested), curated = everything else (`manual`,
-  `migration_localStorage`, unset). Both default True (backward compatible); both False →
-  no edges. Rejected/archived edges remain excluded (reader-level). Stats now expose
+  curated"). Public contract: `include_inferred` returns **machine-generated**
+  relationships, `include_curated` returns **human-curated** relationships. Both default
+  True (backward compatible); both False → no edges. (Implementation note, NOT part of the
+  contract: machine-generated currently = edge `origin` in `{inferred_approved,
+  ai_suggested}`; curated = everything else. New origins can be added without changing the
+  contract.) Rejected/archived edges remain excluded (reader-level). Stats now expose
   `curated_edge_count` + `inferred_edge_count`; response carries the applied `filters`.
 - `list_graph_snapshot` — kept as a **flag-forwarding alias** of `get_graph_snapshot`
   (production parity: it is a pure alias / "spec-canonical name" in production; a distinct
