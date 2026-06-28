@@ -596,6 +596,34 @@ class ApiAdapter:
         linked = self.link_content(hub_id, content_id, workspace_id=workspace_id)
         return {**created, "linked": True, "hub_link": linked, "hub_id": hub_id}
 
+    def set_node_type(self, content_id: str, node_type: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        conditions = ["content_id = %s::uuid"]
+        params: List[Any] = [node_type, content_id]
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            params.append(workspace_id)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    UPDATE content_items
+                       SET node_type = %s, updated_at = NOW()
+                     WHERE {' AND '.join(conditions)}
+                    RETURNING content_id::text AS content_id,
+                              workspace_id::text AS workspace_id,
+                              node_type,
+                              updated_at
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        if result.get("updated_at") is not None:
+            result["updated_at"] = result["updated_at"].isoformat()
+        return result
+
     def get_graph_snapshot(self, include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         from dataclasses import asdict
         from memory_lab.graph.repository_reader import RepositoryGraphHealthReader

@@ -41,6 +41,7 @@ server.tool()(APPROVED_TOOLS["update_decision_status"])
 server.tool()(APPROVED_TOOLS["get_decision_lineage"])
 server.tool()(APPROVED_TOOLS["list_decision_conflicts"])
 server.tool()(APPROVED_TOOLS["get_decision_timeline"])
+server.tool()(APPROVED_TOOLS["classify_content_node"])
 
 
 if __name__ == "__main__":

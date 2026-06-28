@@ -161,6 +161,14 @@ class MemoryLabApiClient:
             workspace_id=workspace_id,
         )
 
+    def set_node_type(self, content_id: str, node_type: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request(
+            "PATCH",
+            f"/v1/content/{content_id}/node-type",
+            json_body={"node_type": node_type},
+            workspace_id=workspace_id,
+        )
+
     def get_content_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/v1/content/{content_id}/metadata", workspace_id=workspace_id)
 

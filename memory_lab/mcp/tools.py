@@ -86,6 +86,17 @@ def update_node_metadata(content_id: str, workspace_id: Optional[str] = None) ->
     return result
 
 
+def classify_content_node(content_id: str, node_type: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Assign a semantic node_type to a content item from a fixed vocabulary.
+
+    IMPORTANT (honest contract): this is a CALLER-SPECIFIED, DETERMINISTIC assignment --
+    NOT automatic/AI classification and NOT provider-backed. The name matches the
+    production tool for MCP parity. Allowed node types: decision, fact, hypothesis,
+    question, playbook, concept, source, task, event, raw_note.
+    """
+    return _call_api(_client().set_node_type, content_id=content_id, node_type=node_type, workspace_id=workspace_id)
+
+
 def memory_lab_hub_create(
     title: str,
     hub_type: Optional[str] = None,
@@ -411,4 +422,5 @@ APPROVED_TOOLS = {
     "get_decision_lineage": get_decision_lineage,
     "list_decision_conflicts": list_decision_conflicts,
     "get_decision_timeline": get_decision_timeline,
+    "classify_content_node": classify_content_node,
 }

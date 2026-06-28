@@ -20,6 +20,16 @@ class QuickSummaryRequest(BaseModel):
     quick_summary: str = Field(..., max_length=500)
 
 
+VALID_NODE_TYPES = frozenset({
+    "decision", "fact", "hypothesis", "question", "playbook",
+    "concept", "source", "task", "event", "raw_note",
+})
+
+
+class NodeTypeRequest(BaseModel):
+    node_type: str
+
+
 @router.post("")
 def create_content(req: ContentCreateRequest, auth: AuthContext = Depends(require_permission("content.create"))) -> dict:
     settings = get_settings()
@@ -63,3 +73,26 @@ def set_quick_summary(content_id: str, req: QuickSummaryRequest, auth: AuthConte
     if not row:
         raise HTTPException(status_code=404, detail="content not found")
     return row
+
+
+
+@router.patch("/{content_id}/node-type")
+def set_node_type(content_id: str, req: NodeTypeRequest, auth: AuthContext = Depends(require_permission("content.update"))) -> dict:
+    if req.node_type not in VALID_NODE_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid node_type '{req.node_type}'. Must be one of: {', '.join(sorted(VALID_NODE_TYPES))}",
+        )
+    settings = get_settings()
+    adapter = ApiAdapter(settings.database_url)
+    row = adapter.set_node_type(content_id=content_id, node_type=req.node_type, workspace_id=auth.workspace_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="content not found")
+    return {
+        **row,
+        "updated": True,
+        "deterministic": True,
+        "provider_backed": False,
+        "classification_mode": "caller_specified",
+        "allowed_node_types": sorted(VALID_NODE_TYPES),
+    }
