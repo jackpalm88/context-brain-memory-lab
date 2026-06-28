@@ -216,6 +216,133 @@ class MemoryLabApiClient:
             payload["limit"] = limit
         return self._request("POST", "/v1/retrieval/search", json_body=payload, workspace_id=workspace_id)
 
+
+    def ask(self, query: str, top_k: Optional[int] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"query": query}
+        if top_k is not None:
+            payload["top_k"] = top_k
+        return self._request("POST", "/v1/ask", json_body=payload, workspace_id=workspace_id)
+
+    def hub_list(self, status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request("GET", "/v1/hubs", params={"status": status}, workspace_id=workspace_id)
+
+    def hub_update(
+        self,
+        hub_id: str,
+        title: Optional[str] = None,
+        hub_type: Optional[str] = None,
+        description: Optional[str] = None,
+        aliases: Optional[list[str]] = None,
+        related_terms: Optional[list[str]] = None,
+        status: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if hub_type is not None:
+            payload["type"] = hub_type
+        if description is not None:
+            payload["description"] = description
+        if aliases is not None:
+            payload["aliases"] = aliases
+        if related_terms is not None:
+            payload["related_terms"] = related_terms
+        if status is not None:
+            payload["status"] = status
+        return self._request("PATCH", f"/v1/hubs/{hub_id}", json_body=payload, workspace_id=workspace_id)
+
+    def edge_update(
+        self,
+        edge_id: str,
+        edge_type: Optional[str] = None,
+        status: Optional[str] = None,
+        note: Optional[str] = None,
+        reason: Optional[str] = None,
+        confidence: Optional[float] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if edge_type is not None:
+            payload["edge_type"] = edge_type
+        if status is not None:
+            payload["status"] = status
+        if note is not None:
+            payload["note"] = note
+        if reason is not None:
+            payload["reason"] = reason
+        if confidence is not None:
+            payload["confidence"] = confidence
+        return self._request("PATCH", f"/v1/edges/{edge_id}", json_body=payload, workspace_id=workspace_id)
+
+    def approve_inferred_edge(
+        self,
+        source_hub_id: str,
+        target_hub_id: str,
+        edge_type: str,
+        reason: Optional[str] = None,
+        confidence: Optional[float] = None,
+        note: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"source_hub_id": source_hub_id, "target_hub_id": target_hub_id, "edge_type": edge_type}
+        if reason is not None:
+            payload["reason"] = reason
+        if confidence is not None:
+            payload["confidence"] = confidence
+        if note is not None:
+            payload["note"] = note
+        return self._request("POST", "/v1/edges/inferred/approve", json_body=payload, workspace_id=workspace_id)
+
+    def reject_inferred_edge(
+        self,
+        source_hub_id: str,
+        target_hub_id: str,
+        edge_type: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"source_hub_id": source_hub_id, "target_hub_id": target_hub_id, "edge_type": edge_type}
+        if reason is not None:
+            payload["reason"] = reason
+        if note is not None:
+            payload["note"] = note
+        return self._request("POST", "/v1/edges/inferred/reject", json_body=payload, workspace_id=workspace_id)
+
+    def save_and_link_to_hub(self, content: str, hub_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        created = self.content_create_id(content=content, workspace_id=workspace_id)
+        if not created.get("persisted") or not created.get("content_id"):
+            created["linked"] = False
+            created["hub_id"] = hub_id
+            return created
+        linked = self.hub_link_content(hub_id=hub_id, content_id=created["content_id"], workspace_id=workspace_id)
+        created["linked"] = True
+        created["hub_link"] = linked
+        created["hub_id"] = hub_id
+        return created
+
+    def graph_snapshot(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request("GET", "/v1/graph/snapshot", workspace_id=workspace_id)
+
+    def graph_node_full(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/graph/nodes/{content_id}/full", workspace_id=workspace_id)
+
+    def graph_search_preview(
+        self,
+        query: str,
+        node_type: Optional[str] = None,
+        hub_id: Optional[str] = None,
+        limit: int = 10,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"query": query, "limit": limit}
+        if node_type is not None:
+            params["node_type"] = node_type
+        if hub_id is not None:
+            params["hub_id"] = hub_id
+        return self._request("GET", "/v1/graph/search-preview", params=params, workspace_id=workspace_id)
+
     def decision_create(self, payload: Dict[str, Any], workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("POST", "/decisions/", json_body=payload, workspace_id=workspace_id)
 

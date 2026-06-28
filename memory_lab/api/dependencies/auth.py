@@ -23,6 +23,7 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     "hubs.update": {"owner", "admin", "writer"},
     "edges.create": {"owner", "admin", "writer", "service_agent"},
     "edges.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},
+    "edges.update": {"owner", "admin", "writer"},
     "edges.archive": {"owner", "admin"},
     "decisions.create": {"owner", "admin", "writer", "service_agent"},
     "decisions.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},

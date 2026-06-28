@@ -13,6 +13,7 @@ from memory_lab.api.routers.conflicts import router as conflicts_router
 from memory_lab.api.routers.context_packs import router as context_packs_router
 from memory_lab.api.routers.reasoning import router as reasoning_router
 from memory_lab.api.routers.graph_health import router as graph_health_router
+from memory_lab.api.routers.graph import router as graph_router
 
 
 def create_app() -> FastAPI:
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(context_packs_router)
     app.include_router(reasoning_router)
     app.include_router(graph_health_router)
+    app.include_router(graph_router)
     return app
 
 

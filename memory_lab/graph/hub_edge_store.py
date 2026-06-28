@@ -134,24 +134,29 @@ class HubEdgeStore:
                 cur.execute(f"SELECT {_SELECT_COLS} FROM cb_hub_edges {where} ORDER BY created_at DESC", tuple(params))
                 return [_row_to_dict(r) for r in cur.fetchall()]
 
-    def update_edge(self, edge_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_edge(self, edge_id: str, updates: Dict[str, Any], workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         allowed = {"type", "status", "note", "reason", "confidence"}
         fields = {k: v for k, v in updates.items() if k in allowed}
         if not fields:
-            return self.get_edge(edge_id)
+            return self.get_edge(edge_id, workspace_id=workspace_id)
         if "type" in fields and fields["type"] not in ALL_TYPES:
             raise ValueError(f"Invalid type '{fields['type']}'")
         if "status" in fields and fields["status"] not in VALID_STATUSES:
             raise ValueError(f"Invalid status '{fields['status']}'")
         set_clause = ", ".join(f"{k} = %s" for k in fields)
-        values = list(fields.values()) + [edge_id]
+        conditions = ["id = %s::uuid"]
+        where_values: List[Any] = [edge_id]
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            where_values.append(workspace_id)
+        values = list(fields.values()) + where_values
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     f"""
                     UPDATE cb_hub_edges
                     SET {set_clause}, updated_at = NOW()
-                    WHERE id = %s::uuid
+                    WHERE {' AND '.join(conditions)}
                     RETURNING {_SELECT_COLS}
                     """,
                     values,
@@ -183,45 +188,48 @@ class HubEdgeStore:
 
     def approve_inferred_edge(self, source_hub_id: str, target_hub_id: str, edge_type: str,
                               reason: Optional[str] = None, confidence: Optional[float] = None,
-                              note: Optional[str] = None, created_by: str = "user") -> Dict[str, Any]:
+                              note: Optional[str] = None, created_by: str = "user",
+                              workspace_id: Optional[str] = None) -> Dict[str, Any]:
         edge_key = _compute_edge_key(source_hub_id, target_hub_id, edge_type)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                self._validate_hubs_in_workspace(cur, source_hub_id, target_hub_id, workspace_id)
                 cur.execute(
                     f"""
                     INSERT INTO cb_hub_edges
-                        (source_hub_id, target_hub_id, type, status, origin,
+                        (source_hub_id, target_hub_id, workspace_id, type, status, origin,
                          confidence, reason, note, edge_key, created_by)
-                    VALUES (%s::uuid, %s::uuid, %s, 'approved', 'inferred_approved', %s, %s, %s, %s, %s)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid, %s, 'approved', 'inferred_approved', %s, %s, %s, %s, %s)
                     ON CONFLICT (edge_key) WHERE archived_at IS NULL
                     DO UPDATE SET status = 'approved', origin = 'inferred_approved', confidence = EXCLUDED.confidence,
                         reason = COALESCE(EXCLUDED.reason, cb_hub_edges.reason),
                         note = COALESCE(EXCLUDED.note, cb_hub_edges.note), updated_at = NOW()
                     RETURNING {_SELECT_COLS}
                     """,
-                    (source_hub_id, target_hub_id, edge_type, confidence, reason, note, edge_key, created_by),
+                    (source_hub_id, target_hub_id, workspace_id, edge_type, confidence, reason, note, edge_key, created_by),
                 )
                 conn.commit()
                 return _row_to_dict(cur.fetchone())
 
     def reject_inferred_edge(self, source_hub_id: str, target_hub_id: str, edge_type: str,
                              reason: Optional[str] = None, note: Optional[str] = None,
-                             created_by: str = "user") -> Dict[str, Any]:
+                             created_by: str = "user", workspace_id: Optional[str] = None) -> Dict[str, Any]:
         edge_key = _compute_edge_key(source_hub_id, target_hub_id, edge_type)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                self._validate_hubs_in_workspace(cur, source_hub_id, target_hub_id, workspace_id)
                 cur.execute(
                     f"""
                     INSERT INTO cb_hub_edges
-                        (source_hub_id, target_hub_id, type, status, origin, reason, note, edge_key, created_by)
-                    VALUES (%s::uuid, %s::uuid, %s, 'rejected', 'inferred_rejected', %s, %s, %s, %s)
+                        (source_hub_id, target_hub_id, workspace_id, type, status, origin, reason, note, edge_key, created_by)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid, %s, 'rejected', 'inferred_rejected', %s, %s, %s, %s)
                     ON CONFLICT (edge_key) WHERE archived_at IS NULL
                     DO UPDATE SET status = 'rejected', origin = 'inferred_rejected',
                         reason = COALESCE(EXCLUDED.reason, cb_hub_edges.reason),
                         note = COALESCE(EXCLUDED.note, cb_hub_edges.note), updated_at = NOW()
                     RETURNING {_SELECT_COLS}
                     """,
-                    (source_hub_id, target_hub_id, edge_type, reason, note, edge_key, created_by),
+                    (source_hub_id, target_hub_id, workspace_id, edge_type, reason, note, edge_key, created_by),
                 )
                 conn.commit()
                 return _row_to_dict(cur.fetchone())

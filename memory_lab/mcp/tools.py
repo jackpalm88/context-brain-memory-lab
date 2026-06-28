@@ -115,6 +115,141 @@ def memory_lab_retrieval_search(query: str, limit: Optional[int] = None, workspa
     return _call_api(_client().retrieval_search, query=query, limit=limit, workspace_id=workspace_id)
 
 
+
+def query_memory(query: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().ask, query=query, workspace_id=workspace_id)
+
+
+def list_hubs(status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().hub_list, status=status, workspace_id=workspace_id)
+
+
+def update_hub(
+    hub_id: str,
+    title: Optional[str] = None,
+    hub_type: Optional[str] = None,
+    description: Optional[str] = None,
+    aliases: Optional[List[str]] = None,
+    related_terms: Optional[List[str]] = None,
+    status: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().hub_update,
+        hub_id=hub_id,
+        title=title,
+        hub_type=hub_type,
+        description=description,
+        aliases=aliases,
+        related_terms=related_terms,
+        status=status,
+        workspace_id=workspace_id,
+    )
+
+
+def update_hub_edge(
+    edge_id: str,
+    edge_type: Optional[str] = None,
+    status: Optional[str] = None,
+    note: Optional[str] = None,
+    reason: Optional[str] = None,
+    confidence: Optional[float] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().edge_update,
+        edge_id=edge_id,
+        edge_type=edge_type,
+        status=status,
+        note=note,
+        reason=reason,
+        confidence=confidence,
+        workspace_id=workspace_id,
+    )
+
+
+def approve_inferred_edge(
+    source_hub_id: str,
+    target_hub_id: str,
+    edge_type: str,
+    reason: Optional[str] = None,
+    confidence: Optional[float] = None,
+    note: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().approve_inferred_edge,
+        source_hub_id=source_hub_id,
+        target_hub_id=target_hub_id,
+        edge_type=edge_type,
+        reason=reason,
+        confidence=confidence,
+        note=note,
+        workspace_id=workspace_id,
+    )
+
+
+def reject_inferred_edge(
+    source_hub_id: str,
+    target_hub_id: str,
+    edge_type: str,
+    reason: Optional[str] = None,
+    note: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().reject_inferred_edge,
+        source_hub_id=source_hub_id,
+        target_hub_id=target_hub_id,
+        edge_type=edge_type,
+        reason=reason,
+        note=note,
+        workspace_id=workspace_id,
+    )
+
+
+def save_and_link_to_hub(
+    content: str,
+    save_purpose: str,
+    hub_id: str,
+    content_url: Optional[str] = None,
+    quick_summary: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    del save_purpose, content_url, quick_summary
+    return _call_api(_client().save_and_link_to_hub, content=content, hub_id=hub_id, workspace_id=workspace_id)
+
+
+def get_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    del include_inferred, include_curated
+    return _call_api(_client().graph_snapshot, workspace_id=workspace_id)
+
+
+def list_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return get_graph_snapshot(include_inferred=include_inferred, include_curated=include_curated, workspace_id=workspace_id)
+
+
+def load_graph_node_full(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().graph_node_full, content_id=content_id, workspace_id=workspace_id)
+
+
+def search_graph_preview(
+    query: str,
+    node_type: Optional[str] = None,
+    hub_id: Optional[str] = None,
+    limit: int = 10,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().graph_search_preview,
+        query=query,
+        node_type=node_type,
+        hub_id=hub_id,
+        limit=limit,
+        workspace_id=workspace_id,
+    )
+
+
 def create_decision_memory(
     title: str,
     decision_reason: str,
@@ -208,6 +343,18 @@ APPROVED_TOOLS = {
     "memory_lab_edge_list": memory_lab_edge_list,
     "memory_lab_edge_archive": memory_lab_edge_archive,
     "memory_lab_retrieval_search": memory_lab_retrieval_search,
+
+    "query_memory": query_memory,
+    "list_hubs": list_hubs,
+    "update_hub": update_hub,
+    "update_hub_edge": update_hub_edge,
+    "approve_inferred_edge": approve_inferred_edge,
+    "reject_inferred_edge": reject_inferred_edge,
+    "save_and_link_to_hub": save_and_link_to_hub,
+    "get_graph_snapshot": get_graph_snapshot,
+    "list_graph_snapshot": list_graph_snapshot,
+    "load_graph_node_full": load_graph_node_full,
+    "search_graph_preview": search_graph_preview,
     "create_decision_memory": create_decision_memory,
     "explain_decision": explain_decision,
     "list_decisions": list_decisions,

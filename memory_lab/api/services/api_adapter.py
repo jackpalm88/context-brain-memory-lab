@@ -429,3 +429,156 @@ class ApiAdapter:
 
     def archive_edge(self, edge_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         return self.hub_edge_store.archive_edge(edge_id, workspace_id=workspace_id)
+
+    def update_edge(self, edge_id: str, updates: Dict[str, Any], workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        return self.hub_edge_store.update_edge(edge_id, updates, workspace_id=workspace_id)
+
+    def approve_inferred_edge(
+        self,
+        source_hub_id: str,
+        target_hub_id: str,
+        edge_type: str,
+        reason: Optional[str] = None,
+        confidence: Optional[float] = None,
+        note: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self.hub_edge_store.approve_inferred_edge(
+            source_hub_id=source_hub_id,
+            target_hub_id=target_hub_id,
+            edge_type=edge_type,
+            reason=reason,
+            confidence=confidence,
+            note=note,
+            workspace_id=workspace_id,
+        )
+
+    def reject_inferred_edge(
+        self,
+        source_hub_id: str,
+        target_hub_id: str,
+        edge_type: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self.hub_edge_store.reject_inferred_edge(
+            source_hub_id=source_hub_id,
+            target_hub_id=target_hub_id,
+            edge_type=edge_type,
+            reason=reason,
+            note=note,
+            workspace_id=workspace_id,
+        )
+
+    def save_and_link_to_hub(self, content: str, hub_id: str, workspace_id: Optional[str] = None, workspace_source: Optional[str] = None) -> Dict[str, Any]:
+        created = self.create_content_minimal(content=content, workspace_id=workspace_id, workspace_source=workspace_source)
+        if not created.get("persisted") or not created.get("content_id"):
+            return {**created, "linked": False, "hub_id": hub_id}
+        linked = self.link_content(hub_id, created["content_id"], workspace_id=workspace_id)
+        return {**created, "linked": True, "hub_link": linked, "hub_id": hub_id}
+
+    def get_graph_snapshot(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        from dataclasses import asdict
+        from memory_lab.graph.repository_reader import RepositoryGraphHealthReader
+
+        reader = RepositoryGraphHealthReader(conn_factory=self._conn, workspace_id=workspace_id)
+        snapshot = reader.read_snapshot()
+        nodes = [asdict(hub) for hub in snapshot.hubs]
+        edges = [asdict(edge) for edge in snapshot.hub_edges]
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "content_count": len(snapshot.content_records),
+                "hub_content_link_count": len(snapshot.hub_content_links),
+            },
+            "schema_version": "public-m7-v1",
+            "workspace_id": workspace_id,
+            "limitations": list(snapshot.limitations),
+            "warnings": list(snapshot.warnings),
+        }
+
+    def load_graph_node_full(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        conditions = ["ci.content_id = %s::uuid"]
+        params: List[Any] = [content_id]
+        if workspace_id:
+            conditions.append("ci.workspace_id = %s::uuid")
+            params.append(workspace_id)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT ci.content_id::text AS content_id,
+                           ci.workspace_id::text AS workspace_id,
+                           ci.node_type,
+                           ci.quick_summary,
+                           ci.memory_type,
+                           ci.created_at,
+                           ci.updated_at,
+                           COALESCE(string_agg(ch.chunk_text, E'\\n\\n' ORDER BY ch.chunk_index), '') AS full_text,
+                           COALESCE(sum(ch.word_count), 0)::int AS word_count
+                      FROM content_items ci
+                      LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id
+                     WHERE {' AND '.join(conditions)}
+                     GROUP BY ci.content_id, ci.workspace_id, ci.node_type, ci.quick_summary, ci.memory_type, ci.created_at, ci.updated_at
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "content_id": row["content_id"],
+            "workspace_id": row.get("workspace_id"),
+            "node_type": row.get("node_type"),
+            "quick_summary": row.get("quick_summary"),
+            "memory_type": row.get("memory_type"),
+            "full_text": row.get("full_text") or "",
+            "word_count": row.get("word_count") or 0,
+            "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+            "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
+        }
+
+    def search_graph_preview(self, query: str, node_type: Optional[str] = None, hub_id: Optional[str] = None, limit: int = 10, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        q = f"%{(query or '').lower()}%"
+        conditions = ["(LOWER(COALESCE(ci.quick_summary, '')) LIKE %s OR LOWER(COALESCE(ch.chunk_text, '')) LIKE %s)"]
+        params: List[Any] = [q, q]
+        joins = "LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id"
+        select_hub_match = "FALSE AS hub_match"
+        score_expr = "max(CASE WHEN LOWER(COALESCE(ci.quick_summary, '')) LIKE %s THEN 2 ELSE 1 END) AS score"
+        lead_params: List[Any] = [q]
+        if hub_id:
+            joins += " LEFT JOIN cb_hub_content hc ON hc.content_id = ci.content_id AND hc.hub_id = %s::uuid"
+            params.insert(0, hub_id)
+            select_hub_match = "bool_or(hc.hub_id IS NOT NULL) AS hub_match"
+        if node_type:
+            conditions.append("ci.node_type = %s")
+            params.append(node_type)
+        if workspace_id:
+            conditions.append("ci.workspace_id = %s::uuid")
+            params.append(workspace_id)
+        params.append(limit)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT ci.content_id::text AS content_id,
+                           ci.node_type,
+                           ci.quick_summary,
+                           {select_hub_match},
+                           CASE WHEN ci.quick_summary IS NULL OR ci.quick_summary = '' THEN TRUE ELSE FALSE END AS load_full_content_recommended,
+                           {score_expr}
+                      FROM content_items ci
+                      {joins}
+                     WHERE {' AND '.join(conditions)}
+                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary
+                     ORDER BY score DESC, ci.content_id
+                     LIMIT %s
+                    """,
+                    tuple(lead_params + params),
+                )
+                rows = cur.fetchall()
+        return {"results": [dict(r) for r in rows], "count": len(rows), "workspace_id": workspace_id}
