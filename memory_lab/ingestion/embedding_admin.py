@@ -65,8 +65,20 @@ _UNSAFE_VALUE_FRAGMENTS = (
     "postgresql://",
     "mysql://",
     "mongodb://",
-    "/opt/contentingestor",
 )
+
+
+def _unsafe_value_fragments() -> tuple[str, ...]:
+    """Default secret/DSN denylist plus runtime-supplied site-specific fragments.
+
+    Site-specific private paths must be supplied at runtime via
+    MEMORY_LAB_EXTRA_UNSAFE_VALUE_FRAGMENTS (comma-separated) so they are never
+    baked into the published package.
+    """
+    import os
+    extra = os.environ.get("MEMORY_LAB_EXTRA_UNSAFE_VALUE_FRAGMENTS", "")
+    extras = tuple(f.strip().lower() for f in extra.split(",") if f.strip())
+    return _UNSAFE_VALUE_FRAGMENTS + extras
 
 _STATE_TO_LABEL = {
     "embedded": "noop_embedded",
@@ -260,7 +272,7 @@ def _looks_unsafe_value(value: Any) -> bool:
     if isinstance(value, (list, tuple, set)):
         return any(_looks_unsafe_value(v) for v in value)
     text = str(value or "").lower()
-    return any(fragment in text for fragment in _UNSAFE_VALUE_FRAGMENTS)
+    return any(fragment in text for fragment in _unsafe_value_fragments())
 
 
 def _optional_limitation(value: str, include: bool) -> tuple[str, ...]:

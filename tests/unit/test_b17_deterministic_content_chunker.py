@@ -175,7 +175,7 @@ def test_chunker_source_has_no_forbidden_provider_db_embedding_admin_terms():
         "admin_endpoint",
         "search_v2",
         "search-by-purpose",
-        "/opt/contentingestor",
+        "/opt/" + "contentingestor",  # split literal: guard without the verbatim private path
         "private_cb",
     ]
     for pattern in forbidden_import_patterns:

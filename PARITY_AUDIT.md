@@ -1,8 +1,8 @@
 # PARITY_AUDIT.md — M5 Task 2
 
-Scope: compare the production Context Brain source material in `/opt/contentingestor` with the Memory Lab public-beta surface in this repository. `/opt/contentingestor` is source material only; this audit does not refactor or edit the old `main.py` tree.
+Scope: compare the production Context Brain source material in the private reference monolith with the Memory Lab public-beta surface in this repository. the private reference monolith is source material only; this audit does not refactor or edit the old `main.py` tree.
 
-| Original capability / function | Original location in /opt/contentingestor | memory_lab status: ported / opt-in / intentionally dropped / post-1.0 | memory_lab location | evidence command/test | notes/risks |
+| Original capability / function | Original location in the private reference monolith | memory_lab status: ported / opt-in / intentionally dropped / post-1.0 | memory_lab location | evidence command/test | notes/risks |
 |---|---|---|---|---|---|
 | Health endpoint / service liveness | `main.py` `/health` | ported | `memory_lab/api/routers/health.py` | `bash scripts/hermetic_test.sh`; `tests/smoke/test_package_assets.py` | Public API liveness only; no private production health claims. |
 | Content save / minimal create | `main.py` `/classify`; `mcp_server.py` `save_memory` | ported | `memory_lab/api/routers/content.py`; `memory_lab/api/services/api_adapter.py`; `memory_lab/persistence/postgres_backend.py` | `bash scripts/hermetic_test.sh`; `tests/unit/test_b26_memory_backend.py`; `tests/integration/test_m2_postgres_persistence_backend.py`; `scripts/m5_live_smoke.py` | Public-beta save path is workspace-scoped and minimal; not full legacy classifier side effects. |

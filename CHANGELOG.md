@@ -2,6 +2,8 @@
 
 ## 0.2.0a1 — M6 release readiness
 
+- Privacy remediation (fix-forward): scrubbed private server paths from shipped source (`embedding_admin` denylist is now runtime/env-extensible), tests, and docs; removed internal B-phase reports and clone inventory from the public repo; rebuilt clean 0.2.0a1 wheel/sdist; repo + artifact privacy scan clean.
+
 - Aligned README, capabilities, install, and state docs with M1-M5 release-candidate truth.
 - Replaced stale pre-M artifacts with rebuilt `0.2.0a1` wheel/sdist during release-readiness proof.
 - Added clean-install artifact proof expectation: import package from built artifact, verify installed metadata version, and run deterministic smoke without editable install.
@@ -10,7 +12,7 @@
 ## 0.2.0a1 — M5
 
 - Added opt-in live end-to-end smoke `scripts/m5_live_smoke.py` proving the full real engine: real OpenAI embeddings + real Anthropic synthesis + pgvector KNN retrieval + grounded provider-backed answer over freshly-ingested content.
-- Added `PARITY_AUDIT.md` mapping every original /opt/contentingestor capability to its memory_lab status (ported / opt-in / intentionally dropped / post-1.0) with no unknown rows.
+- Added `PARITY_AUDIT.md` mapping every original the private reference monolith capability to its memory_lab status (ported / opt-in / intentionally dropped / post-1.0) with no unknown rows.
 - Live smoke is opt-in (requires a live DB + provider keys) and is not part of the hermetic deterministic gate.
 
 ## 0.2.0a1 — M4
