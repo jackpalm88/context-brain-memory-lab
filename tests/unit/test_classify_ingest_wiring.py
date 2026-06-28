@@ -296,6 +296,7 @@ class TestCurrentStateResolverBoundary:
         fake_event, fake_tier = self._persist_event_and_tier()
         conn_insert, _ = _mock_conn_with_cursor({"content_id": _CI_ID})
         conn_score, _ = _mock_conn_with_cursor(None)
+        conn_body, _ = _mock_conn_with_cursor(None)
         conn_resolver, _ = _mock_conn_with_cursor(None)
         classify_meta = {
             "memory_type": "anchor",
@@ -318,7 +319,7 @@ class TestCurrentStateResolverBoundary:
         with patch("memory_lab.api.services.api_adapter.score_content", return_value=fake_event), \
              patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
              patch.object(adapter, "_run_classify_and_write", return_value=classify_meta) as mock_classify, \
-             patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score, conn_resolver]), \
+             patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score, conn_body, conn_resolver]), \
              patch("memory_lab.api.services.api_adapter.resolve_current_state_after_ingest", return_value=fake_resolution) as mock_resolver:
             resp = adapter.create_content_minimal(
                 content="current_state_scope: b10\nCurrent state active anchor.", workspace_id=_WS_ID
@@ -339,6 +340,7 @@ class TestCurrentStateResolverBoundary:
         fake_event, fake_tier = self._persist_event_and_tier()
         conn_insert, _ = _mock_conn_with_cursor({"content_id": _CI_ID})
         conn_score, _ = _mock_conn_with_cursor(None)
+        conn_body, _ = _mock_conn_with_cursor(None)
         classify_meta = {
             "memory_type": "evidence",
             "memory_sub_type": "implementation_evidence",
@@ -350,7 +352,7 @@ class TestCurrentStateResolverBoundary:
         with patch("memory_lab.api.services.api_adapter.score_content", return_value=fake_event), \
              patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
              patch.object(adapter, "_run_classify_and_write", return_value=classify_meta), \
-             patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score]), \
+             patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score, conn_body]), \
              patch("memory_lab.api.services.api_adapter.resolve_current_state_after_ingest") as mock_resolver:
             resp = adapter.create_content_minimal(content="weak evidence", workspace_id=_WS_ID)
 

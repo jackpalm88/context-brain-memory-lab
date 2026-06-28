@@ -628,3 +628,55 @@ def test_second_current_state_supersedes_previous_anchor(test_dsn, conn):
     assert rows[second_id]["supersedes"] == first_id
     assert anchors[first_id] == "superseded"
     assert anchors[second_id] == "active"
+
+
+def test_m10_1_body_persisted_and_retrievable(test_dsn, conn):
+    """M10.1: create_content_minimal persists the submitted body as a content_chunks
+    row; load_graph_node_full returns it as full_text and search_graph_preview finds it."""
+    ws_id = _insert_workspace(conn)
+    from memory_lab.api.services.api_adapter import ApiAdapter
+    adapter = ApiAdapter(test_dsn)
+
+    body = "alpha bravo charlie persistent body marker delta echo foxtrot"
+    resp = adapter.create_content_minimal(content=body, workspace_id=ws_id)
+    assert resp["created"] is True
+    cid = resp["content_id"]
+
+    # 1. content_chunks row written (chunk_index 0) with the exact body + word_count
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute(
+            "SELECT chunk_index, chunk_text, word_count FROM content_chunks WHERE content_id = %s::uuid",
+            (cid,),
+        )
+        chunks = cur.fetchall()
+    assert len(chunks) == 1
+    assert chunks[0]["chunk_index"] == 0
+    assert chunks[0]["chunk_text"] == body
+    assert chunks[0]["word_count"] == len(body.split())
+
+    # 2. load_graph_node_full returns the body as full_text (previously empty)
+    node = adapter.load_graph_node_full(cid, workspace_id=ws_id)
+    assert node is not None
+    assert "persistent body marker" in node["full_text"]
+
+    # 3. search_graph_preview can now find the saved content by substring
+    found = adapter.search_graph_preview(query="persistent body marker", workspace_id=ws_id)
+    assert cid in {r["content_id"] for r in found["results"]}
+
+
+def test_m10_1_discard_path_writes_no_chunk(test_dsn, conn):
+    """Governance-discarded content must not create a content_chunks row."""
+    ws_id = _insert_workspace(conn)
+    from memory_lab.api.services.api_adapter import ApiAdapter
+    adapter = ApiAdapter(test_dsn)
+
+    resp = adapter.create_content_minimal(content="x", workspace_id=ws_id)
+    if resp.get("created"):
+        import pytest
+        pytest.skip("content was persisted (not discarded) under current governance thresholds")
+
+    assert resp["discarded"] is True
+    assert "content_id" not in resp
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM content_chunks")
+        assert cur.fetchone()["n"] == 0

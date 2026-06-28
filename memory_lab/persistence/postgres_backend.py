@@ -14,7 +14,8 @@ import json
 import uuid
 from typing import Any, Mapping
 
-from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
+from memory_lab.providers.embedding_backend import EmbeddingBackend
+from memory_lab.persistence.body_chunks import persist_body_chunks
 
 from memory_lab.governance.state import (
     GovernanceProvenance,
@@ -113,23 +114,18 @@ class PostgresPersistenceBackend:
                         normalized.governance_state_id,
                     ),
                 )
-                cur.execute("DELETE FROM content_chunks WHERE content_id = %s::uuid AND chunk_index = 0", (normalized.content_id,))
-                if normalized.text:
-                    cur.execute(
-                        """
-                        INSERT INTO content_chunks (content_id, workspace_id, chunk_index, chunk_text, word_count)
-                        VALUES (%s::uuid, %s::uuid, 0, %s, %s)
-                        RETURNING chunk_id::text
-                        """,
-                        (normalized.content_id, normalized.workspace_id, normalized.text, len(normalized.text.split())),
-                    )
-                    chunk_row = cur.fetchone()
-                    warning = self._maybe_store_chunk_embedding(cur, chunk_row[0], normalized.text)
-                    if warning is None and self.vector_embeddings_enabled:
-                        operation_state["uses_embeddings"] = True
-                        operation_state["uses_vector_db"] = True
-                    elif warning and warning != "provider_disabled":
-                        operation_state["warnings"].append(warning)
+                _chunk_result = persist_body_chunks(
+                    cur,
+                    normalized.content_id,
+                    normalized.workspace_id,
+                    normalized.text,
+                    embedding_backend=self._embedding_backend(),
+                    vector_enabled=self.vector_embeddings_enabled,
+                )
+                if _chunk_result.uses_embeddings:
+                    operation_state["uses_embeddings"] = True
+                    operation_state["uses_vector_db"] = True
+                operation_state["warnings"].extend(_chunk_result.warnings)
             conn.commit()
             return normalized
 
@@ -418,32 +414,6 @@ class PostgresPersistenceBackend:
         self.embedding_backend = OpenAIEmbeddingBackend()
         return self.embedding_backend
 
-    def _maybe_store_chunk_embedding(self, cur: Any, chunk_id: str, text: str) -> str | None:
-        if not self.vector_embeddings_enabled:
-            return "provider_disabled"
-        backend = self._embedding_backend()
-        if backend is None or not backend.is_configured:
-            return "provider_disabled"
-        response = backend.embed_text(EmbeddingRequest(text=text))
-        if not response.is_ok or response.dimensions != 1536:
-            reason = response.failure_reason.value if response.failure_reason is not None else "embedding_degraded"
-            return reason
-        cur.execute(
-            """
-            UPDATE content_chunks
-               SET embedding = %s::vector,
-                   embedding_provider = %s,
-                   embedding_model = %s,
-                   embedding_dimensions = %s,
-                   embedded_at = NOW(),
-                   embedding_status = 'embedded',
-                   embedding_failure_reason = NULL
-             WHERE chunk_id = %s::uuid
-            """,
-            (_vector_literal(response.vector), backend.provider_name, _embedding_model_label(backend), response.dimensions, chunk_id),
-        )
-        return None
-
     def _run(self, operation: str, work: Any, metadata: Any = _postgres_metadata, warnings: Any = tuple) -> PersistenceResult:
         if not self.database_url:
             return _failure(operation, "database_url_required", "DATABASE_URL is required for PostgresPersistenceBackend operations.", "database_url")
@@ -629,15 +599,3 @@ def _vector_embeddings_enabled() -> bool:
     return _env_bool("MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED", False) or _env_bool("MEMORY_LAB_PROVIDER_EMBEDDINGS_ENABLED", False)
 
 
-def _vector_literal(vector: list[float]) -> str:
-    return "[" + ",".join(str(float(v)) for v in vector) + "]"
-
-
-def _embedding_model_label(backend: EmbeddingBackend) -> str:
-    getter = getattr(backend, "_get_model", None)
-    if callable(getter):
-        try:
-            return str(getter())
-        except Exception:
-            return backend.provider_name
-    return backend.provider_name

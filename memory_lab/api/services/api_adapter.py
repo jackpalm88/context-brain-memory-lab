@@ -9,6 +9,7 @@ from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.hub_edge_store import HubEdgeStore
 from memory_lab.ingestion.scorer import score_content
 from memory_lab.ingestion.classify_pipeline import classify as _classify
+from memory_lab.persistence.body_chunks import persist_body_chunks
 from memory_lab.governance.tier_router import route as tier_route
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 
@@ -148,6 +149,13 @@ class ApiAdapter:
                         row["content_id"],
                     ),
                 )
+                conn.commit()
+
+        # M10.1: persist submitted body as content_chunks (chunk_index 0). Deterministic;
+        # embedding is opt-in/provider-gated and off on this path by default.
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                persist_body_chunks(cur, row["content_id"], workspace_id, content or "")
                 conn.commit()
 
         # T3: classify write — best-effort, isolated; failure never rolls back T1/T2
