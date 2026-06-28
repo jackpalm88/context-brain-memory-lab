@@ -680,3 +680,62 @@ def test_m10_1_discard_path_writes_no_chunk(test_dsn, conn):
     with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute("SELECT COUNT(*) AS n FROM content_chunks")
         assert cur.fetchone()["n"] == 0
+
+
+_DEDUP_BODY = (
+    "M10.2 dedup integration body: alpha bravo charlie delta echo foxtrot. "
+    "This text is substantial enough to persist under governance scoring."
+)
+
+
+def test_m10_2_migration_adds_column_and_partial_unique_index(test_dsn, conn):
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'content_items' AND column_name = 'content_hash'"
+        )
+        assert cur.fetchone() is not None
+        cur.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_content_items_ws_content_hash'"
+        )
+        idx = cur.fetchone()
+    assert idx is not None
+    assert "UNIQUE" in idx["indexdef"].upper()
+    assert "content_hash" in idx["indexdef"]
+
+
+def test_m10_2_same_content_same_workspace_dedups(test_dsn, conn):
+    ws_id = _insert_workspace(conn)
+    from memory_lab.api.services.api_adapter import ApiAdapter
+    adapter = ApiAdapter(test_dsn)
+
+    first = adapter.create_content_minimal(content=_DEDUP_BODY, workspace_id=ws_id)
+    assert first["created"] is True
+    assert first.get("duplicate") is False
+    cid = first["content_id"]
+
+    second = adapter.create_content_minimal(content=_DEDUP_BODY, workspace_id=ws_id)
+    assert second["duplicate"] is True
+    assert second["created"] is False
+    assert second["persisted"] is True
+    assert second["mode"] == "deduplicated"
+    assert second["content_id"] == cid
+
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM content_items WHERE workspace_id = %s::uuid", (ws_id,))
+        assert cur.fetchone()["n"] == 1
+        cur.execute("SELECT COUNT(*) AS n FROM content_chunks WHERE content_id = %s::uuid", (cid,))
+        assert cur.fetchone()["n"] == 1
+
+
+def test_m10_2_same_content_different_workspace_two_rows(test_dsn, conn):
+    ws_a = _insert_workspace(conn)
+    ws_b = _insert_workspace(conn)
+    from memory_lab.api.services.api_adapter import ApiAdapter
+    adapter = ApiAdapter(test_dsn)
+
+    ra = adapter.create_content_minimal(content=_DEDUP_BODY, workspace_id=ws_a)
+    rb = adapter.create_content_minimal(content=_DEDUP_BODY, workspace_id=ws_b)
+    assert ra["created"] is True and rb["created"] is True
+    assert ra.get("duplicate") is False and rb.get("duplicate") is False
+    assert ra["content_id"] != rb["content_id"]

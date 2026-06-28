@@ -10,6 +10,7 @@ from memory_lab.graph.hub_edge_store import HubEdgeStore
 from memory_lab.ingestion.scorer import score_content
 from memory_lab.ingestion.classify_pipeline import classify as _classify
 from memory_lab.persistence.body_chunks import persist_body_chunks
+from memory_lab.api.utils.content_signatures import compute_content_hash
 from memory_lab.governance.tier_router import route as tier_route
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 
@@ -60,6 +61,25 @@ class ApiAdapter:
             meta["workspace_context_source"] = source
         return meta
 
+    def _find_duplicate_content_id(self, content_hash: str, workspace_id: Optional[str]) -> Optional[str]:
+        """content_id of an existing persisted row with this hash in the same
+        workspace, else None. Workspace scope uses IS NOT DISTINCT FROM so NULL
+        (unknown) workspaces dedup within their own bucket."""
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT content_id::text AS content_id
+                      FROM content_items
+                     WHERE content_hash = %s
+                       AND workspace_id IS NOT DISTINCT FROM %s::uuid
+                     LIMIT 1
+                    """,
+                    (content_hash, workspace_id),
+                )
+                row = cur.fetchone()
+        return row["content_id"] if row else None
+
     def create_content_minimal(
         self,
         content: Optional[str] = None,
@@ -67,6 +87,20 @@ class ApiAdapter:
         workspace_source: Optional[str] = None,
         created_by_subject: Optional[str] = None,
     ) -> Dict[str, Any]:
+        content_hash = compute_content_hash(content)
+        existing_id = self._find_duplicate_content_id(content_hash, workspace_id)
+        if existing_id is not None:
+            duplicate_response: Dict[str, Any] = {
+                "content_id": existing_id,
+                "created": False,
+                "persisted": True,
+                "discarded": False,
+                "duplicate": True,
+                "mode": "deduplicated",
+            }
+            duplicate_response.update(self._workspace_meta(workspace_id, workspace_source))
+            return duplicate_response
+
         event = score_content(content or "")
         tier_decision = tier_route(
             composite_score=event.scores.composite,
@@ -112,11 +146,11 @@ class ApiAdapter:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
-                    INSERT INTO content_items (workspace_id, created_by_subject)
-                    VALUES (%s::uuid, %s)
+                    INSERT INTO content_items (workspace_id, created_by_subject, content_hash)
+                    VALUES (%s::uuid, %s, %s)
                     RETURNING content_id::text AS content_id
                     """,
-                    (workspace_id, created_by_subject),
+                    (workspace_id, created_by_subject, content_hash),
                 )
                 row = cur.fetchone()
                 conn.commit()
@@ -197,6 +231,7 @@ class ApiAdapter:
             "created": True,
             "persisted": True,
             "discarded": False,
+            "duplicate": False,
             "memory_type": classify_meta.get("memory_type"),
             "memory_sub_type": classify_meta.get("memory_sub_type"),
             "classify_confidence": classify_meta.get("classify_confidence"),

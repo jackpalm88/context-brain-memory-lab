@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 def looks_like_github_ui_chrome(text: str) -> bool:
     """
     Check if text looks like GitHub UI chrome rather than actual content.
@@ -62,3 +64,12 @@ def is_placeholder_preview(text: str) -> bool:
     }
 
     return text_stripped.lower() in placeholder_values
+
+
+def compute_content_hash(text: str | None) -> str:
+    """SHA-256 hex of the raw content body, for content-level deduplication.
+
+    Matches production compute_content_hash exactly (no normalization).
+    None is treated as empty so the hash is always well-defined.
+    """
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()

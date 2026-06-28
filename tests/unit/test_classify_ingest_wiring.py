@@ -79,7 +79,8 @@ class TestDiscardTierSkip:
         with patch.object(adapter, "_conn") as mock_conn_ctx, \
              patch("memory_lab.api.services.api_adapter.score_content", return_value=fake_event), \
              patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
-             patch.object(adapter, "_run_classify_and_write") as mock_classify_write:
+             patch.object(adapter, "_run_classify_and_write") as mock_classify_write, \
+             patch.object(adapter, "_find_duplicate_content_id", return_value=None):
 
             resp = adapter.create_content_minimal(content="low quality content", workspace_id=_WS_ID)
 
@@ -108,7 +109,8 @@ class TestDiscardTierSkip:
 
         with patch.object(adapter, "_conn") as mock_conn_ctx, \
              patch("memory_lab.api.services.api_adapter.score_content", return_value=fake_event), \
-             patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier):
+             patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
+             patch.object(adapter, "_find_duplicate_content_id", return_value=None):
 
             resp = adapter.create_content_minimal(content="discard me", workspace_id=_WS_ID)
 
@@ -320,6 +322,7 @@ class TestCurrentStateResolverBoundary:
              patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
              patch.object(adapter, "_run_classify_and_write", return_value=classify_meta) as mock_classify, \
              patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score, conn_body, conn_resolver]), \
+             patch.object(adapter, "_find_duplicate_content_id", return_value=None), \
              patch("memory_lab.api.services.api_adapter.resolve_current_state_after_ingest", return_value=fake_resolution) as mock_resolver:
             resp = adapter.create_content_minimal(
                 content="current_state_scope: b10\nCurrent state active anchor.", workspace_id=_WS_ID
@@ -353,6 +356,7 @@ class TestCurrentStateResolverBoundary:
              patch("memory_lab.api.services.api_adapter.tier_route", return_value=fake_tier), \
              patch.object(adapter, "_run_classify_and_write", return_value=classify_meta), \
              patch.object(adapter, "_conn", side_effect=[conn_insert, conn_score, conn_body]), \
+             patch.object(adapter, "_find_duplicate_content_id", return_value=None), \
              patch("memory_lab.api.services.api_adapter.resolve_current_state_after_ingest") as mock_resolver:
             resp = adapter.create_content_minimal(content="weak evidence", workspace_id=_WS_ID)
 

@@ -110,6 +110,7 @@ def test_content_create_minimal_persists_created_by_subject():
     adapter.database_url = "postgresql://unit/test"
     cur = FakeCursor({"content_id": CONTENT})
     adapter._conn = lambda: FakeConn(cur)
+    adapter._find_duplicate_content_id = lambda *a, **k: None
     adapter.create_content_minimal(content="hello world", workspace_id=WS, created_by_subject=SUBJECT)
     text = _executed_text(cur)
     assert "INSERT INTO content_items" in text and "created_by_subject" in text
