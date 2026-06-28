@@ -73,7 +73,17 @@ def set_quick_summary(content_id: str, quick_summary: str, workspace_id: Optiona
 
 
 def update_node_metadata(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    return _call_api(_client().update_node_metadata, content_id=content_id, workspace_id=workspace_id)
+    """Read-only node metadata reader (no mutation).
+
+    NOTE: despite the production-parity name, this tool does NOT mutate. It returns the
+    content node's metadata and marks the response read_only=true / mutation="none". A
+    real metadata update would require a dedicated PATCH endpoint (not implemented).
+    """
+    result = _call_api(_client().update_node_metadata, content_id=content_id, workspace_id=workspace_id)
+    if isinstance(result, dict) and result.get("ok") is not False:
+        result.setdefault("read_only", True)
+        result.setdefault("mutation", "none")
+    return result
 
 
 def memory_lab_hub_create(
@@ -229,8 +239,19 @@ def save_and_link_to_hub(
     quick_summary: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    del save_purpose, content_url, quick_summary
-    return _call_api(_client().save_and_link_to_hub, content=content, hub_id=hub_id, workspace_id=workspace_id)
+    # save_purpose and content_url have no counterpart in the public minimal API
+    # (no classify/governance ingest pipeline), so they are accepted for production
+    # tool-signature parity and reported as unsupported when supplied. quick_summary
+    # IS persisted via the content quick-summary setter after the content node is saved.
+    return _call_api(
+        _client().save_and_link_to_hub,
+        content=content,
+        hub_id=hub_id,
+        quick_summary=quick_summary,
+        save_purpose=save_purpose,
+        content_url=content_url,
+        workspace_id=workspace_id,
+    )
 
 
 def get_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:

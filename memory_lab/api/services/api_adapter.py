@@ -544,11 +544,32 @@ class ApiAdapter:
             workspace_id=workspace_id,
         )
 
-    def save_and_link_to_hub(self, content: str, hub_id: str, workspace_id: Optional[str] = None, workspace_source: Optional[str] = None) -> Dict[str, Any]:
+    def save_and_link_to_hub(
+        self,
+        content: str,
+        hub_id: str,
+        workspace_id: Optional[str] = None,
+        workspace_source: Optional[str] = None,
+        quick_summary: Optional[str] = None,
+        save_purpose: Optional[str] = None,
+        content_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
         created = self.create_content_minimal(content=content, workspace_id=workspace_id, workspace_source=workspace_source)
+        unsupported_fields = {
+            name: "accepted for production MCP signature parity but not persisted by the public minimal content API"
+            for name, value in {"save_purpose": save_purpose, "content_url": content_url}.items()
+            if value is not None
+        }
+        if unsupported_fields:
+            created["unsupported_fields"] = unsupported_fields
         if not created.get("persisted") or not created.get("content_id"):
             return {**created, "linked": False, "hub_id": hub_id}
-        linked = self.link_content(hub_id, created["content_id"], workspace_id=workspace_id)
+        content_id = created["content_id"]
+        if quick_summary is not None:
+            created["quick_summary_result"] = self.set_quick_summary(
+                content_id=content_id, quick_summary=quick_summary, workspace_id=workspace_id
+            )
+        linked = self.link_content(hub_id, content_id, workspace_id=workspace_id)
         return {**created, "linked": True, "hub_link": linked, "hub_id": hub_id}
 
     def get_graph_snapshot(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
