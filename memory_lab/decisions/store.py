@@ -75,6 +75,7 @@ class DecisionStore:
             reversible=row["reversible"],
             confidence_level=row.get("confidence_level") or "medium",
             decision_tags=list(row.get("decision_tags") or []),
+            created_by_subject=row.get("created_by_subject"),
             created_at=row["created_at"],
         )
 
@@ -130,7 +131,7 @@ class DecisionStore:
                 cur.execute(
                     """
                     SELECT decision_id, title, decision_status, reversible,
-                           confidence_level, decision_tags, created_at
+                           confidence_level, decision_tags, created_by_subject, created_at
                       FROM cb_decision_nodes
                      WHERE (%s::uuid IS NULL OR workspace_id = %s::uuid)
                        AND (%s::uuid IS NULL OR %s::uuid = ANY(linked_hub_ids))
@@ -164,7 +165,7 @@ class DecisionStore:
                 cur.execute(
                     f"""
                     SELECT decision_id, title, decision_status, reversible,
-                           confidence_level, decision_tags, created_at
+                           confidence_level, decision_tags, created_by_subject, created_at
                       FROM cb_decision_nodes
                     {where}
                      ORDER BY created_at DESC
@@ -241,37 +242,37 @@ class DecisionStore:
                 cur.execute(
                     """
                     WITH RECURSIVE ancestors AS (
-                        SELECT decision_id, title, decision_status, created_at, supersedes_decision_id, 1 AS depth
+                        SELECT decision_id, title, decision_status, created_at, created_by_subject, supersedes_decision_id, 1 AS depth
                           FROM cb_decision_nodes
                          WHERE decision_id = (SELECT supersedes_decision_id FROM cb_decision_nodes WHERE decision_id = %s::uuid AND (%s::uuid IS NULL OR workspace_id = %s::uuid))
                            AND (%s::uuid IS NULL OR workspace_id = %s::uuid)
                         UNION ALL
-                        SELECT d.decision_id, d.title, d.decision_status, d.created_at, d.supersedes_decision_id, a.depth + 1
+                        SELECT d.decision_id, d.title, d.decision_status, d.created_at, d.created_by_subject, d.supersedes_decision_id, a.depth + 1
                           FROM cb_decision_nodes d JOIN ancestors a ON d.decision_id = a.supersedes_decision_id
                          WHERE a.depth < 10 AND a.supersedes_decision_id IS NOT NULL
                            AND (%s::uuid IS NULL OR d.workspace_id = %s::uuid)
                     ), descendants AS (
-                        SELECT decision_id, title, decision_status, created_at, superseded_by_decision_id, 1 AS depth
+                        SELECT decision_id, title, decision_status, created_at, created_by_subject, superseded_by_decision_id, 1 AS depth
                           FROM cb_decision_nodes
                          WHERE decision_id = (SELECT superseded_by_decision_id FROM cb_decision_nodes WHERE decision_id = %s::uuid AND (%s::uuid IS NULL OR workspace_id = %s::uuid))
                            AND (%s::uuid IS NULL OR workspace_id = %s::uuid)
                         UNION ALL
-                        SELECT d.decision_id, d.title, d.decision_status, d.created_at, d.superseded_by_decision_id, desc2.depth + 1
+                        SELECT d.decision_id, d.title, d.decision_status, d.created_at, d.created_by_subject, d.superseded_by_decision_id, desc2.depth + 1
                           FROM cb_decision_nodes d JOIN descendants desc2 ON d.decision_id = desc2.superseded_by_decision_id
                          WHERE desc2.depth < 10 AND desc2.superseded_by_decision_id IS NOT NULL
                            AND (%s::uuid IS NULL OR d.workspace_id = %s::uuid)
                     )
-                    SELECT 'ancestor' AS role, decision_id, title, decision_status, created_at, depth FROM ancestors
+                    SELECT 'ancestor' AS role, decision_id, title, decision_status, created_at, created_by_subject, depth FROM ancestors
                     UNION ALL
-                    SELECT 'descendant' AS role, decision_id, title, decision_status, created_at, depth FROM descendants
+                    SELECT 'descendant' AS role, decision_id, title, decision_status, created_at, created_by_subject, depth FROM descendants
                     ORDER BY role, depth
                     """,
                     (str(decision_id), workspace_id, workspace_id, workspace_id, workspace_id, workspace_id, workspace_id,
                      str(decision_id), workspace_id, workspace_id, workspace_id, workspace_id, workspace_id, workspace_id),
                 )
                 rows = cur.fetchall()
-        ancestors = [LineageNode(decision_id=str(r["decision_id"]), title=r["title"], decision_status=r["decision_status"], created_at=r["created_at"]) for r in rows if r["role"] == "ancestor"]
-        descendants = [LineageNode(decision_id=str(r["decision_id"]), title=r["title"], decision_status=r["decision_status"], created_at=r["created_at"]) for r in rows if r["role"] == "descendant"]
+        ancestors = [LineageNode(decision_id=str(r["decision_id"]), title=r["title"], decision_status=r["decision_status"], created_by_subject=r.get("created_by_subject"), created_at=r["created_at"]) for r in rows if r["role"] == "ancestor"]
+        descendants = [LineageNode(decision_id=str(r["decision_id"]), title=r["title"], decision_status=r["decision_status"], created_by_subject=r.get("created_by_subject"), created_at=r["created_at"]) for r in rows if r["role"] == "descendant"]
         max_depth = max((r["depth"] for r in rows), default=0)
         return DecisionLineageResponse(decision_id=str(base["decision_id"]), title=base["title"], ancestors=ancestors, descendants=descendants, depth=max_depth, depth_limit_reached=max_depth >= 10)
 

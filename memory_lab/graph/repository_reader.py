@@ -124,6 +124,7 @@ class HubEdgeRecord:
     confidence: Optional[float] = None
     weight: Optional[float] = None
     workspace_id: Optional[str] = None
+    created_by: Optional[str] = None
     archived_at: Optional[datetime] = None
 
 
@@ -490,6 +491,7 @@ class RepositoryGraphHealthReader:
                 confidence=_float_or_none(_get(row, "confidence")),
                 weight=_float_or_none(_get(row, "weight")),
                 workspace_id=_str_or_none(_get(row, "workspace_id")),
+                created_by=_str_or_none(_get(row, "created_by")),
                 archived_at=_get(row, "archived_at"),
             )
             for row in _sorted_rows(rows, "source_hub_id", "target_hub_id", "type")

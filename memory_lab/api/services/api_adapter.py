@@ -680,12 +680,13 @@ class ApiAdapter:
                            ci.memory_type,
                            ci.created_at,
                            ci.updated_at,
+                           ci.created_by_subject,
                            COALESCE(string_agg(ch.chunk_text, E'\\n\\n' ORDER BY ch.chunk_index), '') AS full_text,
                            COALESCE(sum(ch.word_count), 0)::int AS word_count
                       FROM content_items ci
                       LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id
                      WHERE {' AND '.join(conditions)}
-                     GROUP BY ci.content_id, ci.workspace_id, ci.node_type, ci.quick_summary, ci.memory_type, ci.created_at, ci.updated_at
+                     GROUP BY ci.content_id, ci.workspace_id, ci.node_type, ci.quick_summary, ci.memory_type, ci.created_at, ci.updated_at, ci.created_by_subject
                     """,
                     tuple(params),
                 )
@@ -700,6 +701,7 @@ class ApiAdapter:
             "memory_type": row.get("memory_type"),
             "full_text": row.get("full_text") or "",
             "word_count": row.get("word_count") or 0,
+            "created_by_subject": row.get("created_by_subject"),
             "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
             "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
         }

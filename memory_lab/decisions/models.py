@@ -39,6 +39,7 @@ class DecisionSummary(BaseModel):
     reversible: bool
     confidence_level: Optional[str] = None
     decision_tags: List[str] = Field(default_factory=list)
+    created_by_subject: Optional[str] = None
     created_at: datetime
 
 
@@ -80,6 +81,7 @@ class LineageNode(BaseModel):
     decision_id: str
     title: str
     decision_status: str
+    created_by_subject: Optional[str] = None
     created_at: datetime
 
 
