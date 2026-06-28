@@ -11,6 +11,7 @@ from memory_lab.ingestion.scorer import score_content
 from memory_lab.ingestion.classify_pipeline import classify as _classify
 from memory_lab.persistence.body_chunks import persist_body_chunks
 from memory_lab.api.utils.content_signatures import compute_content_hash
+from memory_lab.ingestion.semantic_enrichment import annotate
 from memory_lab.governance.tier_router import route as tier_route
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 
@@ -225,6 +226,24 @@ class ApiAdapter:
             logger.warning("[api_adapter] current-state resolve failed for %s: %s", row["content_id"], exc)
             current_state_meta = {"status": "deferred", "reason": "resolver_error"}
 
+        # T5: optional semantic enrichment - best-effort; the provider is an
+        # implementation detail and a missing/degraded provider never blocks the save.
+        topic_tags: List[str] = []
+        meta_tags: List[str] = []
+        try:
+            annotation = annotate(content or "", domain_hint=classify_meta.get("domain_hint"))
+            topic_tags, meta_tags = annotation.topic_tags, annotation.meta_tags
+            if topic_tags or meta_tags:
+                with self._conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE content_items SET topic_tags = %s, meta_tags = %s WHERE content_id = %s::uuid",
+                            (topic_tags, meta_tags, row["content_id"]),
+                        )
+                        conn.commit()
+        except Exception as exc:
+            logger.warning("[api_adapter] semantic enrichment failed for %s: %s", row["content_id"], exc)
+
         response: Dict[str, Any] = {
             **base_response,
             "content_id": row["content_id"],
@@ -237,6 +256,8 @@ class ApiAdapter:
             "classify_confidence": classify_meta.get("classify_confidence"),
             "classify_mode": classify_meta.get("classify_mode", "heuristic_v1"),
             "classify_status": classify_meta.get("classify_status", "deferred"),
+            "topic_tags": topic_tags,
+            "meta_tags": meta_tags,
         }
         if current_state_meta:
             response.update({

@@ -739,3 +739,40 @@ def test_m10_2_same_content_different_workspace_two_rows(test_dsn, conn):
     assert ra["created"] is True and rb["created"] is True
     assert ra.get("duplicate") is False and rb.get("duplicate") is False
     assert ra["content_id"] != rb["content_id"]
+
+
+def test_m10_3_migration_adds_tag_columns(test_dsn, conn):
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = 'content_items' AND column_name IN ('topic_tags', 'meta_tags')"
+        )
+        cols = {r["column_name"]: r["data_type"] for r in cur.fetchall()}
+    assert "topic_tags" in cols and "meta_tags" in cols
+    assert cols["topic_tags"] == "ARRAY" and cols["meta_tags"] == "ARRAY"
+
+
+def test_m10_3_new_content_persists_tag_arrays_no_key(test_dsn, conn):
+    """No provider key in CI: enrichment falls back deterministically and the
+    save still succeeds; topic_tags/meta_tags are non-null arrays on the row."""
+    ws_id = _insert_workspace(conn)
+    from memory_lab.api.services.api_adapter import ApiAdapter
+    adapter = ApiAdapter(test_dsn)
+
+    resp = adapter.create_content_minimal(
+        content=(
+            "context brain memory milestone governance audit alpha bravo charlie "
+            "delta echo deterministic enrichment integration body"
+        ),
+        workspace_id=ws_id,
+    )
+    assert resp["created"] is True
+    assert "topic_tags" in resp and "meta_tags" in resp
+    cid = resp["content_id"]
+
+    with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
+        cur.execute("SELECT topic_tags, meta_tags FROM content_items WHERE content_id = %s::uuid", (cid,))
+        row = cur.fetchone()
+    assert row["topic_tags"] is not None
+    assert row["meta_tags"] is not None
+    assert isinstance(row["topic_tags"], list)
