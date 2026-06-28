@@ -15,6 +15,30 @@ from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 logger = logging.getLogger(__name__)
 
 
+INFERRED_EDGE_ORIGINS = {"inferred_approved", "ai_suggested"}
+
+
+def _edge_is_inferred(origin):
+    return (origin or "") in INFERRED_EDGE_ORIGINS
+
+
+def filter_snapshot_edges(edges, include_inferred: bool = True, include_curated: bool = True):
+    """Filter snapshot edges by origin class.
+
+    PUBLIC IMPROVEMENT over production (where include_inferred is a documented no-op):
+    inferred = origin in INFERRED_EDGE_ORIGINS (machine-suggested); curated = everything
+    else (manual / migration_localStorage / unset). Both flags default True (backward
+    compatible); both False yields an empty edge list.
+    """
+    result = []
+    for edge in edges:
+        origin = edge.get("origin") if isinstance(edge, dict) else getattr(edge, "origin", None)
+        inferred = _edge_is_inferred(origin)
+        if (inferred and include_inferred) or ((not inferred) and include_curated):
+            result.append(edge)
+    return result
+
+
 class ApiAdapter:
     """Thin adapter over PR1a stores. No runtime side-effects beyond normal store calls."""
 
@@ -572,23 +596,28 @@ class ApiAdapter:
         linked = self.link_content(hub_id, content_id, workspace_id=workspace_id)
         return {**created, "linked": True, "hub_link": linked, "hub_id": hub_id}
 
-    def get_graph_snapshot(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_graph_snapshot(self, include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         from dataclasses import asdict
         from memory_lab.graph.repository_reader import RepositoryGraphHealthReader
 
         reader = RepositoryGraphHealthReader(conn_factory=self._conn, workspace_id=workspace_id)
         snapshot = reader.read_snapshot()
         nodes = [asdict(hub) for hub in snapshot.hubs]
-        edges = [asdict(edge) for edge in snapshot.hub_edges]
+        all_edges = [asdict(edge) for edge in snapshot.hub_edges]
+        edges = filter_snapshot_edges(all_edges, include_inferred=include_inferred, include_curated=include_curated)
+        inferred_count = sum(1 for e in edges if _edge_is_inferred(e.get("origin")))
         return {
             "nodes": nodes,
             "edges": edges,
             "stats": {
                 "node_count": len(nodes),
                 "edge_count": len(edges),
+                "curated_edge_count": len(edges) - inferred_count,
+                "inferred_edge_count": inferred_count,
                 "content_count": len(snapshot.content_records),
                 "hub_content_link_count": len(snapshot.hub_content_links),
             },
+            "filters": {"include_inferred": include_inferred, "include_curated": include_curated},
             "schema_version": "public-m7-v1",
             "workspace_id": workspace_id,
             "limitations": list(snapshot.limitations),

@@ -356,8 +356,12 @@ class MemoryLabApiClient:
         created["hub_id"] = hub_id
         return created
 
-    def graph_snapshot(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-        return self._request("GET", "/v1/graph/snapshot", workspace_id=workspace_id)
+    def graph_snapshot(self, include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        params = {
+            "include_inferred": str(include_inferred).lower(),
+            "include_curated": str(include_curated).lower(),
+        }
+        return self._request("GET", "/v1/graph/snapshot", params=params, workspace_id=workspace_id)
 
     def graph_node_full(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/v1/graph/nodes/{content_id}/full", workspace_id=workspace_id)

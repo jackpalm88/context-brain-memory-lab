@@ -72,3 +72,24 @@ Tally: ~11 expose-only (incl. 4 thin-adapter), 3 implement (1 post-1.0), 2 drop.
 ## Fix-forward corrections required
 - PARITY_AUDIT.md "MCP server tool surface" row says post-1.0/"not implemented" — false; PR1b ships 18 MCP tools. (Corrected.)
 - BLK-07 / handoff "36" production tools — actual is 32. (Corrected in CB + handoff.)
+
+
+## M8D2 update — graph snapshot filter parity (2026-06-28)
+
+Decision (Ritvars): real filters + keep alias. Implemented in commit (M8D2).
+
+- `get_graph_snapshot(include_inferred, include_curated)` — **now functional**, and an
+  INTENTIONAL PUBLIC IMPROVEMENT over production. Production accepts `include_inferred`
+  but treats it as a documented no-op ("signals intent ... currently returns only
+  curated"). Public honors both flags via edge `origin`: inferred = `{inferred_approved,
+  ai_suggested}` (machine-suggested), curated = everything else (`manual`,
+  `migration_localStorage`, unset). Both default True (backward compatible); both False →
+  no edges. Rejected/archived edges remain excluded (reader-level). Stats now expose
+  `curated_edge_count` + `inferred_edge_count`; response carries the applied `filters`.
+- `list_graph_snapshot` — kept as a **flag-forwarding alias** of `get_graph_snapshot`
+  (production parity: it is a pure alias / "spec-canonical name" in production; a distinct
+  paginated surface would be invented, not parity).
+
+Status change: `get_graph_snapshot` was "expose-only (thin adapter)" with non-functional
+filters → now **full + improved**. `list_graph_snapshot` redundancy is **intentional
+parity**, not a defect.

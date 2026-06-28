@@ -255,11 +255,22 @@ def save_and_link_to_hub(
 
 
 def get_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    del include_inferred, include_curated
-    return _call_api(_client().graph_snapshot, workspace_id=workspace_id)
+    """Full graph snapshot: hub nodes + edges, filterable by origin class.
+
+    PUBLIC IMPROVEMENT over production (where include_inferred is a documented no-op):
+    include_inferred toggles machine-suggested edges (origin inferred_approved/ai_suggested),
+    include_curated toggles human edges. Both default True; both False yields no edges.
+    """
+    return _call_api(
+        _client().graph_snapshot,
+        include_inferred=include_inferred,
+        include_curated=include_curated,
+        workspace_id=workspace_id,
+    )
 
 
 def list_graph_snapshot(include_inferred: bool = True, include_curated: bool = True, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Flag-forwarding alias of get_graph_snapshot (production parity: spec-canonical name)."""
     return get_graph_snapshot(include_inferred=include_inferred, include_curated=include_curated, workspace_id=workspace_id)
 
 

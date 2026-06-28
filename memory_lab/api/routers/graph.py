@@ -11,9 +11,17 @@ router = APIRouter(prefix="/v1/graph", tags=["graph"])
 
 
 @router.get("/snapshot")
-def graph_snapshot(auth: AuthContext = Depends(require_permission("hubs.read"))) -> dict:
+def graph_snapshot(
+    include_inferred: bool = True,
+    include_curated: bool = True,
+    auth: AuthContext = Depends(require_permission("hubs.read")),
+) -> dict:
     adapter = ApiAdapter(get_settings().database_url)
-    return adapter.get_graph_snapshot(workspace_id=auth.workspace_id)
+    return adapter.get_graph_snapshot(
+        include_inferred=include_inferred,
+        include_curated=include_curated,
+        workspace_id=auth.workspace_id,
+    )
 
 
 @router.get("/nodes/{content_id}/full")
