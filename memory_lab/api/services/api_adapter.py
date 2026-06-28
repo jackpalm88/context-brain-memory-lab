@@ -326,6 +326,38 @@ class ApiAdapter:
             logger.warning("[api_adapter] classify write failed for %s: %s", content_id, exc)
             return None
 
+    def set_quick_summary(self, content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        conditions = ["content_id = %s::uuid"]
+        params: List[Any] = [quick_summary, content_id]
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            params.append(workspace_id)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    UPDATE content_items
+                       SET quick_summary = %s, updated_at = NOW()
+                     WHERE {' AND '.join(conditions)}
+                    RETURNING content_id::text AS content_id,
+                              workspace_id::text AS workspace_id,
+                              quick_summary,
+                              updated_at
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+
+        if not row:
+            return None
+        return {
+            "content_id": row["content_id"],
+            "workspace_id": row.get("workspace_id"),
+            "quick_summary": row.get("quick_summary"),
+            "updated": True,
+            "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
+        }
+
     def get_content_minimal(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conditions = ["content_id = %s::uuid"]
         params: List[Any] = [content_id]

@@ -17,6 +17,7 @@ from memory_lab.api.workspace_context import WorkspaceContext, resolve_workspace
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     "content.create": {"owner", "admin", "writer", "service_agent"},
     "content.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},
+    "content.update": {"owner", "admin", "writer", "service_agent"},
     "hubs.create": {"owner", "admin", "writer", "service_agent"},
     "hubs.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},
     "hubs.link": {"owner", "admin", "writer", "service_agent"},

@@ -63,6 +63,15 @@ def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) 
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
+def set_quick_summary(content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(
+        _client().set_quick_summary,
+        content_id=content_id,
+        quick_summary=quick_summary,
+        workspace_id=workspace_id,
+    )
+
+
 def memory_lab_hub_create(
     title: str,
     hub_type: Optional[str] = None,
@@ -335,6 +344,7 @@ APPROVED_TOOLS = {
     "memory_lab_health": memory_lab_health,
     "memory_lab_content_create_id": memory_lab_content_create_id,
     "memory_lab_content_get": memory_lab_content_get,
+    "set_quick_summary": set_quick_summary,
     "memory_lab_hub_create": memory_lab_hub_create,
     "memory_lab_hub_get": memory_lab_hub_get,
     "memory_lab_hub_link_content": memory_lab_hub_link_content,

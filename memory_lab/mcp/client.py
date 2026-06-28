@@ -153,6 +153,14 @@ class MemoryLabApiClient:
     def content_get(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/v1/content/{content_id}", workspace_id=workspace_id)
 
+    def set_quick_summary(self, content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request(
+            "PATCH",
+            f"/v1/content/{content_id}/quick-summary",
+            json_body={"quick_summary": quick_summary},
+            workspace_id=workspace_id,
+        )
+
     def hub_create(
         self,
         title: str,
