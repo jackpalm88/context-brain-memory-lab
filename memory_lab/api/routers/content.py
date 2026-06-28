@@ -41,6 +41,16 @@ def get_content(content_id: str, auth: AuthContext = Depends(require_permission(
     return row
 
 
+@router.get("/{content_id}/metadata")
+def get_content_metadata(content_id: str, auth: AuthContext = Depends(require_permission("content.read"))) -> dict:
+    settings = get_settings()
+    adapter = ApiAdapter(settings.database_url)
+    row = adapter.get_content_metadata(content_id, workspace_id=auth.workspace_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="content not found")
+    return row
+
+
 @router.patch("/{content_id}/quick-summary")
 def set_quick_summary(content_id: str, req: QuickSummaryRequest, auth: AuthContext = Depends(require_permission("content.update"))) -> dict:
     settings = get_settings()

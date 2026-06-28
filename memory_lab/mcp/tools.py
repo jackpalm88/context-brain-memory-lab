@@ -72,6 +72,10 @@ def set_quick_summary(content_id: str, quick_summary: str, workspace_id: Optiona
     )
 
 
+def update_node_metadata(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().update_node_metadata, content_id=content_id, workspace_id=workspace_id)
+
+
 def memory_lab_hub_create(
     title: str,
     hub_type: Optional[str] = None,
@@ -345,6 +349,7 @@ APPROVED_TOOLS = {
     "memory_lab_content_create_id": memory_lab_content_create_id,
     "memory_lab_content_get": memory_lab_content_get,
     "set_quick_summary": set_quick_summary,
+    "update_node_metadata": update_node_metadata,
     "memory_lab_hub_create": memory_lab_hub_create,
     "memory_lab_hub_get": memory_lab_hub_get,
     "memory_lab_hub_link_content": memory_lab_hub_link_content,

@@ -23,7 +23,7 @@ M7_TOOL_NAMES = {
 
 def test_m7_tools_are_registered_in_approved_surface_and_server_entrypoint():
     assert M7_TOOL_NAMES.issubset(APPROVED_TOOLS)
-    assert len(APPROVED_TOOLS) == 30
+    assert len(APPROVED_TOOLS) == 31
 
     server_source = Path("memory_lab/mcp/server.py").read_text()
     for name in M7_TOOL_NAMES:

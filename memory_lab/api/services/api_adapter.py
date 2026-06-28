@@ -358,6 +358,47 @@ class ApiAdapter:
             "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
         }
 
+    def get_content_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        conditions = ["ci.content_id = %s::uuid"]
+        params: List[Any] = [content_id]
+        if workspace_id:
+            conditions.append("ci.workspace_id = %s::uuid")
+            params.append(workspace_id)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT ci.content_id::text AS content_id,
+                           ci.node_type,
+                           ci.quick_summary,
+                           ci.memory_type,
+                           dd.domain_name AS domain,
+                           COALESCE(sum(ch.word_count), 0)::int AS word_count,
+                           ci.created_at,
+                           ci.updated_at
+                      FROM content_items ci
+                      LEFT JOIN cb_discovered_domains dd ON dd.domain_id = ci.domain_id
+                      LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id
+                     WHERE {' AND '.join(conditions)}
+                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary, ci.memory_type, dd.domain_name, ci.created_at, ci.updated_at
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+
+        if not row:
+            return None
+        return {
+            "content_id": row["content_id"],
+            "node_type": row.get("node_type"),
+            "quick_summary": row.get("quick_summary"),
+            "memory_type": row.get("memory_type"),
+            "domain": row.get("domain"),
+            "word_count": row.get("word_count") or 0,
+            "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+            "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
+        }
+
     def get_content_minimal(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conditions = ["content_id = %s::uuid"]
         params: List[Any] = [content_id]

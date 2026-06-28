@@ -161,6 +161,12 @@ class MemoryLabApiClient:
             workspace_id=workspace_id,
         )
 
+    def get_content_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/content/{content_id}/metadata", workspace_id=workspace_id)
+
+    def update_node_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self.get_content_metadata(content_id=content_id, workspace_id=workspace_id)
+
     def hub_create(
         self,
         title: str,
