@@ -7,7 +7,7 @@ from psycopg2.extras import RealDictCursor
 
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
 from memory_lab.conflicts.service import search_conflict_candidates
-from memory_lab.reasoning.answer_synthesizer import normalize_evidence
+from memory_lab.query.evidence import normalize_evidence
 
 from .builder import build_context_pack
 from .models import ContextPackBuildRequest, ContextPackBuildResponse, ContextPackOmittedItem

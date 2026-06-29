@@ -8,7 +8,7 @@ from memory_lab.api.config import get_settings
 from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
 from memory_lab.ingestion.classify_pipeline import MEMORY_TYPE_VALUES
-from memory_lab.reasoning.answer_synthesizer import normalize_evidence
+from memory_lab.query.evidence import normalize_evidence
 
 router = APIRouter(prefix="/v1/retrieval", tags=["retrieval"])
 
