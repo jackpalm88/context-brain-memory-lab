@@ -2,18 +2,24 @@
 
 Current package version: `0.2.0a1`.
 
-This document is the compact truth map for the M1–M5 release candidate. It supersedes older B-era documentation as the current release authority while preserving the same public-safety boundaries.
+This document is the compact truth map for the public Memory Lab beta after M10.3. It supersedes older B-era and M1–M5 wording as the current capability/boundary reference while preserving the same public-safety boundaries.
 
 ## Implemented and proven
 
 - **Deterministic empty-env core** — imports, deterministic helpers, and hermetic tests run without provider keys, without private Context Brain access, and without a configured database.
 - **Workspace-aware API and retrieval surfaces** — FastAPI routers and evidence contracts remain public-beta and self-hosted.
+- **MCP parity surface** — 32/32 approved Context Brain-compatible MCP tool names are registered in the public Memory Lab MCP surface.
+- **Content body persistence** — created content bodies are persisted to `content_chunks` through a shared body persistence primitive.
+- **Workspace-scoped content dedup** — content creation computes `content_hash` and uses a workspace-scoped unique index/friendly duplicate response when Postgres persistence is configured.
+- **Deterministic classification and current-state substrate** — public classification/current-state logic remains provider-free and does not claim semantic truth understanding.
+- **Optional semantic annotations** — `topic_tags` and `meta_tags` can be produced as provider-neutral, best-effort enrichment; save/ingest success does not depend on provider availability.
+- **Canonical query/evidence seams** — public query paths now normalize evidence and project `AskResponse` through canonical seams, but this is not private `ask_v2` behavior parity.
 - **Decision, graph, governance, context-pack, and reasoning helpers** — public Memory Lab functionality is packaged in `memory_lab.*` modules.
 - **Opt-in Postgres persistence** — `PostgresPersistenceBackend` is available only when explicitly configured; in-memory persistence remains the empty-env fallback.
 - **Opt-in pgvector retrieval** — pgvector KNN retrieval and embedding storage are gated by migrations/configuration and do not replace deterministic fallback retrieval.
 - **Opt-in provider-backed reasoning** — provider synthesis is disabled by default and requires explicit flags, request opt-in, and runtime provider keys.
 - **Provider adapters** — OpenAI embeddings and Anthropic LLM adapters use deferred imports and degraded/no-key behavior.
-- **M5 live smoke proof** — `scripts/m5_live_smoke.py` proves real OpenAI embeddings, real Anthropic response, throwaway pgvector KNN rank #1, and grounded answer evidence when runtime-only secrets are supplied.
+- **Opt-in live smoke proof** — `scripts/m5_live_smoke.py` remains the opt-in live proof for real OpenAI embeddings, real Anthropic response, throwaway pgvector KNN rank #1, and grounded answer evidence when runtime-only secrets are supplied.
 
 ## What this is
 
@@ -27,6 +33,7 @@ This document is the compact truth map for the M1–M5 release candidate. It sup
 - Not hosted production Context Brain.
 - Not Full/private Context Brain parity.
 - Not private `ask_v2` parity.
+- Not `query_memory` behavior parity with hosted/private Context Brain; current parity is surface/tool coverage plus public-safe query seams, not full private ranking/confidence/debug behavior.
 - Not production tenancy, billing, monitoring, or operations.
 - Not production MCP/GPT Actions deployment readiness.
 - Not provider-backed semantic search or LLM reasoning by default.
@@ -39,4 +46,6 @@ This document is the compact truth map for the M1–M5 release candidate. It sup
 - Postgres: opt-in through explicit database configuration.
 - pgvector: opt-in through explicit flags/migrations and vector-enabled DB.
 - Providers: opt-in through explicit flags, request-level selection where applicable, installed extras/dependencies, and runtime-only keys.
+- Semantic annotations: optional and best-effort; public storage/API should describe provider-neutral annotations, not vendor-specific tags.
+- Save/ingest invariant: body persistence, dedup, deterministic classification, and governance must not require provider availability.
 - Secrets: environment variable names may be documented; secret values, private `.env` files, and DSNs must not be committed or shipped in artifacts.
