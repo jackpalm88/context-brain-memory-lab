@@ -26,7 +26,7 @@ This document is the compact truth map for the public Memory Lab beta after M10.
 - A public Memory Lab beta / release candidate for governed agent-memory experiments.
 - A provider-neutral default runtime and helper library.
 - A self-hosted package with optional DB/vector/provider paths.
-- A release-readiness candidate, not a completed public release until separate push/tag/PyPI/public-announcement approval.
+- A public beta package and architecture reference for governed agent-memory experiments; PyPI publication and public announcement remain separate approvals.
 
 ## What this is not
 
