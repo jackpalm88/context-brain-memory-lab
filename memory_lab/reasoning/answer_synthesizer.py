@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .intent_detector import IntentDetection
-from .models import AskRequest, AskResponse, Citation, Claim, EvidenceItem
+from .models import AskRequest, AskResponse, EvidenceItem
 from .policy_generator import ReasoningPolicy
 
 # normalize_evidence now lives in the neutral canonical query/evidence layer.
@@ -16,11 +16,10 @@ from memory_lab.query.evidence import (  # noqa: F401
 
 
 def _confidence_for(evidence: list[EvidenceItem]) -> tuple[float, str]:
-    if not evidence:
-        return 0.0, "No workspace evidence was retrieved, so no factual confidence is assigned."
-    if len(evidence) == 1:
-        return 0.45, "Conservative deterministic confidence based on one workspace-scoped evidence item."
-    return min(0.7, 0.5 + min(len(evidence), 4) * 0.05), "Conservative deterministic confidence based on multiple workspace-scoped evidence items."
+    """Backward-compatible alias for the ask confidence helper."""
+    from memory_lab.query.ask_projection import ask_confidence_for
+
+    return ask_confidence_for(evidence)
 
 
 def synthesize_answer(
@@ -31,55 +30,27 @@ def synthesize_answer(
     workspace_id: str,
 ) -> AskResponse:
     """Deterministic/noop answer synthesis from evidence snippets only."""
+    from memory_lab.query.ask_projection import (
+        insufficient_evidence_response,
+        successful_ask_response,
+        unsupported_intent_response,
+    )
+
     query = request.normalized_query()
     if detection.intent == "unknown" or not query:
-        return AskResponse(
-            answer="I need a clearer question before I can search workspace evidence.",
-            intent=detection.intent,
-            confidence=0.0,
-            confidence_explanation="The query was empty or unsupported.",
-            degraded=True,
-            insufficient_evidence=True,
-            workspace_id=workspace_id,
-            status="unsupported_intent",
-            failure_reason="unsupported_or_empty_query",
-        )
+        return unsupported_intent_response(intent=detection.intent, workspace_id=workspace_id)
 
     if len(evidence) < max(1, policy.min_evidence_items):
-        return AskResponse(
-            answer="Insufficient workspace evidence was found to answer this question without introducing unsupported facts.",
+        return insufficient_evidence_response(
             intent=detection.intent,
-            confidence=0.0,
-            confidence_explanation="The retrieval step returned too little workspace-scoped evidence for this intent.",
-            citations=[],
-            evidence=evidence if request.include_evidence else [],
-            claims=[],
-            degraded=True,
-            insufficient_evidence=True,
+            evidence=evidence,
+            include_evidence=request.include_evidence,
             workspace_id=workspace_id,
-            status="insufficient_evidence",
-            failure_reason="insufficient_workspace_evidence",
         )
 
-    confidence, explanation = _confidence_for(evidence)
-    citations = [
-        Citation(evidence_id=e.evidence_id, rank=e.rank, content_id=e.content_id, chunk_id=e.chunk_id, score=e.score)
-        for e in evidence
-    ]
-    snippets = [f"[{e.evidence_id}] {e.snippet}" for e in evidence]
-    answer = "Based only on retrieved workspace evidence: " + " ".join(snippets)
-    claims = [Claim(claim=e.snippet, evidence_ids=[e.evidence_id]) for e in evidence]
-    return AskResponse(
-        answer=answer,
+    return successful_ask_response(
         intent=detection.intent,
-        confidence=confidence,
-        confidence_explanation=explanation,
-        citations=citations,
-        evidence=evidence if request.include_evidence else [],
-        claims=claims,
-        degraded=False,
-        insufficient_evidence=False,
+        evidence=evidence,
+        include_evidence=request.include_evidence,
         workspace_id=workspace_id,
-        status="ok",
-        failure_reason=None,
     )
