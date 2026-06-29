@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
+from memory_lab.query.context_pack_adapter import (
+    build_support_only_context_pack_for_ask,
+    evidence_items_from_supporting_context_pack,
+)
 from memory_lab.query.evidence import normalize_evidence
 from memory_lab.reasoning.answer_synthesizer import synthesize_answer
 from memory_lab.reasoning.intent_detector import detect_intent
@@ -32,10 +36,18 @@ class QueryService:
             workspace_id=workspace_id,
         )
         evidence = normalize_evidence(results[: policy.top_k], limit=policy.snippet_char_limit)
+        context_pack = build_support_only_context_pack_for_ask(
+            request=request,
+            workspace_id=workspace_id,
+            query=query,
+            evidence=evidence,
+            limit=policy.top_k,
+        )
+        ask_evidence = evidence_items_from_supporting_context_pack(context_pack)
         return synthesize_answer(
             request=request,
             detection=detection,
             policy=policy,
-            evidence=evidence,
+            evidence=ask_evidence,
             workspace_id=workspace_id,
         )
