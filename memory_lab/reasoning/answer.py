@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-import re
 from typing import Any, Optional
 
 from memory_lab.context_packs.models import ContextPackBuildResponse
+from memory_lab.providers.answer_gate import (
+    EVIDENCE_ID_PATTERN,
+    FORBIDDEN_PROVIDER_TERMS,
+    gate_provider_answer,
+)
 from memory_lab.providers.llm_backend import LLMBackend, LLMRequest
 from memory_lab.providers.noop import NoopLLMBackend
 from memory_lab.reasoning.explain import BASE_LIMITATIONS, BASE_NON_CLAIMS, build_conflict_warnings
@@ -11,8 +15,6 @@ from memory_lab.reasoning.models import ReasoningAnswerResponse, ReasoningProvid
 from memory_lab.reasoning.traverse import build_traversal_steps, collect_evidence_refs
 
 FORBIDDEN_PUBLIC_FIELD_NAMES = {"verdict", "truth_decision", "resolution", "winner", "canonical_truth"}
-FORBIDDEN_PROVIDER_TERMS = {"verdict", "truth decision", "resolution", "winner", "canonical truth"}
-EVIDENCE_ID_PATTERN = re.compile(r"\bev_[A-Za-z0-9_-]+\b")
 
 ANSWER_LIMITATIONS = [
     "B14 returns an evidence-grounded answer candidate only.",
@@ -142,20 +144,13 @@ def provider_synthesize_answer_candidate(
     backend: Optional[LLMBackend] = None,
     provider_synthesis_enabled: bool = True,
 ) -> tuple[str, ReasoningProviderMetadata, Optional[str], str]:
-    """Try explicitly opted-in provider wording through the public LLMBackend ABC only."""
-    if not request.enable_provider_synthesis:
-        return deterministic_candidate, _provider_metadata_without_call(), None, "deterministic"
-    if not provider_synthesis_enabled:
-        metadata = ReasoningProviderMetadata(provider="none", attempted=False, configured=False, degraded=True, failure_reason="provider_disabled")
-        return deterministic_candidate, metadata, "provider_disabled", "degraded"
+    """Try explicitly opted-in provider wording through the shared neutral provider gate.
 
-    llm = backend or NoopLLMBackend()
-    metadata = ReasoningProviderMetadata(
-        provider=llm.provider_name,
-        attempted=True,
-        configured=llm.is_configured,
-        degraded=False,
-    )
+    The decision flow (dual gate, forbidden-term rejection, citation allow-list, typed degraded
+    fallback) lives in memory_lab.providers.answer_gate so the ask/query path shares one
+    implementation. This function only builds the reasoning-specific prompt and maps the neutral
+    ProviderGateResult onto ReasoningProviderMetadata.
+    """
     citation_ids = [_evidence_id(ref) for ref in evidence_refs if _evidence_id(ref)]
     prompt = (
         "Produce a concise evidence-grounded answer_candidate from these evidence snippets only. "
@@ -166,25 +161,26 @@ def provider_synthesize_answer_candidate(
         f"Evidence refs:\n{evidence_refs[:5]}\n\n"
         f"Warnings:\n{conflict_warnings}"
     )
-    response = llm.summarize(
-        LLMRequest(
-            prompt=prompt,
-            system="Public B14 answer-candidate wording only. No private prompts. No conflict decision.",
-            max_tokens=192,
-            temperature=0.0,
-        )
+    result = gate_provider_answer(
+        enable_provider_synthesis=request.enable_provider_synthesis,
+        provider_synthesis_enabled=provider_synthesis_enabled,
+        deterministic_text=deterministic_candidate,
+        allowed_evidence_ids=set(citation_ids),
+        prompt=prompt,
+        system="Public B14 answer-candidate wording only. No private prompts. No conflict decision.",
+        backend=backend,
+        max_tokens=192,
     )
-    metadata.model = response.model or None
-    if response.degraded:
-        metadata.degraded = True
-        metadata.failure_reason = _provider_failure_reason(response)
-        return deterministic_candidate, metadata, metadata.failure_reason, "degraded"
-    text = str(response.text or "").strip()
-    if not _provider_text_allowed(text) or not _provider_citations_allowed(text, evidence_refs):
-        metadata.degraded = True
-        metadata.failure_reason = "provider_output_rejected"
-        return deterministic_candidate, metadata, metadata.failure_reason, "degraded"
-    return text, metadata, None, "provider_backed"
+    metadata = ReasoningProviderMetadata(
+        provider=result.provider_name,
+        attempted=result.attempted,
+        configured=result.configured,
+        degraded=result.degraded,
+        failure_reason=result.failure_reason,
+        model=result.model,
+    )
+    degraded_reason = result.failure_reason if result.mode == "degraded" else None
+    return result.text, metadata, degraded_reason, result.mode
 
 
 def answer_context_pack(

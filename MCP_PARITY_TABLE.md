@@ -124,5 +124,10 @@ Parity character: this is not a blind copy of production. Where production param
 names were misleading, the public version is more honest/functional and the divergence is documented as
 intentional (graph snapshot filters; read-only metadata; deterministic classify). Remaining work is
 deeper BEHAVIOR parity, tracked separately: `content_create_id` (minimal governed insert vs full
-classify/dedup/embedding pipeline) and `query_memory` (deterministic `answer_candidate` vs LLM-grounded
-confidence+citations) — both provider/governance territory.
+classify/dedup/embedding pipeline). `query_memory` behavior parity advanced under OPENCB-M11C-1: the
+public ask path now returns a grounded answer with a declared `mode`
+(`deterministic|provider_backed|degraded`), optional provider-backed wording behind a per-request
+opt-in plus a deployment config gate (`MEMORY_LAB_ASK_PROVIDER_SYNTHESIS_ENABLED`), a citation
+allow-list (no invented citations), and a typed degraded taxonomy. Still NOT private parity:
+provider-derived confidence scoring, full semantic ranking, and `search_raw_chunks` debug
+diagnostics remain private/provider territory.

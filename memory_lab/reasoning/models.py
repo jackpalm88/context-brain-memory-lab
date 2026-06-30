@@ -13,6 +13,9 @@ class AskRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=10)
     include_evidence: bool = True
     degraded_ok: bool = True
+    memory_type: Optional[str] = None
+    memory_types: Optional[List[str]] = None
+    enable_provider_synthesis: bool = False
 
     def normalized_query(self) -> str:
         query = (self.query or "").strip()
@@ -20,6 +23,21 @@ class AskRequest(BaseModel):
         if query and question and query != question:
             return query
         return query or question
+
+    def resolved_memory_types(self) -> Optional[List[str]]:
+        """Merge the optional single memory_type and memory_types into a deduped filter list.
+
+        Returns None when no usable filter is supplied (memory-type-agnostic ask), so the
+        retrieval adapter applies no memory_type restriction.
+        """
+        values: List[str] = []
+        if self.memory_type and self.memory_type.strip():
+            values.append(self.memory_type.strip())
+        for value in self.memory_types or []:
+            if value and value.strip():
+                values.append(value.strip())
+        deduped = list(dict.fromkeys(values))
+        return deduped or None
 
 
 class EvidenceItem(BaseModel):
@@ -62,6 +80,7 @@ class AskResponse(BaseModel):
     workspace_id: str
     status: str
     failure_reason: Optional[str] = None
+    mode: str = "deterministic"
 
 
 class ReasoningRequest(BaseModel):

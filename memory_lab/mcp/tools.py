@@ -150,8 +150,45 @@ def memory_lab_retrieval_search(query: str, limit: Optional[int] = None, workspa
 
 
 
+_QUERY_MEMORY_NO_CONTEXT_STATUSES = {"insufficient_evidence", "unsupported_intent", "no_context"}
+
+
+def _enrich_query_memory_result(result: Any) -> Any:
+    """Guarantee the OPENCB-M11C §5.2 six signals on a successful query_memory result.
+
+    Additive enrichment only: existing AskResponse fields are preserved and three derived
+    signals are added — has_citations, no_context (distinct from an error), and a fallback
+    pointer to the deeper raw-retrieval tool. Structured API errors pass through unchanged so
+    an error stays distinguishable from a no-context outcome.
+    """
+    if not isinstance(result, dict) or result.get("ok") is False:
+        return result
+
+    citations = result.get("citations") or []
+    has_citations = bool(citations)
+    status = result.get("status")
+    no_context = (not has_citations) or status in _QUERY_MEMORY_NO_CONTEXT_STATUSES
+    try:
+        low_confidence = float(result.get("confidence", 0.0)) < 0.5
+    except (TypeError, ValueError):
+        low_confidence = True
+
+    enriched = dict(result)
+    enriched["has_citations"] = has_citations
+    enriched["no_context"] = bool(no_context)
+    enriched["fallback"] = {
+        "recommended_tool": "memory_lab_retrieval_search",
+        "reason": (
+            "For graph/hub-aware retrieval, or when confidence is low or no workspace evidence "
+            "grounded the answer, use raw retrieval."
+        ),
+        "suggested": bool(no_context or low_confidence),
+    }
+    return enriched
+
+
 def query_memory(query: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    return _call_api(_client().ask, query=query, workspace_id=workspace_id)
+    return _enrich_query_memory_result(_call_api(_client().ask, query=query, workspace_id=workspace_id))
 
 
 def list_hubs(status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:

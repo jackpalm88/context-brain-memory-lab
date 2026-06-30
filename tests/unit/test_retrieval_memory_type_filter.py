@@ -259,11 +259,15 @@ class TestAskPathUnaffected:
         default = sig.parameters["memory_types"].default
         assert default is None, "memory_types must default to None so ask path is unaffected"
 
-    def test_ask_request_has_no_memory_type_fields(self):
+    def test_ask_request_has_optional_memory_type_fields_defaulting_to_none(self):
+        # OPENCB-M11C-1 §7.1: the ask path now accepts an OPTIONAL memory_type filter.
+        # The fields default to None and resolved_memory_types() returns None unless explicitly
+        # set, so the deterministic ask path is unaffected when the filter is not used.
         from memory_lab.reasoning.models import AskRequest
         fields = AskRequest.model_fields
-        assert "memory_type" not in fields
-        assert "memory_types" not in fields
+        assert "memory_type" in fields
+        assert "memory_types" in fields
+        assert AskRequest(query="x").resolved_memory_types() is None
 
 
 # ---------------------------------------------------------------------------

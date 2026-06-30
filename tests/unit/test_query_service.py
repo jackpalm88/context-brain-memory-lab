@@ -82,6 +82,7 @@ def test_query_service_preserves_retrieval_kwargs():
             "min_confidence": 0.0,
             "graph_boost": 0.1,
             "workspace_id": WS,
+            "memory_types": None,
         }
     ]
 
@@ -201,4 +202,5 @@ def test_query_service_public_ask_response_does_not_leak_context_pack_internals(
         "workspace_id",
         "status",
         "failure_reason",
+        "mode",
     }
