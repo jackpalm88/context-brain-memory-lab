@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Callable, Optional
+import time
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -25,6 +26,7 @@ class RetrievalAdapter:
             vector_search_fn=self.vector_search_fn,
             rerank_fn=self.rerank_fn,
         )
+        self.last_debug_metadata: Dict[str, Any] = {}
 
     def _conn(self):
         return psycopg2.connect(self.database_url)
@@ -223,7 +225,9 @@ class RetrievalAdapter:
         workspace_id: Optional[str] = None,
         memory_types: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
+        started = time.perf_counter()
         query_vector, embedding_degraded = self._query_embedding(query)
+        pgvector_attempted = bool(self.pgvector_retrieval_enabled)
         if query_vector is not None:
             vector_search = lambda q: self._pgvector_knn_search(q, query_vector, workspace_id=workspace_id, memory_types=memory_types)
         else:
@@ -242,13 +246,75 @@ class RetrievalAdapter:
             if query_vector is None:
                 result.setdefault("retrieval_path", "deterministic_fallback")
                 result.setdefault("embedding_status", embedding_degraded or "provider_disabled")
+        before_hub_count = len(results)
         seen = {str(r.get("content_id") or r.get("id")) for r in results}
-        for row in self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types):
+        hub_candidates = self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types)
+        hub_added = 0
+        for row in hub_candidates:
             rid = str(row.get("content_id") or row.get("id"))
             if rid not in seen:
                 seen.add(rid)
                 results.append(row)
-        return self._deterministic_rerank(results)
+                hub_added += 1
+        reranked = self._deterministic_rerank(results)
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        pgvector_count = sum(1 for row in reranked if row.get("retrieval_mode") == "pgvector_knn" or row.get("retrieval_path") == "pgvector_knn")
+        deterministic_count = sum(1 for row in reranked if row.get("retrieval_mode") == "deterministic_fallback" or row.get("retrieval_path") in {"deterministic_fallback", "content_chunk_workspace_scoped"})
+        graph_count = sum(1 for row in reranked if row.get("_graph_boosted") or bool(row.get("graph_match")) or len(row.get("source_queries") or []) > 1)
+        degraded_reasons = []
+        if embedding_degraded:
+            degraded_reasons.append(embedding_degraded)
+        self.last_debug_metadata = {
+            "stage_metrics": {
+                "adapter_search": {
+                    "attempted": True,
+                    "status": "ok",
+                    "candidate_count": len(reranked),
+                    "output_count": len(reranked),
+                    "duration_ms": duration_ms,
+                    "reason": None,
+                },
+                "deterministic_retrieval": {
+                    "attempted": query_vector is None,
+                    "used": deterministic_count > 0,
+                    "skipped": query_vector is not None,
+                    "output_count": deterministic_count,
+                    "reason": None if deterministic_count else "not_used",
+                },
+                "pgvector": {
+                    "attempted": pgvector_attempted,
+                    "used": pgvector_count > 0,
+                    "skipped": pgvector_count == 0,
+                    "output_count": pgvector_count,
+                    "reason": None if pgvector_count else (embedding_degraded or "provider_disabled"),
+                },
+                "hub_inclusion": {
+                    "attempted": bool(workspace_id),
+                    "used": hub_added > 0,
+                    "skipped": hub_added == 0,
+                    "candidate_count": len(hub_candidates),
+                    "output_count": hub_added,
+                    "reason": None if hub_added else "no_hub_matches",
+                },
+                "graph_expansion": {
+                    "attempted": max_hops > 0,
+                    "used": graph_count > 0,
+                    "skipped": graph_count == 0,
+                    "expanded_query_count": graph_count,
+                    "reason": None if graph_count else "no_expanded_terms",
+                },
+                "dedup_filtering": {
+                    "attempted": True,
+                    "status": "ok",
+                    "input_count": before_hub_count + len(hub_candidates),
+                    "output_count": len(reranked),
+                    "dropped_count": max((before_hub_count + len(hub_candidates)) - len(reranked), 0),
+                    "reason": None,
+                },
+            },
+            "degraded_reasons": degraded_reasons,
+        }
+        return reranked
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
