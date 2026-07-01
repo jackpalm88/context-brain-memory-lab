@@ -145,8 +145,21 @@ def memory_lab_edge_archive(edge_id: str, workspace_id: Optional[str] = None) ->
     return _call_api(_client().edge_archive, edge_id=edge_id, workspace_id=workspace_id)
 
 
-def memory_lab_retrieval_search(query: str, limit: Optional[int] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    return _call_api(_client().retrieval_search, query=query, limit=limit, workspace_id=workspace_id)
+def memory_lab_retrieval_search(
+    query: str,
+    limit: Optional[int] = None,
+    debug: Optional[bool] = None,
+    only_clean: Optional[bool] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _call_api(
+        _client().retrieval_search,
+        query=query,
+        limit=limit,
+        debug=debug,
+        only_clean=only_clean,
+        workspace_id=workspace_id,
+    )
 
 
 

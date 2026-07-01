@@ -232,10 +232,21 @@ class MemoryLabApiClient:
     def edge_archive(self, edge_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("POST", f"/v1/edges/{edge_id}/archive", workspace_id=workspace_id)
 
-    def retrieval_search(self, query: str, limit: Optional[int] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def retrieval_search(
+        self,
+        query: str,
+        limit: Optional[int] = None,
+        debug: Optional[bool] = None,
+        only_clean: Optional[bool] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"query": query}
         if limit is not None:
             payload["limit"] = limit
+        if debug is not None:
+            payload["debug"] = debug
+        if only_clean is not None:
+            payload["only_clean"] = only_clean
         return self._request("POST", "/v1/retrieval/search", json_body=payload, workspace_id=workspace_id)
 
 
