@@ -52,6 +52,13 @@ class EvidenceItem(BaseModel):
     source: Optional[str] = None
     title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    retrieval_reason: Optional[str] = None
+    ranking_reason: Optional[str] = None
+    hub_match: Optional[Any] = None
+    graph_match: Optional[Any] = None
+    knowledge_path: Optional[List[Any]] = None
+    score_components: Optional[Dict[str, Any]] = None
+    distance: Optional[float] = None
 
 
 class Citation(BaseModel):

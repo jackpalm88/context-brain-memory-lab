@@ -221,19 +221,22 @@ class TestBackwardsCompatibility:
         req = RetrievalRequest(query="what is memory", max_hops=1, min_confidence=0.7, graph_boost=0.1)
         assert req.resolved_memory_types() is None
 
-    def test_evidence_item_11_field_contract_unchanged(self):
+    def test_evidence_item_backward_compatible_fields_preserved(self):
         from memory_lab.reasoning.models import EvidenceItem
         required = (
             "evidence_id", "rank", "content_id", "chunk_id",
             "snippet", "score", "score_kind", "retrieval_path",
             "source", "title", "metadata",
         )
+        diagnostics = (
+            "retrieval_reason", "ranking_reason", "hub_match", "graph_match",
+            "knowledge_path", "score_components", "distance",
+        )
         fields = EvidenceItem.model_fields
         for f in required:
             assert f in fields, f"EvidenceItem lost contract field: {f}"
-        assert len(fields) == len(required), (
-            f"EvidenceItem field count changed: expected {len(required)}, got {len(fields)}"
-        )
+        for f in diagnostics:
+            assert f in fields, f"EvidenceItem missing M11C-2-2 diagnostic field: {f}"
 
 
 # ---------------------------------------------------------------------------

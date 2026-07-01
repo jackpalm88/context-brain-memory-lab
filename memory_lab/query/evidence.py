@@ -27,6 +27,11 @@ PROVENANCE_METADATA_KEYS = (
     "distance",
     "score_kind",
     "hub_match",
+    "graph_match",
+    "knowledge_path",
+    "retrieval_reason",
+    "ranking_reason",
+    "score_components",
 )
 
 
@@ -43,6 +48,61 @@ def _provenance_metadata(row: dict[str, Any], *, retrieval_path: str, score_kind
         if value is not None:
             metadata[key] = value
     return metadata
+
+
+def _retrieval_reason(row: dict[str, Any], *, retrieval_path: str) -> str:
+    explicit = row.get("retrieval_reason")
+    if explicit:
+        return str(explicit)
+    if retrieval_path == "content_chunk_workspace_scoped":
+        return "Matched chunk text in workspace-scoped deterministic retrieval."
+    if retrieval_path == "hub_link_workspace_scoped":
+        return "Included through workspace-scoped hub-linked content provenance."
+    if retrieval_path == "pgvector_knn":
+        return "Matched by pgvector nearest-neighbor retrieval."
+    if retrieval_path == "deterministic_fallback":
+        return "Matched by deterministic fallback retrieval after provider/vector search was unavailable."
+    return f"Matched through retrieval path: {retrieval_path}."
+
+
+def _ranking_reason(row: dict[str, Any]) -> str:
+    explicit = row.get("ranking_reason")
+    if explicit:
+        return str(explicit)
+    return "Rank preserves the existing retrieval adapter order; diagnostics did not rerank."
+
+
+def _knowledge_path(row: dict[str, Any], *, content_id: str, chunk_id: str | None, retrieval_path: str) -> list[Any]:
+    explicit = row.get("knowledge_path")
+    if isinstance(explicit, list):
+        return explicit
+    path: list[Any] = [{"type": "retrieval_path", "value": retrieval_path}]
+    hub_match = row.get("hub_match")
+    if hub_match is not None:
+        path.append({"type": "hub", "value": hub_match})
+    graph_match = row.get("graph_match")
+    if graph_match is not None:
+        path.append({"type": "graph", "value": graph_match})
+    path.append({"type": "content", "value": content_id})
+    if chunk_id:
+        path.append({"type": "chunk", "value": chunk_id})
+    return path
+
+
+def _score_components(row: dict[str, Any], *, score: Any, score_kind: str, retrieval_path: str) -> dict[str, Any]:
+    explicit = row.get("score_components")
+    if isinstance(explicit, dict):
+        return {k: v for k, v in explicit.items() if v is not None}
+    components: dict[str, Any] = {
+        "score_kind": score_kind,
+        "retrieval_path": retrieval_path,
+        "diagnostic_only": True,
+    }
+    if score is not None:
+        components["score"] = float(score)
+    if row.get("distance") is not None:
+        components["distance"] = float(row["distance"])
+    return components
 
 
 def normalize_evidence(results: list[dict[str, Any]], limit: int = 320) -> list["EvidenceItem"]:
@@ -86,6 +146,23 @@ def normalize_evidence(results: list[dict[str, Any]], limit: int = 320) -> list[
                 source=row.get("source") or row.get("title"),
                 title=row.get("title"),
                 metadata=metadata or None,
+                retrieval_reason=_retrieval_reason(row, retrieval_path=retrieval_path),
+                ranking_reason=_ranking_reason(row),
+                hub_match=row.get("hub_match"),
+                graph_match=row.get("graph_match"),
+                knowledge_path=_knowledge_path(
+                    row,
+                    content_id=content_id,
+                    chunk_id=chunk_id_str,
+                    retrieval_path=retrieval_path,
+                ),
+                score_components=_score_components(
+                    row,
+                    score=score,
+                    score_kind=score_kind,
+                    retrieval_path=retrieval_path,
+                ),
+                distance=float(row["distance"]) if row.get("distance") is not None else None,
             )
         )
     return evidence
