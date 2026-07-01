@@ -8,6 +8,7 @@ from memory_lab.graph.adapter import CBGraphAdapter
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.store import GraphStore
 from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
+from memory_lab.retrieval.composite_ranker import rank_by_composite
 
 
 class RetrievalAdapter:
@@ -256,7 +257,9 @@ class RetrievalAdapter:
                 seen.add(rid)
                 results.append(row)
                 hub_added += 1
-        reranked = self._deterministic_rerank(results)
+        # OPENCB-M12-1: the composite Scoring Model v2 final_score is the ranking authority
+        # (sort key = (-final_score, distance)), replacing the flat per-path score sort.
+        reranked = rank_by_composite(results, query)
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         pgvector_count = sum(1 for row in reranked if row.get("retrieval_mode") == "pgvector_knn" or row.get("retrieval_path") == "pgvector_knn")
         deterministic_count = sum(1 for row in reranked if row.get("retrieval_mode") == "deterministic_fallback" or row.get("retrieval_path") in {"deterministic_fallback", "content_chunk_workspace_scoped"})
