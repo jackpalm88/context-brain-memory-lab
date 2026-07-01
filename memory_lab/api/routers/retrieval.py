@@ -14,15 +14,28 @@ router = APIRouter(prefix="/v1/retrieval", tags=["retrieval"])
 
 
 class RetrievalRequest(BaseModel):
-    query: str
-    limit: int = Field(default=10, ge=1, le=50)
-    debug: bool = False
-    only_clean: bool = True
-    max_hops: int = 1
-    min_confidence: float = 0.7
-    graph_boost: float = 0.1
-    memory_type: Optional[str] = None
-    memory_types: Optional[List[str]] = None
+    query: str = Field(..., description="Free-text retrieval query.", examples=["What changed in M11C retrieval parity?"])
+    limit: int = Field(default=10, ge=1, le=50, description="Maximum normalized evidence results to return.")
+    debug: bool = Field(
+        default=False,
+        description=(
+            "When true, include safe debug_metadata with descriptive stage_metrics. "
+            "When false, debug_metadata is omitted from the normal response."
+        ),
+    )
+    only_clean: bool = Field(
+        default=True,
+        description=(
+            "Compatibility flag for private search_raw_chunks callers. Public M11C-2 records "
+            "the request in debug filters_applied as an accepted no-op; it does not add a "
+            "private clean/dirty retrieval filter."
+        ),
+    )
+    max_hops: int = Field(default=1, description="Graph traversal hint used by the retrieval adapter; does not imply private graph expansion parity.")
+    min_confidence: float = Field(default=0.7, description="Graph confidence hint forwarded to the retrieval adapter.")
+    graph_boost: float = Field(default=0.1, description="Graph boost hint forwarded to the retrieval adapter; not M12 ranking parity.")
+    memory_type: Optional[str] = Field(default=None, description="Optional single memory type filter. Mutually exclusive with memory_types.")
+    memory_types: Optional[List[str]] = Field(default=None, description="Optional list of memory type filters. Mutually exclusive with memory_type.")
 
     @model_validator(mode="after")
     def _validate_memory_type_filter(self):
@@ -217,8 +230,14 @@ def _debug_metadata(
     }
 
 
-@router.post("/search")
+@router.post("/search", summary="Search raw retrieval evidence")
 def retrieval_search(req: RetrievalRequest, auth: AuthContext = Depends(require_permission("retrieval.search"))) -> dict:
+    """Return a public M11C retrieval envelope.
+
+    `debug=false` omits debug metadata. `debug=true` adds safe descriptive
+    stage_metrics for observability only; it does not change retrieval, ranking,
+    scoring, provider behavior, graph expansion, or normalized evidence shape.
+    """
     settings = get_settings()
     adapter = RetrievalAdapter(settings.database_url)
     results = adapter.search(

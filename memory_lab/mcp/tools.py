@@ -152,6 +152,29 @@ def memory_lab_retrieval_search(
     only_clean: Optional[bool] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Search raw Memory Lab retrieval evidence.
+
+    Public analogue of Context Brain `search_raw_chunks`. Returns the structured
+    retrieval envelope introduced in M11C-2, including normalized evidence results
+    with provenance, retrieval/ranking reasons, hub/graph matches, knowledge paths,
+    score components, and distance when available.
+
+    Parameters:
+    - query: required free-text query.
+    - limit: optional result cap forwarded to `/v1/retrieval/search`.
+    - debug: optional flag; when true, returns safe `debug_metadata.stage_metrics`
+      for adapter_search, normalize, deterministic retrieval, pgvector, hub inclusion,
+      graph expansion, dedup/filtering, and degraded reasons. When false/omitted,
+      the normal response stays clean and omits `debug_metadata`.
+    - only_clean: compatibility flag accepted by the public API; currently reported
+      in debug `filters_applied` as an accepted no-op rather than a private clean/dirty
+      filter.
+    - workspace_id: optional workspace override for the API request context.
+
+    Note: API-level `memory_type`/`memory_types` filters exist on
+    `/v1/retrieval/search`, but this MCP wrapper does not forward them in M11C-2-4;
+    adding MCP filter parameters is a future behavior/shape change, not docs polish.
+    """
     return _call_api(
         _client().retrieval_search,
         query=query,

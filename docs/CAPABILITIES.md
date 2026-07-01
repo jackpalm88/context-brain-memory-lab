@@ -2,7 +2,7 @@
 
 Current package version: `0.2.0a1`.
 
-This document is the compact truth map for the public Memory Lab beta after M10.3. It supersedes older B-era and M1–M5 wording as the current capability/boundary reference while preserving the same public-safety boundaries.
+This document is the compact truth map for the public Memory Lab beta after M11C-2-4. It supersedes older B-era and M1–M5 wording as the current capability/boundary reference while preserving the same public-safety boundaries.
 
 ## Implemented and proven
 
@@ -13,10 +13,11 @@ This document is the compact truth map for the public Memory Lab beta after M10.
 - **Workspace-scoped content dedup** — content creation computes `content_hash` and uses a workspace-scoped unique index/friendly duplicate response when Postgres persistence is configured.
 - **Deterministic classification and current-state substrate** — public classification/current-state logic remains provider-free and does not claim semantic truth understanding.
 - **Optional semantic annotations** — `topic_tags` and `meta_tags` can be produced as provider-neutral, best-effort enrichment; save/ingest success does not depend on provider availability.
-- **Canonical query/evidence seams + opt-in grounded answer** — public query paths normalize evidence, project `AskResponse` through canonical seams, declare a `mode` (`deterministic|provider_backed|degraded`), and accept an optional `memory_type` filter. When explicitly opted in per request and enabled by deployment config, the answer is provider-backed wording bounded to retrieved evidence, enforced by a citation allow-list (no invented citations) and a typed degraded fallback. This is bounded evidence-grounded wording, not private `ask_v2` ranking/confidence/debug parity.
+- **Canonical query/evidence seams + opt-in grounded answer** — public query paths normalize evidence, project `AskResponse` through canonical seams, declare a `mode` (`deterministic|provider_backed|degraded`), and accept optional `memory_type`/`memory_types` filters. When explicitly opted in per request and enabled by deployment config, the answer is provider-backed wording bounded to retrieved evidence, enforced by a citation allow-list (no invented citations) and a typed degraded fallback. This is bounded evidence-grounded wording, not private `ask_v2` ranking/confidence parity.
 - **Decision, graph, governance, context-pack, and reasoning helpers** — public Memory Lab functionality is packaged in `memory_lab.*` modules.
 - **Opt-in Postgres persistence** — `PostgresPersistenceBackend` is available only when explicitly configured; in-memory persistence remains the empty-env fallback.
 - **Opt-in pgvector retrieval** — pgvector KNN retrieval and embedding storage are gated by migrations/configuration and do not replace deterministic fallback retrieval.
+- **M11C raw retrieval parity surface** — `memory_lab_retrieval_search` / `/v1/retrieval/search` expose a public `search_raw_chunks` analogue with a structured retrieval envelope, normalized evidence metadata, per-result diagnostics (`retrieval_reason`, `ranking_reason`, `hub_match`, `graph_match`, `knowledge_path`, `score_components`, `distance`), and opt-in safe `debug_metadata.stage_metrics` for adapter search, normalize, deterministic retrieval, pgvector, hub inclusion, graph expansion, dedup/filtering, and degraded reasons. These diagnostics are descriptive observability, not ranking parity.
 - **Opt-in provider-backed reasoning** — provider synthesis is disabled by default and requires explicit flags, request opt-in, and runtime provider keys.
 - **Provider adapters** — OpenAI embeddings and Anthropic LLM adapters use deferred imports and degraded/no-key behavior.
 - **Opt-in live smoke proof** — `scripts/m5_live_smoke.py` remains the opt-in live proof for real OpenAI embeddings, real Anthropic response, throwaway pgvector KNN rank #1, and grounded answer evidence when runtime-only secrets are supplied.
@@ -33,7 +34,7 @@ This document is the compact truth map for the public Memory Lab beta after M10.
 - Not hosted production Context Brain.
 - Not Full/private Context Brain parity.
 - Not private `ask_v2` parity.
-- Not full `query_memory` behavior parity with hosted/private Context Brain. OPENCB-M11C-1 added an opt-in, deployment-gated, provider-backed grounded-answer mode (declared `mode`, citation allow-list, typed degraded taxonomy) on top of the deterministic core — but it does not replicate private provider-derived confidence scoring, full semantic ranking, or `search_raw_chunks` debug diagnostics.
+- Not full `query_memory` behavior parity with hosted/private Context Brain. OPENCB-M11C-1 added an opt-in, deployment-gated, provider-backed grounded-answer mode (declared `mode`, citation allow-list, typed degraded taxonomy) on top of the deterministic core. OPENCB-M11C-2 added a public raw retrieval envelope, result diagnostics, and opt-in safe stage metrics. This still does not replicate private provider-derived confidence scoring or full semantic/ranking parity.
 - Intentional divergence (deferred decision): an unhandled server error surfaces as a standard HTTP 500, not a private-style typed 200 ask body with `status="error"`. FastAPI-native error semantics are preferred for a public API; the private `ask_v2` typed-unhandled-exception precedent was deliberately not copied in M11C-1.
 - Not production tenancy, billing, monitoring, or operations.
 - Not production MCP/GPT Actions deployment readiness.

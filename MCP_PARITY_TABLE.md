@@ -129,5 +129,33 @@ public ask path now returns a grounded answer with a declared `mode`
 (`deterministic|provider_backed|degraded`), optional provider-backed wording behind a per-request
 opt-in plus a deployment config gate (`MEMORY_LAB_ASK_PROVIDER_SYNTHESIS_ENABLED`), a citation
 allow-list (no invented citations), and a typed degraded taxonomy. Still NOT private parity:
-provider-derived confidence scoring, full semantic ranking, and `search_raw_chunks` debug
-diagnostics remain private/provider territory.
+provider-derived confidence scoring and full semantic ranking remain private/provider territory.
+OPENCB-M11C-2 later added a public `search_raw_chunks` analogue with retrieval envelope,
+per-result diagnostics, and opt-in safe stage metrics; those diagnostics are descriptive
+observability only and are not M12 ranking parity.
+
+
+## M11C-2 update — raw retrieval MCP polish status (2026-07-01)
+
+M11C-2 completed the public raw retrieval parity surface without claiming ranking parity:
+
+- `memory_lab_retrieval_search` remains the public MCP analogue of production
+  `search_raw_chunks`.
+- `/v1/retrieval/search` accepts `query`, `limit`, `debug`, `only_clean`,
+  `max_hops`, `min_confidence`, `graph_boost`, and API-level
+  `memory_type`/`memory_types` filters.
+- The MCP wrapper currently forwards `query`, `limit`, `debug`, `only_clean`,
+  and `workspace_id`. API-level `memory_type`/`memory_types` filters are
+  documented but are not added to the MCP wrapper in M11C-2-4 because that
+  would be a tool-shape/behavior change, not documentation polish.
+- `debug=false` keeps the normal response clean. `debug=true` exposes safe
+  `debug_metadata.stage_metrics` for adapter search, normalize, deterministic
+  retrieval, pgvector, hub inclusion, graph expansion, dedup/filtering counts,
+  and degraded reasons.
+- Per-result diagnostics include provenance, retrieval path/reason, ranking
+  reason, hub/graph matches, knowledge path, score components, and distance
+  when available.
+
+Boundary: M11C-2 diagnostics are descriptive observability. They do not change
+retrieval behavior, scoring, provider behavior, graph expansion, or ranking.
+M12 ranking parity remains a separate future milestone.
