@@ -26,6 +26,7 @@ PROVENANCE_METADATA_KEYS = (
     "embedding_status",
     "distance",
     "score_kind",
+    "hub_match",
 )
 
 

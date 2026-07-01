@@ -368,3 +368,26 @@ class TestRetrievalProvenanceMetadata:
         assert evidence[0].metadata["retrieval_path"] == "content_chunk_workspace_scoped"
         assert evidence[0].metadata["embedding_status"] == "provider_disabled"
         assert evidence[0].metadata["score_kind"] == "chunk_text_match"
+
+    def test_normalized_evidence_preserves_hub_match_with_existing_metadata(self):
+        rows = [
+            _row(
+                "cid-hub",
+                None,
+                "hub-linked workspace evidence",
+                retrieval_path="hub_link_workspace_scoped",
+            )
+            | {
+                "hub_match": "hub-123",
+                "retrieval_mode": "hub_linked",
+                "metadata": {"existing": "kept"},
+            }
+        ]
+
+        evidence = normalize_evidence(rows)
+
+        assert evidence[0].metadata["existing"] == "kept"
+        assert evidence[0].metadata["hub_match"] == "hub-123"
+        assert evidence[0].metadata["retrieval_mode"] == "hub_linked"
+        assert evidence[0].metadata["retrieval_path"] == "hub_link_workspace_scoped"
+        assert evidence[0].metadata["score_kind"] == "hub_link"
