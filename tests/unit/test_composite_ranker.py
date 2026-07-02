@@ -127,3 +127,36 @@ def test_p8_hub_term_corroboration_is_acceptance_property_not_new_invariant():
 
     assert order.index("HUB_CORROBORATED") < order.index("HUB_ONLY")
     assert ranked[0]["final_score"] > ranked[1]["final_score"]
+
+def test_p9_graph_provenance_signal_is_acceptance_property_not_new_invariant():
+    # P9 validates that existing graph provenance is fed to the composite scorer.
+    # It is an Acceptance Suite property, not Doctrine invariant #6: when otherwise
+    # comparable candidates differ only by graph corroboration, the graph-corroborated
+    # candidate must not rank below the candidate without graph corroboration.
+    rows = [
+        {
+            "content_id": "NO_GRAPH",
+            "chunk_id": "chk-no-graph",
+            "text": "alpha beta",
+            "score": 0.7,
+            "retrieval_path": "content_chunk_workspace_scoped",
+        },
+        {
+            "content_id": "GRAPH_CORROBORATED",
+            "chunk_id": "chk-graph-corroborated",
+            "text": "alpha beta",
+            "score": 0.7,
+            "knowledge_path": [
+                {"type": "query", "value": "alpha beta"},
+                {"type": "graph", "value": "corroborated concept"},
+                {"type": "content", "value": "GRAPH_CORROBORATED"},
+            ],
+            "retrieval_path": "content_chunk_workspace_scoped",
+        },
+    ]
+
+    ranked = rank_by_composite(rows, QUERY)
+    order = [r["content_id"] for r in ranked]
+
+    assert order.index("GRAPH_CORROBORATED") < order.index("NO_GRAPH")
+    assert ranked[0]["final_score"] > ranked[1]["final_score"]

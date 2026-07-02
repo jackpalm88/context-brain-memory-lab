@@ -51,11 +51,34 @@ def _rank_distance(row: Dict[str, Any]) -> float:
     return _HUB_ONLY_DISTANCE
 
 
+def _graph_signal(row: Dict[str, Any]) -> List[str]:
+    """Resolve graph provenance fed to Scoring Model v2.
+
+    M12-2B is metadata feed only: consume existing ``graph_match`` first, then
+    fall back to already-attached ``knowledge_path`` graph entries when present.
+    No candidate expansion, rescue, boost, or formula changes happen here.
+    """
+    signal = _as_list(row.get("graph_match"))
+    if signal:
+        return signal
+
+    path = row.get("knowledge_path") or []
+    graph_terms: List[str] = []
+    for item in path if isinstance(path, list) else []:
+        if isinstance(item, dict):
+            value = item.get("value") or item.get("node") or item.get("term")
+            if value:
+                graph_terms.append(str(value))
+        elif isinstance(item, str) and item.startswith("graph:"):
+            graph_terms.append(item.split(":", 1)[1])
+    return graph_terms
+
+
 def _score_row(row: Dict[str, Any], query_tokens) -> tuple[float, float]:
     distance = _rank_distance(row)
     sc = compute_chunk_score(
         distance=distance,
-        graph_match=_as_list(row.get("graph_match")),
+        graph_match=_graph_signal(row),
         hub_match=_as_list(row.get("hub_match")),
         hub_aliases=_as_list(row.get("hub_aliases")),          # DP2: empty -> hub_score base 0.30
         hub_related_terms=_as_list(row.get("hub_related_terms")),
