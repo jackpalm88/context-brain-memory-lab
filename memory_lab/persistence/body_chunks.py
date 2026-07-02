@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
 
@@ -26,6 +26,81 @@ class ChunkWriteResult:
     uses_vector_db: bool = False
     warnings: Tuple[str, ...] = ()
 
+
+
+
+@dataclass
+class MultiChunkWriteResult:
+    """Result of a multi-chunk persist operation (EMB-1B)."""
+    chunks_written: int = 0
+    embeddings_attempted: int = 0
+    embeddings_stored: int = 0
+    warnings: Tuple[str, ...] = ()
+
+
+def persist_multi_chunks(
+    cur: Any,
+    content_id: str,
+    workspace_id: Optional[str],
+    chunks: "Sequence[Tuple[int, str]]",
+    *,
+    embedding_backend: Optional[EmbeddingBackend] = None,
+    vector_enabled: bool = False,
+) -> MultiChunkWriteResult:
+    """Replace all chunks for content_id with the supplied sequence (idempotent).
+
+    chunks is a sequence of (index, text) pairs in ascending index order.
+    Deletes all existing content_chunks rows for the content_id before inserting,
+    so this is a full replace, not an append.
+
+    Embedding is opt-in and best-effort per chunk — a failure on one chunk does
+    not prevent the others from being persisted.  Never raises on a
+    missing/disabled provider.
+    """
+    from typing import Sequence as _Seq  # local import to avoid circular
+    cur.execute(
+        "DELETE FROM content_chunks WHERE content_id = %s::uuid",
+        (content_id,),
+    )
+    if not chunks:
+        return MultiChunkWriteResult()
+
+    embeddings_attempted = 0
+    embeddings_stored = 0
+    all_warnings: list[str] = []
+
+    for index, text in chunks:
+        if not text:
+            continue
+        word_count = len(text.split())
+        cur.execute(
+            """
+            INSERT INTO content_chunks (content_id, workspace_id, chunk_index, chunk_text, word_count)
+            VALUES (%s::uuid, %s::uuid, %s, %s, %s)
+            RETURNING chunk_id::text
+            """,
+            (content_id, workspace_id, index, text, word_count),
+        )
+        chunk_id = _first_value(cur.fetchone())
+
+        if vector_enabled and embedding_backend is not None:
+            embeddings_attempted += 1
+            embed_warning = _maybe_store_chunk_embedding(
+                cur, chunk_id, text,
+                embedding_backend=embedding_backend,
+                vector_enabled=vector_enabled,
+            )
+            if embed_warning is None:
+                embeddings_stored += 1
+            elif embed_warning not in ("provider_disabled",):
+                all_warnings.append(f"chunk[{index}]: {embed_warning}")
+
+    return MultiChunkWriteResult(
+        chunks_written=len([t for _, t in chunks if t]),
+        embeddings_attempted=embeddings_attempted,
+        embeddings_stored=embeddings_stored,
+        warnings=tuple(all_warnings),
+    )
 
 def _first_value(row: Any) -> Any:
     """Extract the single RETURNING value cursor-agnostically.

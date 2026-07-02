@@ -9,7 +9,8 @@ from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.hub_edge_store import HubEdgeStore
 from memory_lab.ingestion.scorer import score_content
 from memory_lab.ingestion.classify_pipeline import classify as _classify
-from memory_lab.persistence.body_chunks import persist_body_chunks
+from memory_lab.persistence.body_chunks import persist_body_chunks, persist_multi_chunks
+from memory_lab.ingestion.chunking import DeterministicContentChunker
 from memory_lab.api.utils.content_signatures import compute_content_hash
 from memory_lab.ingestion.semantic_enrichment import annotate
 from memory_lab.governance.tier_router import route as tier_route
@@ -188,17 +189,19 @@ class ApiAdapter:
                 )
                 conn.commit()
 
-        # M10.1: persist submitted body as content_chunks (chunk_index 0). Best-effort;
-        # embedding is opt-in/provider-gated. Backend None or not configured → deterministic
-        # text-only path. Embedding failure is never transactional: content is always saved.
+        # M10.1 / EMB-1B: split body into deterministic chunks, persist all, embed per chunk.
+        # Best-effort: embedding failure never blocks save. Deterministic chunker is provider-free.
         with self._conn() as conn:
             with conn.cursor() as cur:
                 _eb = getattr(self, "embedding_backend", None)
-                chunk_result = persist_body_chunks(
+                _chunker = DeterministicContentChunker()
+                _chunking = _chunker.chunk_text(content or "")
+                _chunks = [(c.index, c.text) for c in _chunking.chunks] if _chunking.chunks else [(0, content or "")]
+                chunk_result = persist_multi_chunks(
                     cur,
                     row["content_id"],
                     workspace_id,
-                    content or "",
+                    _chunks,
                     embedding_backend=_eb,
                     vector_enabled=_eb is not None and _eb.is_configured,
                 )
