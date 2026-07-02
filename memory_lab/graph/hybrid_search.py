@@ -3,6 +3,12 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from .expansion import expand_query
 from .store import GraphStore
 
+# M12-3B: non-zero graph rescue admission constants.
+# Module-level constants (not runtime parameters) ensure the rescue gate is
+# deterministic and not caller-configurable, preserving Doctrine #4.
+_MIN_PRIMARY_FLOOR: int = 3   # rescue activates only when primary count < this
+_MAX_RESCUE_ADD: int = 2      # max graph-rescue candidates admitted per call
+
 VectorSearchFn = Callable[[str], List[Dict[str, Any]]]
 RerankFn = Callable[[List[Dict[str, Any]]], List[Dict[str, Any]]]
 
@@ -109,6 +115,56 @@ def hybrid_search(
         for term in new_terms:
             rescue_query = f"{query} {term}"
             add_results(vector_search_fn(rescue_query), rescue_query, rescued=True)
+
+    # M12-3B: non-zero graph rescue — controlled shortage-fill only.
+    # Activates when primary retrieval returned candidates but fewer than
+    # _MIN_PRIMARY_FLOOR, indicating a thin result set that may benefit from
+    # adjacent graph-linked evidence.
+    #
+    # Admission rules (all must hold):
+    #   1. primary count > 0 and < _MIN_PRIMARY_FLOOR
+    #   2. rescue candidate passes workspace-scope check (enforced by add_results)
+    #   3. candidate has >= 1 matched graph term in its text (text-corroboration)
+    #   4. at most _MAX_RESCUE_ADD candidates admitted
+    #   5. content-level dedup: if candidate already in seen_keys, only graph
+    #      provenance is merged onto the existing row (no duplicate row added)
+    elif 0 < len(all_results) < _MIN_PRIMARY_FLOOR:
+        rescue_added = 0
+        for term in new_terms:
+            if rescue_added >= _MAX_RESCUE_ADD:
+                break
+            rescue_candidates = vector_search_fn(f"{query} {term}")
+            for original in rescue_candidates:
+                if rescue_added >= _MAX_RESCUE_ADD:
+                    break
+                r = dict(original)
+                if workspace_id and r.get("workspace_id") and str(r.get("workspace_id")) != str(workspace_id):
+                    continue
+                matched = _matched_graph_terms(r, new_terms)
+                if not matched:
+                    # No text corroboration — reject. Hub-link-only candidates
+                    # must not be admitted (Doctrine #1: hub is not authority).
+                    continue
+                key = _candidate_key(r)
+                rid = _content_value(r)
+                if key in seen_keys:
+                    # Content-level dedup: enrich existing row with graph provenance
+                    # only; do NOT add a duplicate row. The existing row retains its
+                    # original retrieval_path and does NOT gain graph_rescue=True.
+                    for existing in all_results:
+                        if _candidate_key(existing) == key:
+                            _merge_graph_terms(existing, matched, query, rid)
+                            break
+                else:
+                    # New candidate — admit with non-zero rescue provenance.
+                    seen_keys.add(key)
+                    r["retrieval_path"] = "graph_rescue_nonzero_workspace_scoped"
+                    r["graph_rescue"] = True
+                    r["source_queries"] = [f"{query} {term}"]
+                    r["graph_match"] = matched
+                    _merge_graph_terms(r, matched, query, rid)
+                    all_results.append(r)
+                    rescue_added += 1
 
     for r in all_results:
         query_count = len(r["source_queries"])
