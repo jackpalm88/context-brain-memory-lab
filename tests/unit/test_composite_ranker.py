@@ -93,3 +93,37 @@ def test_sort_tiebreak_prefers_smaller_distance():
 def test_empty_rows_and_empty_query_are_safe():
     assert rank_by_composite([], QUERY) == []
     assert rank_by_composite([_pgvector("P", 0.2, "alpha")], "") != []
+
+def test_p8_hub_term_corroboration_is_acceptance_property_not_new_invariant():
+    # P8 validates Doctrine #1 (hub is provenance, not authority) as an Acceptance
+    # Suite property: when two hub-linked candidates under the same hub differ only
+    # by hub-term textual corroboration, the corroborated candidate must not rank
+    # below the non-corroborated candidate.
+    rows = [
+        {
+            "content_id": "HUB_ONLY",
+            "chunk_id": "chk-hub-only",
+            "text": "ordinary unrelated operational note",
+            "score": 0.95,
+            "hub_match": "hub-1",
+            "hub_aliases": ["durable continuity"],
+            "hub_related_terms": ["session recall"],
+            "retrieval_path": "hub_link_workspace_scoped",
+        },
+        {
+            "content_id": "HUB_CORROBORATED",
+            "chunk_id": "chk-hub-corroborated",
+            "text": "ordinary durable continuity operational note",
+            "score": 0.95,
+            "hub_match": "hub-1",
+            "hub_aliases": ["durable continuity"],
+            "hub_related_terms": ["session recall"],
+            "retrieval_path": "hub_link_workspace_scoped",
+        },
+    ]
+
+    ranked = rank_by_composite(rows, "neutral query")
+    order = [r["content_id"] for r in ranked]
+
+    assert order.index("HUB_CORROBORATED") < order.index("HUB_ONLY")
+    assert ranked[0]["final_score"] > ranked[1]["final_score"]

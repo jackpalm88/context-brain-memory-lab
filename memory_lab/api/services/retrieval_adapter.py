@@ -136,6 +136,12 @@ class RetrievalAdapter:
                     "score": 0.95,
                     "text": row.get("text") or "",
                     "hub_match": hub["hub_id"],
+                    # OPENCB-M12-2A: feed real hub metadata into the composite scorer.
+                    # This does not change the ranking formula or make hubs authoritative;
+                    # it lets Scoring Model v2 distinguish hub-linked-only rows from
+                    # hub-linked rows whose text corroborates hub aliases/related terms.
+                    "hub_aliases": list(hub.get("aliases") or []),
+                    "hub_related_terms": list(hub.get("related_terms") or []),
                     "retrieval_path": "hub_link_workspace_scoped",
                 }
             )
