@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 /reports/
 /LEGACY_CLONES.txt
+
+# secrets — never commit
+.env
+.env.*
+!.env.*.template
