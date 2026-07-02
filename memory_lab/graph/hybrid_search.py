@@ -18,6 +18,39 @@ def _matched_graph_terms(result: Dict[str, Any], graph_terms: List[str]) -> List
     return [term for term in graph_terms if term.lower() in text]
 
 
+def _candidate_key(result: Dict[str, Any]) -> str:
+    """Stable dedup key used before rerank.
+
+    Prefer chunk identity when present; fall back to content identity. Workspace is
+    included so candidates are never merged across workspace boundaries.
+    """
+    workspace = str(result.get("workspace_id") or "")
+    content_id = str(result.get("content_id") or result.get("id") or result.get("entry_id") or "")
+    chunk_id = result.get("chunk_id")
+    if chunk_id:
+        return f"{workspace}:chunk:{content_id}:{chunk_id}"
+    return f"{workspace}:content:{content_id}"
+
+
+def _content_value(result: Dict[str, Any]) -> str:
+    return str(result.get("id", result.get("entry_id", result.get("content_id", ""))))
+
+
+def _merge_graph_terms(existing: Dict[str, Any], graph_terms: List[str], query: str, content_value: str) -> None:
+    if not graph_terms:
+        return
+    merged = list(existing.get("graph_match") or [])
+    for term in graph_terms:
+        if term not in merged:
+            merged.append(term)
+    existing["graph_match"] = merged
+    existing["knowledge_path"] = [
+        {"type": "query", "value": query},
+        *[{"type": "graph", "value": t} for t in merged],
+        {"type": "content", "value": content_value},
+    ]
+
+
 def hybrid_search(
     query: str,
     graph: GraphStore,
@@ -31,48 +64,51 @@ def hybrid_search(
 ) -> List[Dict[str, Any]]:
     terms = query.lower().split()
     expanded_terms = expand_query(terms, graph, max_hops, min_confidence, workspace_id=workspace_id)
-
     new_terms = [t for t in expanded_terms if t not in terms][:max_expanded_queries]
-    expanded_queries = [query] + [f"{query} {t}" for t in new_terms]
 
     all_results: List[Dict[str, Any]] = []
-    seen_ids: Set[str] = set()
+    seen_keys: Set[str] = set()
 
-    for q in expanded_queries:
-        for r in vector_search_fn(q):
+    def add_results(rows: List[Dict[str, Any]], source_query: str, rescued: bool = False) -> None:
+        for original in rows:
+            r = dict(original)
             if workspace_id and r.get("workspace_id") and str(r.get("workspace_id")) != str(workspace_id):
                 continue
-            rid = str(r.get("id", r.get("entry_id", r.get("content_id", ""))))
-            if rid not in seen_ids:
-                seen_ids.add(rid)
-                r["source_queries"] = [q]
+            key = _candidate_key(r)
+            rid = _content_value(r)
+            graph_terms = _matched_graph_terms(r, new_terms)
+            if key not in seen_keys:
+                seen_keys.add(key)
+                r["source_queries"] = [source_query]
                 r["_graph_boosted"] = False
-                r["graph_match"] = _matched_graph_terms(r, new_terms)
-                if r["graph_match"]:
-                    r["knowledge_path"] = [
-                        {"type": "query", "value": query},
-                        *[{"type": "graph", "value": t} for t in r["graph_match"]],
-                        {"type": "content", "value": rid},
-                    ]
+                if rescued:
+                    r["retrieval_path"] = "graph_rescue_zero_result_workspace_scoped"
+                    r["graph_rescue"] = True
+                r["graph_match"] = graph_terms
+                _merge_graph_terms(r, graph_terms, query, rid)
                 all_results.append(r)
             else:
                 for existing in all_results:
-                    eid = str(existing.get("id", existing.get("entry_id", existing.get("content_id", ""))))
-                    if eid == rid and q not in existing["source_queries"]:
-                        existing["source_queries"].append(q)
-                        graph_terms = _matched_graph_terms(existing, new_terms)
-                        if graph_terms:
-                            merged = list(existing.get("graph_match") or [])
-                            for term in graph_terms:
-                                if term not in merged:
-                                    merged.append(term)
-                            existing["graph_match"] = merged
-                            existing["knowledge_path"] = [
-                                {"type": "query", "value": query},
-                                *[{"type": "graph", "value": t} for t in merged],
-                                {"type": "content", "value": rid},
-                            ]
+                    if _candidate_key(existing) == key:
+                        if source_query not in existing["source_queries"]:
+                            existing["source_queries"].append(source_query)
+                        if rescued:
+                            existing["graph_rescue"] = True
+                        _merge_graph_terms(existing, graph_terms, query, rid)
                         break
+
+    # Primary retrieval always runs first. It may receive graph provenance metadata
+    # when its own text evidences expanded graph terms, but it does not broaden the
+    # candidate set.
+    primary_results = vector_search_fn(query)
+    add_results(primary_results, query, rescued=False)
+
+    # M12-3A: graph rescue is deliberately narrow. Expanded graph queries may
+    # introduce candidates only when primary retrieval produced zero usable rows.
+    if not all_results:
+        for term in new_terms:
+            rescue_query = f"{query} {term}"
+            add_results(vector_search_fn(rescue_query), rescue_query, rescued=True)
 
     for r in all_results:
         query_count = len(r["source_queries"])
