@@ -140,7 +140,7 @@ def _app_with_perms(perms):
 class FakeAdapter:
     captured = {}
 
-    def __init__(self, database_url):
+    def __init__(self, database_url, embedding_backend=None):
         pass
 
     def create_content_minimal(self, content=None, workspace_id=None, workspace_source=None, created_by_subject=None):

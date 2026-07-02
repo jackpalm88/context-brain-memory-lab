@@ -161,7 +161,7 @@ class FakePersistenceAdapter:
     def reset(cls) -> None:
         cls._store = {}
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, embedding_backend=None) -> None:
         self.database_url = database_url
 
     def create_content_minimal(

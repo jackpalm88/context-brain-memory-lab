@@ -103,7 +103,12 @@ def _maybe_store_chunk_embedding(
         return "provider_disabled"
     if embedding_backend is None or not embedding_backend.is_configured:
         return "provider_disabled"
-    response = embedding_backend.embed_text(EmbeddingRequest(text=text))
+    try:
+        response = embedding_backend.embed_text(EmbeddingRequest(text=text))
+    except Exception as exc:  # best-effort: provider errors never block save
+        import logging as _logging
+        _logging.getLogger(__name__).warning("[body_chunks] embed_text raised: %s", exc)
+        return "embedding_exception"
     if not response.is_ok or response.dimensions != 1536:
         return response.failure_reason.value if response.failure_reason is not None else "embedding_degraded"
     cur.execute(

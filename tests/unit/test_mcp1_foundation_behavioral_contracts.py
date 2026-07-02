@@ -61,7 +61,7 @@ class FakePersistenceAdapter:
     def reset(cls) -> None:
         cls._store = {}
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, embedding_backend=None) -> None:
         self.database_url = database_url
 
     def create_content_minimal(
@@ -368,7 +368,7 @@ def test_content_create_C2_4_structured_error_on_adapter_failure(
     _install_ws_aware_auth(app, ["content.create"])
 
     class _BrokenAdapter:
-        def __init__(self, database_url: str) -> None:
+        def __init__(self, database_url: str, embedding_backend=None) -> None:
             pass
 
         def create_content_minimal(self, *_a: Any, **_kw: Any) -> None:

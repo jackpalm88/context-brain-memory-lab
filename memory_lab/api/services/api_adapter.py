@@ -13,6 +13,7 @@ from memory_lab.persistence.body_chunks import persist_body_chunks
 from memory_lab.api.utils.content_signatures import compute_content_hash
 from memory_lab.ingestion.semantic_enrichment import annotate
 from memory_lab.governance.tier_router import route as tier_route
+from memory_lab.providers.embedding_backend import EmbeddingBackend
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,9 @@ def filter_snapshot_edges(edges, include_inferred: bool = True, include_curated:
 class ApiAdapter:
     """Thin adapter over PR1a stores. No runtime side-effects beyond normal store calls."""
 
-    def __init__(self, database_url: str):
+    def __init__(self, database_url: str, embedding_backend: "Optional[EmbeddingBackend]" = None):
         self.database_url = database_url
+        self.embedding_backend = embedding_backend
         self.hub_store = HubStore(database_url)
         self.hub_edge_store = HubEdgeStore(database_url)
 
@@ -186,12 +188,23 @@ class ApiAdapter:
                 )
                 conn.commit()
 
-        # M10.1: persist submitted body as content_chunks (chunk_index 0). Deterministic;
-        # embedding is opt-in/provider-gated and off on this path by default.
+        # M10.1: persist submitted body as content_chunks (chunk_index 0). Best-effort;
+        # embedding is opt-in/provider-gated. Backend None or not configured → deterministic
+        # text-only path. Embedding failure is never transactional: content is always saved.
         with self._conn() as conn:
             with conn.cursor() as cur:
-                persist_body_chunks(cur, row["content_id"], workspace_id, content or "")
+                _eb = getattr(self, "embedding_backend", None)
+                chunk_result = persist_body_chunks(
+                    cur,
+                    row["content_id"],
+                    workspace_id,
+                    content or "",
+                    embedding_backend=_eb,
+                    vector_enabled=_eb is not None and _eb.is_configured,
+                )
                 conn.commit()
+        if chunk_result.warnings:
+            logger.warning("[api_adapter] chunk embedding warnings for %s: %s", row["content_id"], chunk_result.warnings)
 
         # T3: classify write — best-effort, isolated; failure never rolls back T1/T2
         classify_meta: Dict[str, Any] = self._run_classify_and_write(

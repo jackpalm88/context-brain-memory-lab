@@ -7,6 +7,7 @@ from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
 from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.api.services.api_adapter import ApiAdapter
+from memory_lab.providers.openai_embedding import OpenAIEmbeddingBackend
 
 router = APIRouter(prefix="/v1/content", tags=["content"])
 
@@ -30,10 +31,23 @@ class NodeTypeRequest(BaseModel):
     node_type: str
 
 
+def _make_embedding_backend(settings):
+    """Return a configured OpenAIEmbeddingBackend when provider embeddings are enabled,
+    else None. Graceful: returns None (not raises) when provider is absent or not configured.
+    Uses getattr defensively so minimal/mock settings objects without the attribute default to off."""
+    if not getattr(settings, "provider_embeddings_enabled", False):
+        return None
+    try:
+        backend = OpenAIEmbeddingBackend()
+        return backend  # is_configured checked per-call inside persist_body_chunks
+    except Exception:
+        return None
+
+
 @router.post("")
 def create_content(req: ContentCreateRequest, auth: AuthContext = Depends(require_permission("content.create"))) -> dict:
     settings = get_settings()
-    adapter = ApiAdapter(settings.database_url)
+    adapter = ApiAdapter(settings.database_url, embedding_backend=_make_embedding_backend(settings))
     return adapter.create_content_minimal(
         content=req.content,
         workspace_id=auth.workspace_id,

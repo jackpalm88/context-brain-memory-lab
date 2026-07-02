@@ -122,7 +122,7 @@ class FakeMemoryAdapter:
         cls._hash_index = {}
         cls._chunks = {}
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, embedding_backend=None) -> None:
         self.database_url = database_url
 
     # ---- governance scoring stubs ----
@@ -271,7 +271,7 @@ class FakeMemoryAdapter:
 class FakeMemoryRetrievalAdapter:
     """WS-scoped deterministic retrieval — surfaces saved content."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, embedding_backend=None) -> None:
         self.database_url = database_url
 
     def search(self, query: str, workspace_id: Optional[str] = None,
