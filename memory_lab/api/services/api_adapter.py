@@ -235,7 +235,8 @@ class ApiAdapter:
                         memory_sub_type=classify_meta.get("memory_sub_type"),
                         classify_confidence=confidence,
                         signals=classify_meta.get("signals"),
-                        project_topic=scope_hint or classify_meta.get("project_topic"),
+                        scope_hint=scope_hint,
+                        project_topic=classify_meta.get("project_topic"),
                         domain_hint=classify_meta.get("domain_hint"),
                         content_text=content or "",
                     )
@@ -298,6 +299,7 @@ class ApiAdapter:
                 "current_state_status": current_state_meta.get("status"),
                 "current_state_reason": current_state_meta.get("reason"),
                 "current_state_scope": current_state_meta.get("current_state_scope"),
+                "current_state_scope_source": current_state_meta.get("scope_source"),
                 "cs_supersedes_content_id": current_state_meta.get("supersedes_content_id"),
             })
         if conflict_meta:

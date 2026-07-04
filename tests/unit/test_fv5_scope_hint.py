@@ -74,19 +74,20 @@ class TestScopeHintThreading:
         }
 
     def test_scope_hint_overrides_heuristic_project_topic(self):
-        """scope_hint must win over the heuristic project_topic extracted by classify."""
+        """scope_hint must reach the resolver as a first-class param, above heuristics."""
         adapter = _make_adapter()
         mock_conn, mock_cur = _build_fake_conn()
         classify_meta = self._mock_classify_meta(project_topic=None)  # heuristic found nothing
         captured = {}
 
-        def fake_resolver(conn, *, project_topic, **kwargs):
+        def fake_resolver(conn, *, scope_hint=None, project_topic=None, **kwargs):
+            captured["scope_hint"] = scope_hint
             captured["project_topic"] = project_topic
             from memory_lab.current_state.resolver import CurrentStateResolution
             return CurrentStateResolution(
                 status="active", reason="resolved_current_state",
                 content_id=_CI_ID, workspace_id=_WS_ID, memory_type="evidence",
-                current_state_scope=project_topic or "global",
+                current_state_scope=scope_hint or project_topic or "global",
                 anchor_id="aaaa", wrote=True,
             )
 
@@ -116,9 +117,10 @@ class TestScopeHintThreading:
                 scope_hint="my-custom-project-scope",
             )
 
-        assert captured.get("project_topic") == "my-custom-project-scope", (
-            f"scope_hint must override heuristic; got {captured.get('project_topic')!r}"
+        assert captured.get("scope_hint") == "my-custom-project-scope", (
+            f"scope_hint must reach the resolver; got {captured.get('scope_hint')!r}"
         )
+        assert captured.get("project_topic") is None
 
     def test_no_scope_hint_uses_heuristic(self):
         """Without scope_hint, heuristic project_topic from classify is used unchanged."""
@@ -127,13 +129,14 @@ class TestScopeHintThreading:
         classify_meta = self._mock_classify_meta(project_topic="context_brain_memory_lab")
         captured = {}
 
-        def fake_resolver(conn, *, project_topic, **kwargs):
+        def fake_resolver(conn, *, scope_hint=None, project_topic=None, **kwargs):
+            captured["scope_hint"] = scope_hint
             captured["project_topic"] = project_topic
             from memory_lab.current_state.resolver import CurrentStateResolution
             return CurrentStateResolution(
                 status="active", reason="resolved_current_state",
                 content_id=_CI_ID, workspace_id=_WS_ID, memory_type="evidence",
-                current_state_scope=project_topic or "global",
+                current_state_scope=scope_hint or project_topic or "global",
                 anchor_id="bbbb", wrote=True,
             )
 
@@ -163,6 +166,7 @@ class TestScopeHintThreading:
                 # no scope_hint
             )
 
+        assert captured.get("scope_hint") is None
         assert captured.get("project_topic") == "context_brain_memory_lab", (
             f"heuristic project_topic must be preserved when no scope_hint; got {captured.get('project_topic')!r}"
         )
