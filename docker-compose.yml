@@ -1,0 +1,99 @@
+# Context Brain Memory Lab — DX-1 onboarding stack.
+#
+# One command to a working deterministic API (no provider keys, no secrets):
+#
+#   docker compose up --build
+#   curl http://127.0.0.1:8088/health
+#
+# Optional demo corpus (DEMO-1 synthetic seeds):
+#
+#   docker compose --profile demo up seed
+#
+# Ports default to 5433/8088 to avoid clashing with an existing local Postgres
+# or API; override with CBML_PG_PORT / CBML_API_PORT.
+#
+# Posture: this stack is a LOCAL DEVELOPMENT onboarding path. Auth runs in
+# local_dev_bypass mode with a fixed bootstrap subject. For anything
+# network-exposed, switch MEMORY_LAB_AUTH_MODE to api_key and provision real
+# subjects/keys.
+
+services:
+  postgres:
+    container_name: cbml-db
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${CBML_PG_DB:-cbml}
+      POSTGRES_USER: ${CBML_PG_USER:-cbml}
+      POSTGRES_PASSWORD: ${CBML_PG_PASSWORD:-cbml-local-dev}
+    ports:
+      - "${CBML_PG_PORT:-5433}:5432"
+    volumes:
+      - cbml_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [cbml-net]
+
+  bootstrap:
+    container_name: cbml-bootstrap
+    image: pgvector/pgvector:pg16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CBML_DSN: postgresql://${CBML_PG_USER:-cbml}:${CBML_PG_PASSWORD:-cbml-local-dev}@postgres:5432/${CBML_PG_DB:-cbml}
+      CBML_DEV_SUBJECT_ID: ${CBML_DEV_SUBJECT_ID:-11111111-1111-1111-1111-111111111111}
+    volumes:
+      - ./migrations:/app/migrations:ro
+      - ./scripts:/app/scripts:ro
+    entrypoint: ["bash", "/app/scripts/compose_bootstrap.sh"]
+    restart: "no"
+    networks: [cbml-net]
+
+  api:
+    container_name: cbml-api
+    image: cbml-api:local
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${CBML_PG_USER:-cbml}:${CBML_PG_PASSWORD:-cbml-local-dev}@postgres:5432/${CBML_PG_DB:-cbml}
+      # Deterministic baseline: providers stay off unless explicitly enabled.
+      LLM_PROVIDER: ${LLM_PROVIDER:-none}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-none}
+      # Local-dev auth (see posture note above).
+      MEMORY_LAB_AUTH_MODE: ${MEMORY_LAB_AUTH_MODE:-local_dev_bypass}
+      MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS: ${MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS:-true}
+      MEMORY_LAB_DEFAULT_AUTH_SUBJECT_ID: ${CBML_DEV_SUBJECT_ID:-11111111-1111-1111-1111-111111111111}
+    ports:
+      - "${CBML_API_PORT:-8088}:8000"
+    restart: unless-stopped
+    networks: [cbml-net]
+
+  # Optional: DEMO-1 synthetic demo corpus. Run with: docker compose --profile demo up seed
+  seed:
+    container_name: cbml-seed
+    image: pgvector/pgvector:pg16
+    profiles: [demo]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      CBML_DSN: postgresql://${CBML_PG_USER:-cbml}:${CBML_PG_PASSWORD:-cbml-local-dev}@postgres:5432/${CBML_PG_DB:-cbml}
+    volumes:
+      - ./scripts:/app/scripts:ro
+    entrypoint: ["bash", "/app/scripts/seed_demo.sh"]
+    restart: "no"
+    networks: [cbml-net]
+
+volumes:
+  cbml_pg_data:
+
+networks:
+  cbml-net:

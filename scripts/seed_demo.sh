@@ -269,7 +269,7 @@ echo ""
 echo "Stage 7 — Verify counts"
 
 read -r HUBS CONTENT CHUNKS LINKS EDGES < <(
-    "${PSQL_CMD[@]}" -t <<VERIFYSQL
+    "${PSQL_CMD[@]}" -tA -F" " <<VERIFYSQL
 SELECT
     (SELECT COUNT(*) FROM cb_hubs        WHERE hub_id::text LIKE 'a1a1a1a1-de00-%')::int,
     (SELECT COUNT(*) FROM content_items  WHERE content_id::text LIKE 'c0de0%')::int,
@@ -279,11 +279,11 @@ SELECT
 VERIFYSQL
 )
 
-[[ "${HUBS// /}"    == "4" ]] && ok "Hubs: 4/4"    || fail "Hubs: expected 4, got '${HUBS// /}'"
-[[ "${CONTENT// /}" == "8" ]] && ok "Content: 8/8" || fail "Content: expected 8, got '${CONTENT// /}'"
-[[ "${CHUNKS// /}"  == "8" ]] && ok "Chunks: 8/8"  || fail "Chunks: expected 8, got '${CHUNKS// /}'"
-[[ "${LINKS// /}"   == "8" ]] && ok "Links: 8/8"   || fail "Links: expected 8, got '${LINKS// /}'"
-[[ "${EDGES// /}"   == "3" ]] && ok "Edges: 3/3"   || fail "Edges: expected 3, got '${EDGES// /}'"
+[[ "${HUBS}"    == "4" ]] && ok "Hubs: 4/4"    || fail "Hubs: expected 4, got '${HUBS}'"
+[[ "${CONTENT}" == "8" ]] && ok "Content: 8/8" || fail "Content: expected 8, got '${CONTENT}'"
+[[ "${CHUNKS}"  == "8" ]] && ok "Chunks: 8/8"  || fail "Chunks: expected 8, got '${CHUNKS}'"
+[[ "${LINKS}"   == "8" ]] && ok "Links: 8/8"   || fail "Links: expected 8, got '${LINKS}'"
+[[ "${EDGES}"   == "3" ]] && ok "Edges: 3/3"   || fail "Edges: expected 3, got '${EDGES}'"
 
 # ── Stage 8: Optional API smoke ────────────────────────────────────────────────
 if [[ -n "${MEMORY_LAB_API_HOST:-}" ]]; then

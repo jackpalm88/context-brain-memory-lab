@@ -1,3 +1,81 @@
+# Quick start (Docker Compose)
+
+The fastest path to a working API — no Python install, no database setup, no provider keys.
+
+## Prerequisites
+
+- Docker ≥ 24 with Compose v2 plugin (`docker compose` — not `docker-compose`)
+- Ports 5433 and 8088 free (override with `CBML_PG_PORT` / `CBML_API_PORT` in `.env`)
+
+## 1. Clone
+
+```bash
+git clone https://github.com/jackpalm88/context-brain-memory-lab.git
+cd context-brain-memory-lab
+```
+
+## 2. (Optional) copy env template
+
+```bash
+cp .env.example .env
+# Edit .env if you need different ports or credentials.
+```
+
+## 3. Start the stack
+
+```bash
+docker compose up --build
+```
+
+On first run this builds the API image (~60s), starts Postgres, applies all
+migrations, seeds the local-dev auth subject, and starts the API on :8088.
+Subsequent runs use the cached image.
+
+## 4. Verify
+
+```bash
+curl http://127.0.0.1:8088/health
+# Expected: {"status":"ok"}
+```
+
+Or run the quickstart smoke script (requires curl + jq):
+
+```bash
+bash scripts/dx1_quickstart_smoke.sh
+```
+
+## 5. Save and query
+
+```bash
+# Save
+curl -s -X POST http://127.0.0.1:8088/v1/content \
+  -H 'Content-Type: application/json' \
+  -d '{"content": "My first memory. Decision: use OpenCB for workspace recall."}' | jq .
+
+# Query
+curl -s -X POST http://127.0.0.1:8088/v1/retrieval/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "first memory"}' | jq .
+```
+
+## 6. (Optional) seed demo corpus
+
+```bash
+docker compose --profile demo up seed
+```
+
+Loads the DEMO-1 synthetic corpus (~10 documents) so `/v1/retrieval/search` has
+something to retrieve out of the box.
+
+## 7. Tear down
+
+```bash
+docker compose down          # stop, keep data volume
+docker compose down -v       # stop + wipe data volume
+```
+
+---
+
 # Local developer setup
 
 This guide covers installing and running Context Brain Memory Lab `0.2.0a1` locally. It does not cover hosted production deployment, private Context Brain parity, push/tag/PyPI publication, or public release announcements.
