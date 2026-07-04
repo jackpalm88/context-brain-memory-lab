@@ -16,6 +16,7 @@ from memory_lab.ingestion.semantic_enrichment import annotate
 from memory_lab.governance.tier_router import route as tier_route
 from memory_lab.providers.embedding_backend import EmbeddingBackend
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
+from memory_lab.conflicts.escalation import evaluate_and_escalate_on_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,22 @@ class ApiAdapter:
         except Exception as exc:
             logger.warning("[api_adapter] semantic enrichment failed for %s: %s", row["content_id"], exc)
 
+        # T6: conflict detection + escalation (gap-5) — deterministic B11 detector,
+        # best-effort: never blocks or rolls back the save. requires_review
+        # quarantines the row to tier=conflicted pending human approve/reject.
+        conflict_meta: Dict[str, Any] = {}
+        try:
+            if workspace_id:
+                with self._conn() as conn:
+                    conflict_meta = evaluate_and_escalate_on_ingest(
+                        conn,
+                        workspace_id=workspace_id,
+                        content_id=row["content_id"],
+                    ) or {}
+        except Exception as exc:
+            logger.warning("[api_adapter] conflict escalation failed for %s: %s", row["content_id"], exc)
+            conflict_meta = {}
+
         response: Dict[str, Any] = {
             **base_response,
             "content_id": row["content_id"],
@@ -282,6 +299,11 @@ class ApiAdapter:
                 "current_state_scope": current_state_meta.get("current_state_scope"),
                 "cs_supersedes_content_id": current_state_meta.get("supersedes_content_id"),
             })
+        if conflict_meta:
+            response.update(conflict_meta)
+            if conflict_meta.get("conflict_severity") == "requires_review":
+                response["tier"] = "conflicted"
+                response["tier_reason"] = "conflict:requires_review"
         return response
 
     # ---------------------------------------------------------------------------
