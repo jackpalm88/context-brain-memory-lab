@@ -191,7 +191,7 @@ class TestBatchEndpoint:
         """One failing item must not abort subsequent items."""
         persisted = {**self._PERSISTED}
 
-        def _side_effect(content=None, workspace_id=None):
+        def _side_effect(content=None, **kw):
             if content == "fail":
                 raise RuntimeError("forced")
             return {**persisted, "content_id": "ok-id"}
@@ -215,13 +215,17 @@ class TestBatchEndpoint:
 class TestSimilarEndpoint:
     """POST /v1/retrieval/similar"""
 
-    _SOURCE = {"content_id": "src-001", "full_text": "context brain memory retrieval"}
+    _SOURCE = {"content_id": "src-001", "workspace_id": "00000000-0000-0000-0000-000000000002"}
     _RESULT_A = {"content_id": "res-001", "chunk_text": "memory systems", "score": 0.91}
     _RESULT_B = {"content_id": "res-002", "chunk_text": "retrieval ranking", "score": 0.85}
 
-    def test_s1_returns_similar_results(self, monkeypatch):
+    def _patch_source(self, monkeypatch, *, exists=True, text="context brain memory retrieval"):
         monkeypatch.setattr(similar_router, "ApiAdapter",
-            lambda *a, **kw: SimpleNamespace(get_content_minimal=lambda *_, **__: self._SOURCE))
+            lambda *a, **kw: SimpleNamespace(get_content_minimal=lambda *_, **__: self._SOURCE if exists else None))
+        monkeypatch.setattr(similar_router, "_fetch_source_text", lambda *a, **kw: text)
+
+    def test_s1_returns_similar_results(self, monkeypatch):
+        self._patch_source(monkeypatch)
         monkeypatch.setattr(similar_router, "RetrievalAdapter",
             lambda *a, **kw: SimpleNamespace(search=lambda **__: [self._RESULT_A, self._RESULT_B]))
         client = TestClient(_similar_app(monkeypatch))
@@ -233,8 +237,7 @@ class TestSimilarEndpoint:
 
     def test_s2_source_excluded_from_results(self, monkeypatch):
         results = [{"content_id": "src-001", "chunk_text": "self", "score": 1.0}, self._RESULT_A]
-        monkeypatch.setattr(similar_router, "ApiAdapter",
-            lambda *a, **kw: SimpleNamespace(get_content_minimal=lambda *_, **__: self._SOURCE))
+        self._patch_source(monkeypatch)
         monkeypatch.setattr(similar_router, "RetrievalAdapter",
             lambda *a, **kw: SimpleNamespace(search=lambda **__: results))
         client = TestClient(_similar_app(monkeypatch))
@@ -244,30 +247,61 @@ class TestSimilarEndpoint:
         assert "res-001" in ids
 
     def test_s3_not_found_returns_404(self, monkeypatch):
-        monkeypatch.setattr(similar_router, "ApiAdapter",
-            lambda *a, **kw: SimpleNamespace(get_content_minimal=lambda *_, **__: None))
+        self._patch_source(monkeypatch, exists=False)
         client = TestClient(_similar_app(monkeypatch))
         resp = client.post("/v1/retrieval/similar", json={"content_id": "missing-id"})
         assert resp.status_code == 404
 
     def test_s4_empty_text_returns_422(self, monkeypatch):
-        monkeypatch.setattr(similar_router, "ApiAdapter",
-            lambda *a, **kw: SimpleNamespace(
-                get_content_minimal=lambda *_, **__: {"content_id": "src", "full_text": "   "}
-            ))
+        self._patch_source(monkeypatch, text="")
         client = TestClient(_similar_app(monkeypatch))
         resp = client.post("/v1/retrieval/similar", json={"content_id": "src"})
         assert resp.status_code == 422
 
     def test_s5_limit_respected(self, monkeypatch):
         many = [{"content_id": f"r-{i}", "chunk_text": f"text {i}", "score": 0.9 - i * 0.01} for i in range(20)]
-        monkeypatch.setattr(similar_router, "ApiAdapter",
-            lambda *a, **kw: SimpleNamespace(get_content_minimal=lambda *_, **__: self._SOURCE))
+        self._patch_source(monkeypatch)
         monkeypatch.setattr(similar_router, "RetrievalAdapter",
             lambda *a, **kw: SimpleNamespace(search=lambda **__: many))
         client = TestClient(_similar_app(monkeypatch))
         resp = client.post("/v1/retrieval/similar", json={"content_id": "src-001", "limit": 3})
         assert resp.json()["count"] == 3
+
+    def test_s7_search_called_without_limit_kwarg(self, monkeypatch):
+        """RetrievalAdapter.search has no limit parameter — the router must not pass one."""
+        captured = {}
+
+        def _search(**kw):
+            captured.update(kw)
+            return []
+
+        self._patch_source(monkeypatch)
+        monkeypatch.setattr(similar_router, "RetrievalAdapter",
+            lambda *a, **kw: SimpleNamespace(search=_search))
+        client = TestClient(_similar_app(monkeypatch))
+        resp = client.post("/v1/retrieval/similar", json={"content_id": "src-001"})
+        assert resp.status_code == 200
+        assert "limit" not in captured
+        assert captured["workspace_id"] == "00000000-0000-0000-0000-000000000002"
+
+    def test_s8_body_workspace_is_ignored(self, monkeypatch):
+        """Workspace isolation: caller-supplied workspace_id must not widen scope."""
+        captured = {}
+
+        def _get(content_id, workspace_id=None):
+            captured["workspace_id"] = workspace_id
+            return self._SOURCE
+
+        monkeypatch.setattr(similar_router, "ApiAdapter",
+            lambda *a, **kw: SimpleNamespace(get_content_minimal=_get))
+        monkeypatch.setattr(similar_router, "_fetch_source_text", lambda *a, **kw: "text")
+        monkeypatch.setattr(similar_router, "RetrievalAdapter",
+            lambda *a, **kw: SimpleNamespace(search=lambda **__: []))
+        client = TestClient(_similar_app(monkeypatch))
+        resp = client.post("/v1/retrieval/similar",
+            json={"content_id": "src-001", "workspace_id": "99999999-9999-9999-9999-999999999999"})
+        assert resp.status_code == 200
+        assert captured["workspace_id"] == "00000000-0000-0000-0000-000000000002"
 
     def test_s6_limit_over_max_rejected(self, monkeypatch):
         client = TestClient(_similar_app(monkeypatch))

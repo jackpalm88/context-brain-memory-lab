@@ -18,6 +18,7 @@ from memory_lab.api.routers.graph import router as graph_router
 from memory_lab.api.routers.batch import router as batch_router
 from memory_lab.api.routers.similar import router as similar_router
 from memory_lab.api.routers.feedback import router as feedback_router
+from memory_lab.api.routers.audit_keywords import router as audit_keywords_router
 
 
 def create_app() -> FastAPI:
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(reasoning_router)
     app.include_router(graph_health_router)
     app.include_router(graph_router)
+    app.include_router(audit_keywords_router)
     return app
 
 

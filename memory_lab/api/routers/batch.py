@@ -2,10 +2,12 @@
 DX-2: POST /v1/content/batch — save multiple content items in one call.
 
 Contract:
-  Request:  { "items": [ {content, workspace_id?, save_purpose?}, ... ] }  max 50 items
+  Request:  { "items": [ {content}, ... ] }  max 50 items
   Response: { "results": [...], "summary": {total, persisted, deduplicated, discarded, failed} }
 
-Each item goes through the same create_content_minimal path as POST /v1/content.
+Each item goes through the same create_content_minimal path as POST /v1/content:
+workspace and actor identity come from the auth context only — a body-supplied
+workspace is not accepted (workspace isolation posture of the single-item route).
 Items are processed sequentially (no DB transaction spanning all items — each is atomic).
 Failed items are captured with error detail and do not abort the batch.
 """
@@ -29,8 +31,6 @@ _BATCH_MAX = 50
 
 class BatchItem(BaseModel):
     content: Optional[str] = None
-    workspace_id: Optional[str] = None
-    save_purpose: Optional[str] = None
 
 
 class BatchRequest(BaseModel):
@@ -68,7 +68,9 @@ def batch_create(
         try:
             result = adapter.create_content_minimal(
                 content=item.content,
-                workspace_id=item.workspace_id or auth.workspace_id,
+                workspace_id=auth.workspace_id,
+                workspace_source=auth.workspace_source,
+                created_by_subject=auth.auth_subject_id,
             )
             results.append({"index": idx, "ok": True, **result})
             if result.get("duplicate"):
