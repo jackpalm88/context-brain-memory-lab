@@ -63,6 +63,10 @@ class EvidenceItem(BaseModel):
     confidence: Optional[float] = None
     result_trust: Optional[str] = None
     source_path: Optional[str] = None
+    # FV-FIX-3 ask current-state awareness (resolver-owned fields, read-only here)
+    is_current: Optional[bool] = None
+    current_state_scope: Optional[str] = None
+    cs_supersedes_content_id: Optional[str] = None
 
 
 class Citation(BaseModel):

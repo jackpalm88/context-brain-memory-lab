@@ -11,6 +11,7 @@ from memory_lab.query.context_pack_adapter import (
     build_support_only_context_pack_for_ask,
     evidence_items_from_supporting_context_pack,
 )
+from memory_lab.query.current_state_enrichment import enrich_evidence_with_current_state
 from memory_lab.query.evidence import normalize_evidence
 from memory_lab.query.provider_answer import apply_provider_answer
 from memory_lab.reasoning.answer_synthesizer import synthesize_answer
@@ -55,6 +56,13 @@ class QueryService:
             memory_types=request.resolved_memory_types(),
         )
         evidence = normalize_evidence(results[: policy.top_k], limit=policy.snippet_char_limit)
+        # FV-FIX-3: surface resolver-owned current-state signals to the answer path.
+        # Post-retrieval, best-effort, and never reorders across scopes.
+        evidence = enrich_evidence_with_current_state(
+            evidence,
+            database_url=getattr(self.retrieval_adapter, "database_url", None),
+            query=query,
+        )
         context_pack = build_support_only_context_pack_for_ask(
             request=request,
             workspace_id=workspace_id,

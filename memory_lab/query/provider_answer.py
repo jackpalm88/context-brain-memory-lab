@@ -30,11 +30,30 @@ ASK_PROVIDER_SYSTEM = (
 _FORBIDDEN_TERMS_REMINDER = "verdict, resolution, winner, canonical truth, truth decision"
 
 
+def _current_state_label(item: EvidenceItem) -> str:
+    """Render the resolver-computed status of one snippet; empty when unknown."""
+    if item.is_current is True:
+        return " [status: current]"
+    if item.is_current is False:
+        return " [status: superseded]"
+    return ""
+
+
 def _build_ask_prompt(query: str, deterministic_text: str, evidence: List[EvidenceItem]) -> str:
     top_evidence = evidence[:5]
     # One ID per line so the model can copy them accurately without truncation.
     allowed_ids_block = "\n".join(e.evidence_id for e in top_evidence)
-    snippets = "\n".join(f"[{e.evidence_id}] {e.snippet}" for e in top_evidence)
+    snippets = "\n".join(
+        f"[{e.evidence_id}] {e.snippet}{_current_state_label(e)}" for e in top_evidence
+    )
+    has_status = any(e.is_current is not None for e in top_evidence)
+    status_rule = (
+        "- Snippets marked [status: superseded] were replaced by a newer decision; "
+        "prefer [status: current] snippets unless the question asks about history, "
+        "in which case superseded snippets may be cited as historical context.\n"
+        if has_status
+        else ""
+    )
     return (
         "Reword the deterministic candidate answer using ONLY the evidence snippets below.\n"
         "Rules:\n"
@@ -42,6 +61,7 @@ def _build_ask_prompt(query: str, deterministic_text: str, evidence: List[Eviden
         "- Copy each evidence_id character-for-character; do not shorten or alter them.\n"
         "- Do not introduce any evidence_id not listed in ALLOWED IDS.\n"
         "- Do not decide truth. Do not resolve conflicts.\n"
+        f"{status_rule}"
         f"- Do not use these words: {_FORBIDDEN_TERMS_REMINDER}.\n\n"
         f"ALLOWED IDS (copy exactly, one per line):\n{allowed_ids_block}\n\n"
         f"QUESTION:\n{query}\n\n"
