@@ -15,15 +15,21 @@ from memory_lab.api.routers.context_packs import router as context_packs_router
 from memory_lab.api.routers.reasoning import router as reasoning_router
 from memory_lab.api.routers.graph_health import router as graph_health_router
 from memory_lab.api.routers.graph import router as graph_router
+from memory_lab.api.routers.batch import router as batch_router
+from memory_lab.api.routers.similar import router as similar_router
+from memory_lab.api.routers.feedback import router as feedback_router
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Context Brain Memory Lab API", version="pr1b-minimal")
     app.include_router(health_router)
     app.include_router(content_router)
+    app.include_router(batch_router)
     app.include_router(hubs_router)
     app.include_router(edges_router)
     app.include_router(retrieval_router)
+    app.include_router(similar_router)
+    app.include_router(feedback_router)
     app.include_router(ask_router)
     app.include_router(decisions_router)
     app.include_router(tier_override_router)
