@@ -9,3 +9,7 @@ __pycache__/
 .env.*
 !.env.*.template
 !.env.example
+
+# host-specific deployment helpers — local only, not part of the public artifact
+scripts/cbml_mcp_start.sh
+scripts/deploy_openapi_dev.sh
