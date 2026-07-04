@@ -1,0 +1,1463 @@
+openapi: "3.1.0"
+info:
+  title: "Context Brain Memory Lab — Public Agent API"
+  description: |
+    Public agent-facing REST API for Context Brain Memory Lab (OpenCB).
+
+    This schema covers the routes safe for external agents, GPT Actions, and
+    non-MCP integrations. Admin, internal-tooling, and private-compatibility
+    endpoints are excluded.
+
+    **Auth:** Bearer token via `Authorization: Bearer <token>` header.
+    Workspace scope is resolved server-side from the token; callers never
+    inject raw workspace UUIDs unless the deployment grants explicit override.
+
+    **Base URL:** configure per deployment (see `docs/GPT_ACTIONS.md`).
+
+    **MCP alternative:** if your client supports MCP streamable-http transport,
+    connect to `POST /mcp` with the same Bearer token — all 32 tools are
+    available with identical semantics to this REST surface.
+  version: "pr1b"
+  contact:
+    name: "OpenCB project"
+
+servers:
+  - url: "https://your-opencb-host/api"
+    description: "Self-hosted deployment (replace with your actual host)"
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    # ── Shared ──────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+      required: [detail]
+
+    NodeType:
+      type: string
+      enum:
+        - decision
+        - fact
+        - hypothesis
+        - question
+        - playbook
+        - concept
+        - source
+        - task
+        - event
+        - raw_note
+
+    HubType:
+      type: string
+      enum: [project, system, concept_cluster, topic]
+
+    EdgeType:
+      type: string
+      enum: [parent, related, duplicate, overlaps, supports, part_of, contradicts]
+
+    EdgeStatus:
+      type: string
+      enum: [manual, approved, rejected, needs_review, archived]
+
+    DecisionStatus:
+      type: string
+      enum: [active, superseded, reversed, draft]
+
+    # ── Health ───────────────────────────────────────────────────────────────
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        service:
+          type: string
+        version:
+          type: string
+        reason:
+          type: string
+          nullable: true
+
+    # ── Content ──────────────────────────────────────────────────────────────
+    ContentCreateRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: "Full text body to store (200+ words recommended)."
+          nullable: true
+        workspace_id:
+          type: string
+          nullable: true
+          description: "Optional workspace override. Usually resolved from token."
+
+    ContentResponse:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        full_text:
+          type: string
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        word_count:
+          type: integer
+          nullable: true
+        node_type:
+          $ref: "#/components/schemas/NodeType"
+          nullable: true
+        quick_summary:
+          type: string
+          nullable: true
+        workspace_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ContentMetadataResponse:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        node_type:
+          $ref: "#/components/schemas/NodeType"
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        word_count:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    QuickSummaryRequest:
+      type: object
+      required: [quick_summary]
+      properties:
+        quick_summary:
+          type: string
+          maxLength: 500
+
+    NodeTypeRequest:
+      type: object
+      required: [node_type]
+      properties:
+        node_type:
+          $ref: "#/components/schemas/NodeType"
+
+    # ── Hubs ─────────────────────────────────────────────────────────────────
+    HubCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+        hub_type:
+          $ref: "#/components/schemas/HubType"
+          default: topic
+        description:
+          type: string
+          nullable: true
+        aliases:
+          type: array
+          items:
+            type: string
+          nullable: true
+        related_terms:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    HubUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          nullable: true
+        type:
+          $ref: "#/components/schemas/HubType"
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        aliases:
+          type: array
+          items:
+            type: string
+          nullable: true
+        related_terms:
+          type: array
+          items:
+            type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+          nullable: true
+
+    HubResponse:
+      type: object
+      properties:
+        hub_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+          nullable: true
+        aliases:
+          type: array
+          items:
+            type: string
+        related_terms:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        owner_defined:
+          type: boolean
+        workspace_uuid:
+          type: string
+          nullable: true
+        linked_content_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HubLinkRequest:
+      type: object
+      required: [content_id]
+      properties:
+        content_id:
+          type: string
+          format: uuid
+
+    # ── Edges ────────────────────────────────────────────────────────────────
+    EdgeCreateRequest:
+      type: object
+      required: [source_hub_id, target_hub_id, edge_type]
+      properties:
+        source_hub_id:
+          type: string
+          format: uuid
+        target_hub_id:
+          type: string
+          format: uuid
+        edge_type:
+          $ref: "#/components/schemas/EdgeType"
+        status:
+          $ref: "#/components/schemas/EdgeStatus"
+          default: manual
+        origin:
+          type: string
+          default: manual
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+
+    EdgeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_hub_id:
+          type: string
+          format: uuid
+        target_hub_id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/EdgeType"
+        status:
+          $ref: "#/components/schemas/EdgeStatus"
+        origin:
+          type: string
+        confidence:
+          type: number
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        edge_key:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    EdgeListResponse:
+      type: object
+      properties:
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/EdgeResponse"
+        count:
+          type: integer
+        workspace_id:
+          type: string
+          nullable: true
+
+    # ── Retrieval ────────────────────────────────────────────────────────────
+    RetrievalRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: "Free-text retrieval query."
+          example: "What changed in M11C retrieval parity?"
+        limit:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+        debug:
+          type: boolean
+          default: false
+          description: "Include safe descriptive stage_metrics in response."
+        only_clean:
+          type: boolean
+          default: true
+          description: "Compatibility flag; accepted as no-op in public M11C-2."
+        max_hops:
+          type: integer
+          default: 1
+          description: "Graph traversal depth hint."
+        min_confidence:
+          type: number
+          default: 0.7
+        graph_boost:
+          type: number
+          default: 0.1
+        memory_type:
+          type: string
+          nullable: true
+          description: "Single memory type filter. Mutually exclusive with memory_types."
+        memory_types:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: "Multi-value memory type filter. Mutually exclusive with memory_type."
+
+    EvidenceItem:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        chunk_text:
+          type: string
+          nullable: true
+        score:
+          type: number
+          nullable: true
+        retrieval_path:
+          type: string
+          nullable: true
+        hub_match:
+          type: string
+          nullable: true
+        graph_match:
+          type: string
+          nullable: true
+
+    RetrievalResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        count:
+          type: integer
+        limit:
+          type: integer
+        status:
+          type: string
+        mode:
+          type: string
+        workspace_id:
+          type: string
+          nullable: true
+        debug_metadata:
+          type: object
+          nullable: true
+          description: "Present only when debug=true."
+
+    # ── Ask ──────────────────────────────────────────────────────────────────
+    AskRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          nullable: true
+          description: "Natural language question. Either query or question required."
+        question:
+          type: string
+          nullable: true
+          description: "Alias for query."
+        top_k:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 10
+        include_evidence:
+          type: boolean
+          default: true
+        degraded_ok:
+          type: boolean
+          default: true
+        memory_type:
+          type: string
+          nullable: true
+        memory_types:
+          type: array
+          items:
+            type: string
+          nullable: true
+        enable_provider_synthesis:
+          type: boolean
+          default: false
+          description: "Opt-in LLM synthesis. Off by default; requires provider key configured on server."
+
+    AskResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          nullable: true
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+          nullable: true
+        degraded:
+          type: boolean
+        workspace_id:
+          type: string
+          nullable: true
+
+    # ── Decisions ────────────────────────────────────────────────────────────
+    DecisionCreate:
+      type: object
+      required: [title, decision_reason]
+      properties:
+        title:
+          type: string
+        decision_reason:
+          type: string
+          description: "Why this decision was made."
+        decision_context:
+          type: string
+          nullable: true
+        why_this_matters:
+          type: string
+          nullable: true
+        decision_status:
+          $ref: "#/components/schemas/DecisionStatus"
+          default: active
+        reversible:
+          type: boolean
+          default: true
+        confidence_level:
+          type: string
+          enum: [low, medium, high]
+          default: medium
+        decision_tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        linked_hub_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        supersedes_decision_id:
+          type: string
+          format: uuid
+          nullable: true
+        source_content_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+        alternatives_considered:
+          type: array
+          items:
+            type: object
+            properties:
+              option:
+                type: string
+              reason_rejected:
+                type: string
+          nullable: true
+        contradicting_evidence:
+          type: string
+          nullable: true
+
+    DecisionSummary:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        decision_status:
+          $ref: "#/components/schemas/DecisionStatus"
+        confidence_level:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DecisionFull:
+      allOf:
+        - $ref: "#/components/schemas/DecisionSummary"
+        - type: object
+          properties:
+            decision_reason:
+              type: string
+            decision_context:
+              type: string
+              nullable: true
+            why_this_matters:
+              type: string
+              nullable: true
+            reversible:
+              type: boolean
+            decision_tags:
+              type: array
+              items:
+                type: string
+            linked_hub_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+            supersedes_decision_id:
+              type: string
+              format: uuid
+              nullable: true
+            alternatives_considered:
+              type: array
+              items:
+                type: object
+            contradicting_evidence:
+              type: string
+              nullable: true
+
+    DecisionStatusUpdate:
+      type: object
+      required: [decision_status]
+      properties:
+        decision_status:
+          $ref: "#/components/schemas/DecisionStatus"
+
+    # ── Graph ────────────────────────────────────────────────────────────────
+    GraphSnapshotResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/HubResponse"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/EdgeResponse"
+        stats:
+          type: object
+        schema_version:
+          type: string
+
+    GraphNodeFull:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        full_text:
+          type: string
+          nullable: true
+        node_type:
+          $ref: "#/components/schemas/NodeType"
+          nullable: true
+        quick_summary:
+          type: string
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        word_count:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    SearchPreviewResult:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        node_type:
+          $ref: "#/components/schemas/NodeType"
+          nullable: true
+        quick_summary:
+          type: string
+          nullable: true
+        hub_match:
+          type: string
+          nullable: true
+        score:
+          type: number
+          nullable: true
+        load_full_content_recommended:
+          type: boolean
+
+paths:
+  # ── Health ─────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      operationId: health_check
+      summary: "Service health"
+      description: "Returns service status. Reports 'unavailable' when DATABASE_URL is not configured."
+      tags: [health]
+      security: []
+      responses:
+        "200":
+          description: "Health envelope"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # ── Content ────────────────────────────────────────────────────────────────
+  /v1/content:
+    post:
+      operationId: create_content
+      summary: "Save content"
+      description: |
+        Save a text body. Returns a `content_id` UUID immediately. The body is
+        chunked and (if embeddings are configured) vectorised asynchronously.
+        200+ words recommended for reliable semantic retrieval.
+      tags: [content]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContentCreateRequest"
+      responses:
+        "200":
+          description: "Saved content record"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentResponse"
+        "422":
+          description: "Validation error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/content/{content_id}:
+    get:
+      operationId: get_content
+      summary: "Retrieve content by ID"
+      tags: [content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Full content record"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/content/{content_id}/metadata:
+    get:
+      operationId: get_content_metadata
+      summary: "Retrieve content metadata (lightweight)"
+      description: "Returns node_type, domain, word_count, and created_at without the full text body."
+      tags: [content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Content metadata"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentMetadataResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/content/{content_id}/quick-summary:
+    patch:
+      operationId: set_quick_summary
+      summary: "Set quick summary"
+      description: "Attach a short (~50-token) human-readable summary for search_graph_preview navigation."
+      tags: [content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickSummaryRequest"
+      responses:
+        "200":
+          description: "Updated content record"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/content/{content_id}/node-type:
+    patch:
+      operationId: classify_content_node
+      summary: "Classify content node type"
+      description: |
+        Assign a semantic node type to a stored content item.
+        Allowed values: decision, fact, hypothesis, question, playbook,
+        concept, source, task, event, raw_note.
+      tags: [content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeTypeRequest"
+      responses:
+        "200":
+          description: "Updated record with classification metadata"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentResponse"
+        "422":
+          description: "Invalid node_type"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Hubs ───────────────────────────────────────────────────────────────────
+  /v1/hubs:
+    post:
+      operationId: create_hub
+      summary: "Create knowledge hub"
+      description: |
+        Create a navigation entry point that groups related content.
+        Hub types: project, system, concept_cluster, topic.
+      tags: [hubs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubCreateRequest"
+      responses:
+        "200":
+          description: "Created hub"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubResponse"
+    get:
+      operationId: list_hubs
+      summary: "List knowledge hubs"
+      tags: [hubs]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
+      responses:
+        "200":
+          description: "Array of hubs"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HubResponse"
+
+  /v1/hubs/{hub_id}:
+    get:
+      operationId: get_hub
+      summary: "Get hub by ID"
+      tags: [hubs]
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Hub detail"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: update_hub
+      summary: "Update hub"
+      description: "Partial update — only provided fields are changed."
+      tags: [hubs]
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubUpdateRequest"
+      responses:
+        "200":
+          description: "Updated hub"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/hubs/{hub_id}/links:
+    post:
+      operationId: link_content_to_hub
+      summary: "Link content to hub"
+      description: "Attach a previously saved content item to a hub for hub-aware retrieval boosting."
+      tags: [hubs]
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubLinkRequest"
+      responses:
+        "200":
+          description: "Link created"
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: "Hub or content not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "Already linked"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Edges ──────────────────────────────────────────────────────────────────
+  /v1/edges:
+    post:
+      operationId: create_hub_edge
+      summary: "Create hub-to-hub edge"
+      description: |
+        Create a manual relationship between two hubs.
+        Symmetric types (related, duplicate, overlaps, contradicts) are
+        deduplicated regardless of direction.
+      tags: [edges]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EdgeCreateRequest"
+      responses:
+        "200":
+          description: "Created edge"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdgeResponse"
+        "404":
+          description: "Hub not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: "Edge already exists"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: list_hub_edges
+      summary: "List hub edges"
+      tags: [edges]
+      parameters:
+        - name: hub_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+            nullable: true
+        - name: include_archived
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: include_rejected
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "Edge list"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdgeListResponse"
+
+  /v1/edges/{edge_id}:
+    get:
+      operationId: get_hub_edge
+      summary: "Get edge by ID"
+      tags: [edges]
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Edge detail"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdgeResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/edges/{edge_id}/archive:
+    post:
+      operationId: archive_hub_edge
+      summary: "Archive edge"
+      description: "Archive a hub edge. Archived edges are excluded from the active graph."
+      tags: [edges]
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Edge archived"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  archived:
+                    type: boolean
+                  edge:
+                    $ref: "#/components/schemas/EdgeResponse"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Retrieval ──────────────────────────────────────────────────────────────
+  /v1/retrieval/search:
+    post:
+      operationId: search_raw_chunks
+      summary: "Semantic / graph-aware retrieval"
+      description: |
+        Retrieve raw knowledge chunks with semantic distance scores and
+        graph/hub-aware signals. Returns normalised evidence items with
+        optional debug stage metrics.
+
+        When embeddings are configured, results include pgvector KNN hits.
+        When not configured, falls back to deterministic full-text retrieval.
+      tags: [retrieval]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrievalRequest"
+      responses:
+        "200":
+          description: "Retrieval envelope"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetrievalResponse"
+
+  # ── Ask ────────────────────────────────────────────────────────────────────
+  /v1/ask:
+    post:
+      operationId: query_memory
+      summary: "Grounded memory query (ask)"
+      description: |
+        Search semantic memory and return a grounded answer with citations.
+        Use for direct factual recall about known content. `enable_provider_synthesis`
+        must be true AND the server must have a provider key configured to receive
+        an LLM-synthesised answer; otherwise returns retrieval-only evidence.
+      tags: [ask]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskRequest"
+      responses:
+        "200":
+          description: "Ask response with evidence"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskResponse"
+        "422":
+          description: "query or question is required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Decisions ──────────────────────────────────────────────────────────────
+  /decisions/:
+    get:
+      operationId: list_decisions
+      summary: "List decisions"
+      tags: [decisions]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/DecisionStatus"
+            nullable: true
+        - name: hub_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+            nullable: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: "Decision list"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  count:
+                    type: integer
+    post:
+      operationId: create_decision_memory
+      summary: "Save a decision with reasoning"
+      description: |
+        Store an important architectural, product, or strategic decision
+        with its full rationale. Future agents can retrieve *why* something
+        was decided, not just what.
+      tags: [decisions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionCreate"
+      responses:
+        "201":
+          description: "Decision created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionSummary"
+        "404":
+          description: "Referenced hub or content not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /decisions/conflicts:
+    get:
+      operationId: list_decision_conflicts
+      summary: "List potential decision conflicts"
+      description: "Find active decisions that may conflict (same hub or tags, both active)."
+      tags: [decisions]
+      responses:
+        "200":
+          description: "Conflicts list"
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /decisions/timeline:
+    get:
+      operationId: get_decision_timeline
+      summary: "Decision history timeline"
+      tags: [decisions]
+      parameters:
+        - name: hub_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+            nullable: true
+        - name: tags
+          in: query
+          schema:
+            type: string
+            nullable: true
+            description: "Comma-separated tag filter"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: "Timeline grouped by status"
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /decisions/{decision_id}:
+    get:
+      operationId: explain_decision
+      summary: "Full decision record"
+      description: "Retrieve full decision including reasoning, context, and why it matters."
+      tags: [decisions]
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Full decision"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionFull"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /decisions/{decision_id}/lineage:
+    get:
+      operationId: get_decision_lineage
+      summary: "Decision reasoning chain"
+      description: "Get ancestors (what this replaced) and descendants (what replaced it)."
+      tags: [decisions]
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Lineage chain"
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /decisions/{decision_id}/status:
+    patch:
+      operationId: update_decision_status
+      summary: "Update decision lifecycle status"
+      tags: [decisions]
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionStatusUpdate"
+      responses:
+        "200":
+          description: "Updated decision"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionFull"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Graph ──────────────────────────────────────────────────────────────────
+  /v1/graph/snapshot:
+    get:
+      operationId: get_graph_snapshot
+      summary: "Full graph snapshot"
+      description: |
+        Get all hub nodes and curated edges as a graph snapshot.
+        Useful for bootstrapping a knowledge map, auditing coverage,
+        or planning curation work.
+      tags: [graph]
+      parameters:
+        - name: include_inferred
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: include_curated
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: "Graph snapshot"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphSnapshotResponse"
+
+  /v1/graph/nodes/{content_id}/full:
+    get:
+      operationId: load_graph_node_full
+      summary: "Load full graph node"
+      description: "Load full content text plus all metadata for a specific node."
+      tags: [graph]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Full graph node"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphNodeFull"
+        "404":
+          description: "Not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/graph/search-preview:
+    get:
+      operationId: search_graph_preview
+      summary: "Lightweight metadata-first graph search"
+      description: |
+        Search the knowledge graph returning only metadata (no full chunk text).
+        Use this before load_graph_node_full to navigate cheaply.
+        Each result shows content_id, node_type, quick_summary, hub_match, score.
+      tags: [graph]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: node_type
+          in: query
+          schema:
+            $ref: "#/components/schemas/NodeType"
+            nullable: true
+        - name: hub_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+            nullable: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: "Search preview results"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchPreviewResult"
+                  count:
+                    type: integer
