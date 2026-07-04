@@ -8,7 +8,7 @@ from memory_lab.graph.adapter import CBGraphAdapter
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.store import GraphStore
 from memory_lab.providers.embedding_backend import EmbeddingBackend, EmbeddingRequest
-from memory_lab.retrieval.composite_ranker import rank_by_composite
+from memory_lab.retrieval.composite_ranker import build_ranking_signals, rank_by_composite
 
 
 class RetrievalAdapter:
@@ -28,6 +28,7 @@ class RetrievalAdapter:
             rerank_fn=self.rerank_fn,
         )
         self.last_debug_metadata: Dict[str, Any] = {}
+        self.last_ranking_signals: Dict[str, Any] = {}
 
     def _conn(self):
         return psycopg2.connect(self.database_url)
@@ -136,6 +137,7 @@ class RetrievalAdapter:
                     "score": 0.95,
                     "text": row.get("text") or "",
                     "hub_match": hub["hub_id"],
+                    "hub_title": hub.get("title"),
                     # OPENCB-M12-2A: feed real hub metadata into the composite scorer.
                     # This does not change the ranking formula or make hubs authoritative;
                     # it lets Scoring Model v2 distinguish hub-linked-only rows from
@@ -265,7 +267,10 @@ class RetrievalAdapter:
                 hub_added += 1
         # OPENCB-M12-1: the composite Scoring Model v2 final_score is the ranking authority
         # (sort key = (-final_score, distance)), replacing the flat per-path score sort.
+        # M12-4: the ranker also applies fixed curation boosts and attaches the
+        # per-result ranking surface; the signals envelope is derived from ranked rows.
         reranked = rank_by_composite(results, query)
+        self.last_ranking_signals = build_ranking_signals(reranked)
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         pgvector_count = sum(1 for row in reranked if row.get("retrieval_mode") == "pgvector_knn" or row.get("retrieval_path") == "pgvector_knn")
         deterministic_count = sum(1 for row in reranked if row.get("retrieval_mode") == "deterministic_fallback" or row.get("retrieval_path") in {"deterministic_fallback", "content_chunk_workspace_scoped"})

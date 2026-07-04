@@ -59,6 +59,10 @@ class EvidenceItem(BaseModel):
     knowledge_path: Optional[List[Any]] = None
     score_components: Optional[Dict[str, Any]] = None
     distance: Optional[float] = None
+    # M12-4 ranking surface parity
+    confidence: Optional[float] = None
+    result_trust: Optional[str] = None
+    source_path: Optional[str] = None
 
 
 class Citation(BaseModel):

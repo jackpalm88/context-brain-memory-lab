@@ -74,11 +74,13 @@ def test_dp2_hub_without_terms_uses_030_base_not_flat_095():
     ranked = rank_by_composite(rows, QUERY)
     # hub-only -> distance 2.0 -> vector 0; hub_score base 0.30 (no alias/related terms);
     # keyword 2 hits -> 0.4; trust has_hub 0.6.
+    # M12-4: hub-recall-only rows additionally carry the fixed manual-link boost.
+    from memory_lab.retrieval.composite_ranker import MANUAL_LINK_BOOST
     expected = compute_chunk_score(
         distance=2.0, graph_match=[], hub_match=["hub-1"], hub_aliases=[], hub_related_terms=[],
         query_tokens={"alpha", "beta"}, chunk_text="alpha beta", source_query_count=1,
     )
-    assert ranked[0]["final_score"] == pytest.approx(round(expected.final_score, 4))
+    assert ranked[0]["final_score"] == pytest.approx(round(min(1.0, expected.final_score + MANUAL_LINK_BOOST), 4))
     assert ranked[0]["final_score"] < 0.5  # nowhere near the old flat 0.95
 
 

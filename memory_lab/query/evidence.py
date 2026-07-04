@@ -32,6 +32,8 @@ PROVENANCE_METADATA_KEYS = (
     "retrieval_reason",
     "ranking_reason",
     "score_components",
+    "result_trust",
+    "source_path",
 )
 
 
@@ -163,6 +165,9 @@ def normalize_evidence(results: list[dict[str, Any]], limit: int = 320) -> list[
                     retrieval_path=retrieval_path,
                 ),
                 distance=float(row["distance"]) if row.get("distance") is not None else None,
+                confidence=float(row["confidence"]) if row.get("confidence") is not None else None,
+                result_trust=row.get("result_trust"),
+                source_path=row.get("source_path"),
             )
         )
     return evidence

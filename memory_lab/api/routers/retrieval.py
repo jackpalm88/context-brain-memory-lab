@@ -33,7 +33,7 @@ class RetrievalRequest(BaseModel):
     )
     max_hops: int = Field(default=1, description="Graph traversal hint used by the retrieval adapter; does not imply private graph expansion parity.")
     min_confidence: float = Field(default=0.7, description="Graph confidence hint forwarded to the retrieval adapter.")
-    graph_boost: float = Field(default=0.1, description="Graph boost hint forwarded to the retrieval adapter; not M12 ranking parity.")
+    graph_boost: float = Field(default=0.1, description="Legacy multi-query score multiplier hint forwarded to the retrieval adapter. M12 curation boosts (curated graph neighbor +0.04, manual hub link +0.15) are fixed constants in the composite ranker and are not caller-configurable.")
     memory_type: Optional[str] = Field(default=None, description="Optional single memory type filter. Mutually exclusive with memory_types.")
     memory_types: Optional[List[str]] = Field(default=None, description="Optional list of memory type filters. Mutually exclusive with memory_type.")
 
@@ -265,6 +265,8 @@ def retrieval_search(req: RetrievalRequest, auth: AuthContext = Depends(require_
         "degraded": False,
         "workspace_id": auth.workspace_id,
         "workspace_source": auth.workspace_source,
+        # M12-4: RankingSignals envelope (production search_by_text_v2 parity).
+        "ranking_signals": getattr(adapter, "last_ranking_signals", None) or None,
     }
     if req.debug:
         response["debug_metadata"] = _debug_metadata(
