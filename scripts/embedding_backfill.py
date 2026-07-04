@@ -94,8 +94,12 @@ def _make_backend(args: argparse.Namespace):
         sys.exit(1)
 
     try:
-        from memory_lab.providers.openai_embedding_backend import OpenAIEmbeddingBackend
-        backend = OpenAIEmbeddingBackend(api_key=api_key)
+        from memory_lab.providers.openai_embedding import OpenAIEmbeddingBackend
+        # OpenAIEmbeddingBackend takes no constructor args — it reads OPENAI_API_KEY
+        # from the process environment directly. Set it so an explicit --api-key
+        # (distinct from an already-exported OPENAI_API_KEY) actually takes effect.
+        os.environ["OPENAI_API_KEY"] = api_key
+        backend = OpenAIEmbeddingBackend()
         if not backend.is_configured:
             logger.error("EmbeddingBackend reports is_configured=False after init.")
             sys.exit(1)
