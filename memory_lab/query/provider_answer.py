@@ -22,21 +22,31 @@ from memory_lab.reasoning.models import AskRequest, AskResponse, EvidenceItem
 
 ASK_PROVIDER_SYSTEM = (
     "Public OpenCB ask wording only. Answer strictly from the supplied evidence snippets. "
-    "Do not decide truth. Do not choose a winner. Do not resolve conflicts. No private prompts."
+    "Do not decide truth. Do not choose a winner. Do not resolve conflicts. No private prompts. "
+    "Do not use the words: verdict, resolution, winner, canonical truth, truth decision."
 )
+
+# Forbidden terms mirrored so the prompt warns the model proactively.
+_FORBIDDEN_TERMS_REMINDER = "verdict, resolution, winner, canonical truth, truth decision"
 
 
 def _build_ask_prompt(query: str, deterministic_text: str, evidence: List[EvidenceItem]) -> str:
-    citation_ids = [e.evidence_id for e in evidence][:5]
-    snippets = "\n".join(f"[{e.evidence_id}] {e.snippet}" for e in evidence[:5])
+    top_evidence = evidence[:5]
+    # One ID per line so the model can copy them accurately without truncation.
+    allowed_ids_block = "\n".join(e.evidence_id for e in top_evidence)
+    snippets = "\n".join(f"[{e.evidence_id}] {e.snippet}" for e in top_evidence)
     return (
-        "Answer the user question using ONLY the evidence snippets below. "
-        "Do not decide truth. Do not choose a winner. Do not resolve conflicts. "
-        "If citing evidence, cite only these evidence_id values exactly: "
-        f"{citation_ids}.\n\n"
-        f"Question:\n{query}\n\n"
-        f"Deterministic candidate:\n{deterministic_text}\n\n"
-        f"Evidence:\n{snippets}"
+        "Reword the deterministic candidate answer using ONLY the evidence snippets below.\n"
+        "Rules:\n"
+        "- Cite evidence using ONLY the exact evidence_id values from ALLOWED IDS.\n"
+        "- Copy each evidence_id character-for-character; do not shorten or alter them.\n"
+        "- Do not introduce any evidence_id not listed in ALLOWED IDS.\n"
+        "- Do not decide truth. Do not resolve conflicts.\n"
+        f"- Do not use these words: {_FORBIDDEN_TERMS_REMINDER}.\n\n"
+        f"ALLOWED IDS (copy exactly, one per line):\n{allowed_ids_block}\n\n"
+        f"QUESTION:\n{query}\n\n"
+        f"DETERMINISTIC CANDIDATE:\n{deterministic_text}\n\n"
+        f"EVIDENCE SNIPPETS:\n{snippets}"
     )
 
 

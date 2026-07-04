@@ -13,3 +13,6 @@ __pycache__/
 # host-specific deployment helpers — local only, not part of the public artifact
 scripts/cbml_mcp_start.sh
 scripts/deploy_openapi_dev.sh
+
+# local compose overrides — server-side feature toggles, never committed
+docker-compose.override.yml

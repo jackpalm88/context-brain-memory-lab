@@ -75,7 +75,7 @@ def gate_provider_answer(
     prompt: str,
     system: str,
     backend: Optional[LLMBackend] = None,
-    max_tokens: int = 192,
+    max_tokens: int = 400,
 ) -> ProviderGateResult:
     """Run the shared provider-answer gate and return a neutral result.
 

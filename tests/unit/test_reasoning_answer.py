@@ -219,8 +219,9 @@ def test_provider_prompt_includes_candidate_evidence_ids_and_constraints():
     assert body.mode == "provider_backed"
     assert backend.last_request is not None
     prompt = backend.last_request.prompt
-    assert "Deterministic candidate" in prompt
+    assert "DETERMINISTIC CANDIDATE" in prompt
     assert "ev_support" in prompt
     assert "Do not decide truth" in prompt
-    assert "Do not choose a winner" in prompt
+    # "winner" now appears in the forbidden terms list, not a standalone rule line
+    assert "winner" in prompt
     assert "Do not resolve conflicts" in prompt

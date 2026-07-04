@@ -152,14 +152,27 @@ def provider_synthesize_answer_candidate(
     ProviderGateResult onto ReasoningProviderMetadata.
     """
     citation_ids = [_evidence_id(ref) for ref in evidence_refs if _evidence_id(ref)]
+    top_ids = citation_ids[:5]
+    # One ID per line so the model can copy them accurately without truncation.
+    allowed_ids_block = "\n".join(top_ids)
+    snippets_block = "\n".join(
+        f"[{_evidence_id(ref)}] {_snippet(ref)}"
+        for ref in evidence_refs[:5]
+        if _evidence_id(ref)
+    )
+    _forbidden = "verdict, resolution, winner, canonical truth, truth decision"
     prompt = (
-        "Produce a concise evidence-grounded answer_candidate from these evidence snippets only. "
-        "Do not decide truth. Do not choose a winner. Do not resolve conflicts. "
-        "If citing evidence, cite only these evidence_id values exactly: "
-        f"{citation_ids[:5]}.\n\n"
-        f"Deterministic candidate:\n{deterministic_candidate}\n\n"
-        f"Evidence refs:\n{evidence_refs[:5]}\n\n"
-        f"Warnings:\n{conflict_warnings}"
+        "Reword the deterministic candidate answer using ONLY the evidence snippets below.\n"
+        "Rules:\n"
+        "- Cite evidence using ONLY the exact evidence_id values from ALLOWED IDS.\n"
+        "- Copy each evidence_id character-for-character; do not shorten or alter them.\n"
+        "- Do not introduce any evidence_id not listed in ALLOWED IDS.\n"
+        "- Do not decide truth. Do not resolve conflicts.\n"
+        f"- Do not use these words: {_forbidden}.\n\n"
+        f"ALLOWED IDS (copy exactly, one per line):\n{allowed_ids_block}\n\n"
+        f"DETERMINISTIC CANDIDATE:\n{deterministic_candidate}\n\n"
+        f"EVIDENCE SNIPPETS:\n{snippets_block}\n\n"
+        f"WARNINGS:\n{conflict_warnings}"
     )
     result = gate_provider_answer(
         enable_provider_synthesis=request.enable_provider_synthesis,
@@ -169,7 +182,7 @@ def provider_synthesize_answer_candidate(
         prompt=prompt,
         system="Public B14 answer-candidate wording only. No private prompts. No conflict decision.",
         backend=backend,
-        max_tokens=192,
+        max_tokens=400,
     )
     metadata = ReasoningProviderMetadata(
         provider=result.provider_name,
