@@ -170,6 +170,7 @@ class FakePersistenceAdapter:
         workspace_id: str,
         workspace_source: str = "header",
         created_by_subject: str = SUBJECT,
+        scope_hint: Optional[str] = None,
     ) -> Dict[str, Any]:
         content_id = str(uuid.uuid4())
         row: Dict[str, Any] = {

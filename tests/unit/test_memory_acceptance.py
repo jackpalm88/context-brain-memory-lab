@@ -172,6 +172,7 @@ class FakeMemoryAdapter:
         workspace_id: Optional[str] = None,
         workspace_source: str = "header",
         created_by_subject: str = SUBJECT,
+        scope_hint: Optional[str] = None,
     ) -> Dict[str, Any]:
         ws = workspace_id or ""
         text = content or ""

@@ -128,7 +128,8 @@ class FakeContentAdapter:
 
     def create_content_minimal(self, content: Optional[str], workspace_id: str,
                                workspace_source: str = "header",
-                               created_by_subject: str = SUBJECT) -> Dict[str, Any]:
+                               created_by_subject: str = SUBJECT,
+                               scope_hint: Optional[str] = None) -> Dict[str, Any]:
         cid = str(uuid.uuid4())
         self.__class__._store[f"{workspace_id}:{cid}"] = {
             "content_id": cid,

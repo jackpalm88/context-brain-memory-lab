@@ -111,7 +111,13 @@ def test_content_create_minimal_persists_created_by_subject():
     cur = FakeCursor({"content_id": CONTENT})
     adapter._conn = lambda: FakeConn(cur)
     adapter._find_duplicate_content_id = lambda *a, **k: None
-    adapter.create_content_minimal(content="hello world", workspace_id=WS, created_by_subject=SUBJECT)
+    # Content must clear the governance quality floor (0.4) or the save is
+    # discarded before any SQL runs and provenance is never exercised.
+    adapter.create_content_minimal(
+        content="Decision: we will use PostgreSQL for storage because it supports pgvector.",
+        workspace_id=WS,
+        created_by_subject=SUBJECT,
+    )
     text = _executed_text(cur)
     assert "INSERT INTO content_items" in text and "created_by_subject" in text
     assert SUBJECT in _all_params(cur)
@@ -143,7 +149,7 @@ class FakeAdapter:
     def __init__(self, database_url, embedding_backend=None):
         pass
 
-    def create_content_minimal(self, content=None, workspace_id=None, workspace_source=None, created_by_subject=None):
+    def create_content_minimal(self, content=None, workspace_id=None, workspace_source=None, created_by_subject=None, scope_hint=None):
         FakeAdapter.captured = {"created_by_subject": created_by_subject, "workspace_id": workspace_id}
         return {"content_id": CONTENT, "persisted": True, "created_by_subject": created_by_subject}
 

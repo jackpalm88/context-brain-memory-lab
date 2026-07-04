@@ -55,8 +55,8 @@ def memory_lab_health() -> Dict[str, Any]:
     return _call_api(_client().health)
 
 
-def memory_lab_content_create_id(content: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    return _call_api(_client().content_create_id, content=content, workspace_id=workspace_id)
+def memory_lab_content_create_id(content: Optional[str] = None, scope_hint: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    return _call_api(_client().content_create_id, content=content, scope_hint=scope_hint, workspace_id=workspace_id)
 
 
 def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
@@ -321,12 +321,15 @@ def save_and_link_to_hub(
     hub_id: str,
     content_url: Optional[str] = None,
     quick_summary: Optional[str] = None,
+    scope_hint: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     # save_purpose and content_url have no counterpart in the public minimal API
     # (no classify/governance ingest pipeline), so they are accepted for production
     # tool-signature parity and reported as unsupported when supplied. quick_summary
     # IS persisted via the content quick-summary setter after the content node is saved.
+    # scope_hint IS threaded through to the current-state resolver to prevent
+    # scope-collapse (FV-5 fix).
     return _call_api(
         _client().save_and_link_to_hub,
         content=content,
@@ -334,6 +337,7 @@ def save_and_link_to_hub(
         quick_summary=quick_summary,
         save_purpose=save_purpose,
         content_url=content_url,
+        scope_hint=scope_hint,
         workspace_id=workspace_id,
     )
 

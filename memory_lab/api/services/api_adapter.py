@@ -91,6 +91,7 @@ class ApiAdapter:
         workspace_id: Optional[str] = None,
         workspace_source: Optional[str] = None,
         created_by_subject: Optional[str] = None,
+        scope_hint: Optional[str] = None,
     ) -> Dict[str, Any]:
         content_hash = compute_content_hash(content)
         existing_id = self._find_duplicate_content_id(content_hash, workspace_id)
@@ -234,7 +235,7 @@ class ApiAdapter:
                         memory_sub_type=classify_meta.get("memory_sub_type"),
                         classify_confidence=confidence,
                         signals=classify_meta.get("signals"),
-                        project_topic=classify_meta.get("project_topic"),
+                        project_topic=scope_hint or classify_meta.get("project_topic"),
                         domain_hint=classify_meta.get("domain_hint"),
                         content_text=content or "",
                     )

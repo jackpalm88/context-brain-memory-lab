@@ -144,10 +144,12 @@ class MemoryLabApiClient:
     def health(self) -> Dict[str, Any]:
         return self._request("GET", "/health")
 
-    def content_create_id(self, content: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def content_create_id(self, content: Optional[str] = None, scope_hint: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {}
         if content is not None:
             payload["content"] = content
+        if scope_hint is not None:
+            payload["scope_hint"] = scope_hint
         return self._request("POST", "/v1/content", json_body=payload, workspace_id=workspace_id)
 
     def content_get(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
@@ -350,9 +352,10 @@ class MemoryLabApiClient:
         quick_summary: Optional[str] = None,
         save_purpose: Optional[str] = None,
         content_url: Optional[str] = None,
+        scope_hint: Optional[str] = None,
         workspace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        created = self.content_create_id(content=content, workspace_id=workspace_id)
+        created = self.content_create_id(content=content, scope_hint=scope_hint, workspace_id=workspace_id)
         unsupported_fields = {
             name: "accepted for production MCP signature parity but not persisted by the public minimal content API"
             for name, value in {"save_purpose": save_purpose, "content_url": content_url}.items()

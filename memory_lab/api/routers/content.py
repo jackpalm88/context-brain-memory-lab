@@ -15,6 +15,13 @@ router = APIRouter(prefix="/v1/content", tags=["content"])
 class ContentCreateRequest(BaseModel):
     content: Optional[str] = None
     workspace_id: Optional[str] = None
+    scope_hint: Optional[str] = Field(None, max_length=120, description=(
+        "Explicit current-state scope key for this content item. "
+        "When supplied it bypasses heuristic keyword matching and is slugified "
+        "directly into current_state_scope. Prevents unrelated items in the same "
+        "workspace from collapsing into the 'global' scope and silently superseding "
+        "each other."
+    ))
 
 
 class QuickSummaryRequest(BaseModel):
@@ -53,6 +60,7 @@ def create_content(req: ContentCreateRequest, auth: AuthContext = Depends(requir
         workspace_id=auth.workspace_id,
         workspace_source=auth.workspace_source,
         created_by_subject=auth.auth_subject_id,
+        scope_hint=req.scope_hint,
     )
 
 

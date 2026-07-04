@@ -21,7 +21,7 @@ class StubClient(MemoryLabApiClient):
         super().__init__(base_url="http://127.0.0.1:8000")
         self.calls = []
 
-    def content_create_id(self, content=None, workspace_id=None):
+    def content_create_id(self, content=None, workspace_id=None, scope_hint=None):
         self.calls.append(("create", content, workspace_id))
         return {"persisted": True, "content_id": "new-id"}
 
@@ -80,6 +80,7 @@ def test_tool_save_and_link_forwards_quick_summary_and_unsupported_fields(monkey
             save_purpose=None,
             content_url=None,
             workspace_id=None,
+            scope_hint=None,
         ):
             captured.update(
                 content=content,
@@ -107,7 +108,7 @@ class AdapterStub(ApiAdapter):
     def __init__(self):
         self.calls = []
 
-    def create_content_minimal(self, content=None, workspace_id=None, workspace_source=None):
+    def create_content_minimal(self, content=None, workspace_id=None, workspace_source=None, scope_hint=None):
         self.calls.append(("create", content, workspace_id, workspace_source))
         return {"persisted": True, "content_id": "new-id"}
 
