@@ -67,6 +67,8 @@ services:
       # Deterministic baseline: providers stay off unless explicitly enabled.
       LLM_PROVIDER: ${LLM_PROVIDER:-none}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-none}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Local-dev auth (see posture note above).
       MEMORY_LAB_AUTH_MODE: ${MEMORY_LAB_AUTH_MODE:-local_dev_bypass}
       MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS: ${MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS:-true}
