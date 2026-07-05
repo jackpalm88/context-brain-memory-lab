@@ -1,8 +1,15 @@
 # Public capabilities and boundaries
 
-Current package version: `0.2.0a1`.
+Current package version: `1.0.0`.
 
-This document is the compact truth map for the public Memory Lab beta after M11C-2-4. It supersedes older B-era and M1–M5 wording as the current capability/boundary reference while preserving the same public-safety boundaries.
+This document is the compact truth map for Memory Lab v1.0 — feature-complete
+and closed against the full-provider field-validation cycle (FV-1..FV-9,
+2026-07-04/05). It supersedes older B-era and M-era wording. For the ratified
+architecture boundaries (standing doctrines, graph authority model, Graph
+Navigation scope freeze, v1.0 exception policy), see
+[ARCHITECTURE_BOUNDARIES.md](ARCHITECTURE_BOUNDARIES.md) — accepted
+limitations and vNext items live there and in the CHANGELOG, deliberately
+separated from blockers.
 
 ## Implemented and proven
 
@@ -11,7 +18,14 @@ This document is the compact truth map for the public Memory Lab beta after M11C
 - **MCP parity surface** — 32/32 approved Context Brain-compatible MCP tool names are registered in the public Memory Lab MCP surface.
 - **Content body persistence** — created content bodies are persisted to `content_chunks` through a shared body persistence primitive.
 - **Workspace-scoped content dedup** — content creation computes `content_hash` and uses a workspace-scoped unique index/friendly duplicate response when Postgres persistence is configured.
-- **Deterministic classification and current-state substrate** — public classification/current-state logic remains provider-free and does not claim semantic truth understanding.
+- **Deterministic classification and current-state substrate** — public classification/current-state logic remains provider-free and does not claim semantic truth understanding. Scope resolution is a deterministic pipeline (explicit `scope_hint` → in-text marker → anchor lineage → hub alias match → classify metadata → keyword heuristic → `global` last resort) with the winning tier reported as `current_state_scope_source`. When the classify-confidence gate skips the resolver, the save response says so (`current_state_status: noop`, `current_state_reason: low_confidence`) instead of staying silent.
+- **Current-state visible on direct reads** — GET content/metadata (and the MCP content-get tool) expose `is_current`, `current_state_scope`, and `cs_supersedes_content_id` through one canonical projection; ranked raw search deliberately stays physics-only.
+- **Loud empty-save failure** — POST /v1/content with missing/empty content returns 422 (batch: inline per-item failure); an empty save never reports `persisted: true`.
+- **Conflict escalations with a human gate** — ingest-path conflict detection produces escalations reviewed via approve/reject; contradictions are surfaced, never auto-resolved.
+- **Deterministic edge inference with a human gate** — provider-free co-membership/tag-alignment signals propose hub edges as `status=inferred`; only human approval promotes them, and rejections are never silently resurrected.
+- **Evidence-grounded ask with current-state awareness** — /v1/ask enriches retrieved evidence with resolver-owned current-state fields; a superseded item is demoted below the current item of the same scope (historical questions keep original order), with explicit ranking reasons.
+- **Reasoning traverse/explain with honored max_hops** — hop-bounded BFS query expansion consults the curated hub graph through read-only hub-term adjacency (reasoning surface only), and traversal steps expose hub/graph provenance.
+- **MCP ergonomics** — all 32 approved MCP tools ship useful descriptions; `query_memory` can opt into the provider-backed ask mode and self-explains when the deployment gate keeps it deterministic.
 - **Optional semantic annotations** — `topic_tags` and `meta_tags` can be produced as provider-neutral, best-effort enrichment; save/ingest success does not depend on provider availability.
 - **Canonical query/evidence seams + opt-in grounded answer** — public query paths normalize evidence, project `AskResponse` through canonical seams, declare a `mode` (`deterministic|provider_backed|degraded`), and accept optional `memory_type`/`memory_types` filters. When explicitly opted in per request and enabled by deployment config, the answer is provider-backed wording bounded to retrieved evidence, enforced by a citation allow-list (no invented citations) and a typed degraded fallback. This is bounded evidence-grounded wording, not private `ask_v2` ranking/confidence parity.
 - **Decision, graph, governance, context-pack, and reasoning helpers** — public Memory Lab functionality is packaged in `memory_lab.*` modules.

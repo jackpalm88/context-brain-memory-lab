@@ -4,9 +4,14 @@ info:
   description: |
     Public agent-facing REST API for Context Brain Memory Lab (OpenCB).
 
-    This schema covers the routes safe for external agents, GPT Actions, and
-    non-MCP integrations. Admin, internal-tooling, and private-compatibility
-    endpoints are excluded.
+    This schema is a deliberately curated Actions subset of the full API
+    surface, covering the routes safe for external agents, GPT Actions, and
+    non-MCP integrations. Intentionally excluded (available on the live API
+    and via MCP, see /openapi.json on a deployment): admin/tier-override,
+    conflict escalations, inferred-edge approve/reject, reasoning
+    traverse/explain/answer, context packs, batch save, similar retrieval,
+    feedback, ask metrics, and keyword-audit routes. Exclusion here is a
+    curation decision, not absence of the capability.
 
     **Auth:** Bearer token via `Authorization: Bearer <token>` header.
     Workspace scope is resolved server-side from the token; callers never
@@ -17,7 +22,7 @@ info:
     **MCP alternative:** if your client supports MCP streamable-http transport,
     connect to `POST /mcp` with the same Bearer token — all 32 tools are
     available with identical semantics to this REST surface.
-  version: "pr1b"
+  version: "1.0.0"
   contact:
     name: "OpenCB project"
 
@@ -91,15 +96,21 @@ components:
     # ── Content ──────────────────────────────────────────────────────────────
     ContentCreateRequest:
       type: object
+      required: [content]
       properties:
         content:
           type: string
-          description: "Full text body to store (200+ words recommended)."
-          nullable: true
+          minLength: 1
+          description: "Full text body to store (200+ words recommended). Missing, empty, or whitespace-only content is rejected with 422 — an empty save never reports persisted=true."
         workspace_id:
           type: string
           nullable: true
           description: "Optional workspace override. Usually resolved from token."
+        scope_hint:
+          type: string
+          maxLength: 120
+          nullable: true
+          description: "Explicit current-state scope key. Bypasses heuristic scope resolution and is slugified directly into current_state_scope; recommended when saving decisions so unrelated topics never supersede each other."
 
     ContentResponse:
       type: object
@@ -125,6 +136,31 @@ components:
         workspace_id:
           type: string
           nullable: true
+        is_current:
+          type: boolean
+          nullable: true
+          description: "Resolver-owned: true = active current-state anchor, false = superseded, null = unscoped/not yet evaluated."
+        current_state_scope:
+          type: string
+          nullable: true
+          description: "Resolver-owned current-state scope this item belongs to."
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Content item this one superseded, when applicable."
+        current_state_status:
+          type: string
+          nullable: true
+          description: "Save responses only: resolver outcome (active | noop | deferred). noop with reason low_confidence means the resolver was skipped and any scope_hint did not take effect."
+        current_state_reason:
+          type: string
+          nullable: true
+          description: "Save responses only: reason accompanying current_state_status."
+        current_state_scope_source:
+          type: string
+          nullable: true
+          description: "Save responses only: which scope-resolution tier produced the scope (scope_hint | marker | lineage | hub_alias | classify_metadata | keyword_heuristic | global_fallback)."
         created_at:
           type: string
           format: date-time
@@ -147,6 +183,19 @@ components:
         word_count:
           type: integer
           nullable: true
+        is_current:
+          type: boolean
+          nullable: true
+          description: "Resolver-owned: true = active current-state anchor, false = superseded, null = unscoped/not yet evaluated."
+        current_state_scope:
+          type: string
+          nullable: true
+          description: "Resolver-owned current-state scope this item belongs to."
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Content item this one superseded, when applicable."
         created_at:
           type: string
           format: date-time

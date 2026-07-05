@@ -16,3 +16,4 @@ scripts/deploy_openapi_dev.sh
 
 # local compose overrides — server-side feature toggles, never committed
 docker-compose.override.yml
+dist/

@@ -1,5 +1,86 @@
 # Changelog
 
+## 1.0.0 — Feature-Complete, field-validated (2026-07-05)
+
+First stable release. Covers everything since tag `v0.2.0a1` (73 commits):
+gap closure, the full-provider field-validation cycle, the v1.0 Architecture
+Review, and the epistemic-blocker fixes.
+
+### Breaking / strictness changes (intentional)
+
+- **Empty save now fails loudly (EB-2).** `POST /v1/content` with a missing,
+  empty, or whitespace-only `content` returns **422** instead of silently
+  answering `persisted: true` (previously it deduplicated onto a shared empty
+  content item). `POST /v1/content/batch` marks such items as inline per-item
+  failures without aborting the batch.
+
+### Added
+
+- **Gap closure (1–8b):** embeddings on the save path with deterministic
+  multi-chunk persistence and a backfill CLI (EMB-1A/1B/1C); ingest-path
+  conflict detection with human-gated escalations (`/v1/escalations`);
+  deterministic, provider-free hub-edge inference with approve/reject
+  (`ai_suggested` proposals are never auto-curated, rejections never
+  resurrected); M12 composite ranking surface (per-result `confidence`,
+  `result_trust`, `ranking_reason`, `score_components`, `ranking_signals`);
+  streamable-http MCP transport; demo seeds; public GPT Actions OpenAPI
+  schema; docker-compose onboarding; batch save, similar retrieval, feedback
+  signal, ask metrics, and keyword-audit routes (DX-1..3).
+- **Scope resolution (FV-FIX-2A/2B):** explicit `scope_hint` on
+  `POST /v1/content` and the MCP save tools, plus a deterministic scope
+  resolver pipeline (`scope_hint` → in-text marker → anchor lineage → hub
+  alias match → classify metadata → keyword heuristic → `global` last
+  resort). The winning tier is reported as `current_state_scope_source`.
+  Fixes silent cross-topic supersession ("scope collapse").
+- **Ask current-state awareness (FV-FIX-3):** `/v1/ask` evidence carries
+  `is_current` / `current_state_scope` / `cs_supersedes_content_id`;
+  superseded items are demoted below the current item of the same scope with
+  an explicit `ranking_reason`; historical questions keep original order;
+  provider prompts label snippet status.
+- **MCP ergonomics (FV-FIX-4):** useful descriptions on all 32 approved MCP
+  tools; `query_memory` gains an `enable_provider_synthesis` opt-in that
+  reaches the provider-backed ask mode (and self-explains via
+  `mode=degraded` / `failure_reason=provider_disabled` when the deployment
+  gate is off).
+- **Reasoning traverse depth (FV-FIX-5):** `/v1/reasoning/traverse` and
+  `/explain` honor `max_hops`, and the hop-bounded BFS expansion consults the
+  curated hub graph through read-only **hub-term graph adjacency** (reasoning
+  surface only — raw retrieval and ask are byte-identical). Traversal steps
+  expose `included_via_hub_link` / `included_via_graph_expansion` provenance.
+- **Current-state on direct reads (EB-1):** `GET /v1/content/{id}` and
+  `/metadata` (and the MCP content-get tool) expose `is_current`,
+  `current_state_scope`, `cs_supersedes_content_id` via one canonical
+  projection (`memory_lab/current_state/projection.py`).
+- **Resolver-skip visibility (EB-3):** when classification confidence is
+  below the 0.70 gate, the save response reports
+  `current_state_status: "noop"` / `current_state_reason: "low_confidence"`
+  instead of omitting the keys — a discarded `scope_hint` is now observable.
+- **Architecture boundaries:** `docs/ARCHITECTURE_BOUNDARIES.md` — standing
+  doctrines, the graph authority model (curated hub graph is the only edge
+  authority; `cb_edges` is the non-authoritative legacy term layer), the
+  Graph Navigation scope freeze with amendment procedure, and the v1.0
+  exception policy.
+
+### Accepted limitations (documented, not blockers)
+
+- First save on a new topic with no hub and no prior anchor resolves to the
+  `global` scope (mitigate with a hub or an explicit `scope_hint`).
+- `/v1/reasoning/answer` retrieval stays at `max_hops=1` without hub-term
+  adjacency (deliberate scoping; threading the parameter alone would be
+  inert).
+- The MCP raw-retrieval tool does not forward `memory_type` filters (stated
+  in its description).
+- Embedding backfill is CLI-only (no HTTP admin route).
+- Ranked raw search does not expose current-state fields (physics-only by
+  design; direct reads and ask do).
+
+### Historical note
+
+- Tag `v0.2.0a1` predates the M6 privacy remediation and was intentionally
+  never re-tagged; `v1.0.0` is the first recommended checkout. Stale
+  `0.2.0a1` build artifacts were removed from the repository (`dist/` is no
+  longer tracked).
+
 ## 0.2.0a1 — M6 release readiness
 
 - Privacy remediation (fix-forward): scrubbed private server paths from shipped source (`embedding_admin` denylist is now runtime/env-extensible), tests, and docs; removed internal B-phase reports and clone inventory from the public repo; rebuilt clean 0.2.0a1 wheel/sdist; repo + artifact privacy scan clean.

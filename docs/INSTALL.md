@@ -78,7 +78,7 @@ docker compose down -v       # stop + wipe data volume
 
 # Local developer setup
 
-This guide covers installing and running Context Brain Memory Lab `0.2.0a1` locally. It does not cover hosted production deployment, private Context Brain parity, push/tag/PyPI publication, or public release announcements.
+This guide covers installing and running Context Brain Memory Lab `1.0.0` locally. It does not cover hosted production deployment, private Context Brain parity, push/tag/PyPI publication, or public release announcements.
 
 ## Prerequisites
 
@@ -181,10 +181,10 @@ rm -rf dist
 python -m build
 ```
 
-Expected artifacts for `0.2.0a1`:
+Expected artifacts for `1.0.0` (dist/ is not tracked in git):
 
-- `dist/context_brain_memory_lab-0.2.0a1-py3-none-any.whl`
-- `dist/context_brain_memory_lab-0.2.0a1.tar.gz`
+- `dist/context_brain_memory_lab-1.0.0-py3-none-any.whl`
+- `dist/context_brain_memory_lab-1.0.0.tar.gz`
 
 ## 8. Clean install from built artifact
 
@@ -192,12 +192,12 @@ Expected artifacts for `0.2.0a1`:
 tmpvenv="$(mktemp -d /tmp/cbml-artifact-venv.XXXXXX)"
 python -m venv "$tmpvenv"
 "$tmpvenv/bin/python" -m pip install --upgrade pip
-"$tmpvenv/bin/python" -m pip install "dist/context_brain_memory_lab-0.2.0a1-py3-none-any.whl[test]"
+"$tmpvenv/bin/python" -m pip install "dist/context_brain_memory_lab-1.0.0-py3-none-any.whl[test]"
 "$tmpvenv/bin/python" - <<'PY'
 import importlib.metadata as metadata
 import memory_lab
 from memory_lab.api.main import app
-assert metadata.version("context-brain-memory-lab") == "0.2.0a1"
+assert metadata.version("context-brain-memory-lab") == "1.0.0"
 assert app is not None
 print("artifact import smoke PASS", metadata.version("context-brain-memory-lab"))
 PY

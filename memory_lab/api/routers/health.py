@@ -1,10 +1,12 @@
 import os
 from fastapi import APIRouter
 
+from memory_lab.version import __version__
+
 router = APIRouter(tags=["health"])
 
 _SERVICE = "memory-lab-api"
-_VERSION = "pr1b-minimal"
+_VERSION = __version__
 
 
 @router.get("/health")
