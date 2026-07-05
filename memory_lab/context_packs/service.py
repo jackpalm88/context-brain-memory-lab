@@ -108,7 +108,11 @@ def _attach_content_metadata(evidence: List[Any], metadata: Dict[str, Dict[str, 
         content_id = str(row.get("content_id") or "")
         meta = metadata.get(content_id, {})
         row.update({k: v for k, v in meta.items() if k != "content_id" and v is not None})
-        row["metadata"] = {k: v for k, v in meta.items() if k not in {"content_id", "memory_type", "memory_sub_type", "classify_confidence", "is_current", "current_state_scope", "cs_supersedes_content_id"} and v is not None} or row.get("metadata")
+        # FV-FIX-5: merge instead of replace — replacing dropped the retrieval
+        # provenance (hub_match/graph_match/source_path) exactly for anchored content.
+        provenance_meta = dict(row.get("metadata") or {})
+        content_meta = {k: v for k, v in meta.items() if k not in {"content_id", "memory_type", "memory_sub_type", "classify_confidence", "is_current", "current_state_scope", "cs_supersedes_content_id"} and v is not None}
+        row["metadata"] = {**provenance_meta, **content_meta} or None
         enriched.append(row)
     return enriched
 
@@ -119,6 +123,8 @@ def build_context_pack_for_request(
     request: ContextPackBuildRequest,
     workspace_id: str,
     workspace_source: Optional[str] = None,
+    max_hops: int = 1,
+    consult_hub_graph: bool = False,
 ) -> ContextPackBuildResponse:
     memory_types = request.resolved_memory_types()
     supporting_evidence: List[Dict[str, Any]] = []
@@ -131,11 +137,14 @@ def build_context_pack_for_request(
             adapter = RetrievalAdapter(database_url)
             raw_results = adapter.search(
                 query=request.effective_query(),
-                max_hops=1,
+                # FV-FIX-5: callers (reasoning traverse/explain) may raise this to reach
+                # deeper M12 BFS query expansion; the public context-pack route keeps 1.
+                max_hops=min(max(int(max_hops or 1), 1), 3),
                 min_confidence=0.0,
                 graph_boost=0.1,
                 workspace_id=workspace_id,
                 memory_types=memory_types,
+                consult_hub_graph=consult_hub_graph,
             )
             normalized = normalize_evidence(raw_results)[: request.limit]
             metadata = _metadata_by_content_id(conn, workspace_id=workspace_id, content_ids=[e.content_id for e in normalized])

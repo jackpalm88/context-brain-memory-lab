@@ -144,6 +144,8 @@ def traverse_for_request(
         request=cp_req,
         workspace_id=workspace_id,
         workspace_source=workspace_source,
+        max_hops=request.max_hops,
+        consult_hub_graph=True,
     )
     return traverse_context_pack(context_pack=context_pack, request=request, backend=backend)
 
@@ -162,6 +164,8 @@ def explain_for_request(
         request=cp_req,
         workspace_id=workspace_id,
         workspace_source=workspace_source,
+        max_hops=request.max_hops,
+        consult_hub_graph=True,
     )
     return explain_context_pack(context_pack=context_pack, request=request, backend=backend)
 

@@ -27,6 +27,16 @@ class RetrievalAdapter:
             vector_search_fn=self.vector_search_fn,
             rerank_fn=self.rerank_fn,
         )
+        # FV-FIX-5: opt-in variant whose BFS expansion also walks the curated hub
+        # graph (cb_hubs + manual cb_hub_edges) as term adjacency. Only callers
+        # passing consult_hub_graph=True (reasoning traverse/explain) use it.
+        from memory_lab.graph.hub_term_graph import HubTermGraph
+
+        self.hub_term_adapter = CBGraphAdapter(
+            graph_store=HubTermGraph(database_url, inner=self.graph_store),
+            vector_search_fn=self.vector_search_fn,
+            rerank_fn=self.rerank_fn,
+        )
         self.last_debug_metadata: Dict[str, Any] = {}
         self.last_ranking_signals: Dict[str, Any] = {}
 
@@ -233,6 +243,7 @@ class RetrievalAdapter:
         graph_boost: float = 0.1,
         workspace_id: Optional[str] = None,
         memory_types: Optional[List[str]] = None,
+        consult_hub_graph: bool = False,
     ) -> List[Dict[str, Any]]:
         started = time.perf_counter()
         query_vector, embedding_degraded = self._query_embedding(query)
@@ -241,7 +252,8 @@ class RetrievalAdapter:
             vector_search = lambda q: self._pgvector_knn_search(q, query_vector, workspace_id=workspace_id, memory_types=memory_types)
         else:
             vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types)
-        results = self.adapter.search(
+        search_adapter = self.hub_term_adapter if consult_hub_graph else self.adapter
+        results = search_adapter.search(
             query=query,
             max_hops=max_hops,
             min_confidence=min_confidence,

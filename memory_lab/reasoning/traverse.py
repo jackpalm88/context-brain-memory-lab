@@ -73,6 +73,39 @@ def build_traversal_steps(context_pack: ContextPackBuildResponse, request: Reaso
                     rationale="Supporting evidence is included by the B12 retrieval/context-pack path.",
                 )
             )
+        # FV-FIX-5: project the retrieval provenance the M12 path already recorded
+        # on each row (hub_match / graph_match / source_path) into read-only steps.
+        # Pure projection — no new queries, no recursion, no truth decisions.
+        for evidence in sorted(context_pack.supporting_evidence, key=lambda e: (e.rank or 999999, e.content_id, e.evidence_id)):
+            meta = evidence.metadata or {}
+            hub_match = meta.get("hub_match")
+            if hub_match:
+                step_no += 1
+                steps.append(
+                    ReasoningTraversalStep(
+                        step_id=f"step_{step_no:02d}",
+                        hop=1,
+                        source=str(hub_match),
+                        relation="included_via_hub_link",
+                        target=evidence.content_id,
+                        evidence_ids=[evidence.evidence_id],
+                        rationale="This evidence reached the pack through a human-curated hub link recorded by retrieval.",
+                    )
+                )
+            graph_match = meta.get("graph_match")
+            if graph_match or meta.get("source_path") == "graph_neighbor":
+                step_no += 1
+                steps.append(
+                    ReasoningTraversalStep(
+                        step_id=f"step_{step_no:02d}",
+                        hop=1,
+                        source=str(graph_match or "graph_expansion"),
+                        relation="included_via_graph_expansion",
+                        target=evidence.content_id,
+                        evidence_ids=[evidence.evidence_id],
+                        rationale="This evidence reached the pack through hop-bounded graph query expansion recorded by retrieval.",
+                    )
+                )
 
     if max_hops >= 2:
         for evidence in sorted(context_pack.current_state_signals, key=lambda e: (e.rank or 999999, e.content_id, e.evidence_id)):
