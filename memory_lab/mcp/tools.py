@@ -52,18 +52,36 @@ def _call_api(fn, *args, **kwargs) -> Dict[str, Any]:
 
 
 def memory_lab_health() -> Dict[str, Any]:
+    """Check Memory Lab API liveness.
+
+    Returns service status, name and version. Call first when a tool sequence
+    fails unexpectedly to distinguish backend-down from request errors.
+    """
     return _call_api(_client().health)
 
 
 def memory_lab_content_create_id(content: Optional[str] = None, scope_hint: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Save one content item to workspace memory and return its content_id.
+
+    The save is governed: content is scored and low-signal text is discarded
+    (persisted=false, mode=governed_discarded) — write substantive prose, and use
+    decision:/finding: vocabulary for decisions and findings. Exact duplicates
+    dedup by content hash. scope_hint explicitly pins the current-state scope
+    (recommended when saving decisions) instead of automatic scope resolution.
+    Read the response: it reports tier, classification and conflict escalations.
+    """
     return _call_api(_client().content_create_id, content=content, scope_hint=scope_hint, workspace_id=workspace_id)
 
 
 def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch one stored content item by content_id, including its quick_summary
+    and stored fields. Use memory_lab_retrieval_search to find content by text."""
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
 def set_quick_summary(content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Set or replace the short human-readable quick_summary of an existing
+    content item. Good summaries make retrieval results scannable for agents."""
     return _call_api(
         _client().set_quick_summary,
         content_id=content_id,
@@ -103,14 +121,24 @@ def memory_lab_hub_create(
     description: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Create a knowledge hub (type: topic, project, system or concept_cluster).
+
+    Hubs organize related content; their titles/aliases/related_terms feed both
+    retrieval corroboration and automatic current-state scope resolution, so a
+    well-named hub keeps decisions on the same topic in one supersession chain.
+    """
     return _call_api(_client().hub_create, title=title, hub_type=hub_type, description=description, workspace_id=workspace_id)
 
 
 def memory_lab_hub_get(hub_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch one hub by hub_id: title, type, description, aliases, related_terms
+    and status. Use list_hubs to discover hub ids."""
     return _call_api(_client().hub_get, hub_id=hub_id, workspace_id=workspace_id)
 
 
 def memory_lab_hub_link_content(hub_id: str, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Link an existing content item to a hub. Manual hub links are a curation
+    signal: linked content earns a fixed recall boost in ranked retrieval."""
     return _call_api(_client().hub_link_content, hub_id=hub_id, content_id=content_id, workspace_id=workspace_id)
 
 
@@ -120,6 +148,9 @@ def memory_lab_edge_create(
     edge_type: str,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Create a manual (human-curated) relationship edge between two hubs with
+    the given edge_type. Machine-proposed edges arrive separately as status
+    'inferred' and go through approve_inferred_edge / reject_inferred_edge."""
     return _call_api(
         _client().edge_create,
         source_hub_id=source_hub_id,
@@ -130,6 +161,8 @@ def memory_lab_edge_create(
 
 
 def memory_lab_edge_get(edge_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch one hub-to-hub relationship edge by edge_id, including its type,
+    status (manual/inferred/archived), note, reason and confidence."""
     return _call_api(_client().edge_get, edge_id=edge_id, workspace_id=workspace_id)
 
 
@@ -138,10 +171,14 @@ def memory_lab_edge_list(
     include_archived: Optional[bool] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """List hub-to-hub relationship edges, optionally restricted to one hub.
+    include_archived=true also returns archived (soft-deleted) edges."""
     return _call_api(_client().edge_list, hub_id=hub_id, include_archived=include_archived, workspace_id=workspace_id)
 
 
 def memory_lab_edge_archive(edge_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Archive (soft-delete) a hub-to-hub edge. Archived edges leave the active
+    graph but remain readable for audit; use update_hub_edge to change fields."""
     return _call_api(_client().edge_archive, edge_id=edge_id, workspace_id=workspace_id)
 
 
@@ -223,11 +260,35 @@ def _enrich_query_memory_result(result: Any) -> Any:
     return enriched
 
 
-def query_memory(query: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    return _enrich_query_memory_result(_call_api(_client().ask, query=query, workspace_id=workspace_id))
+def query_memory(
+    query: str,
+    enable_provider_synthesis: bool = False,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Ask a question answered strictly from workspace memory (evidence-grounded).
+
+    Returns the /v1/ask envelope: answer, citations, claims, confidence,
+    plus derived signals has_citations, no_context (distinct from an error) and a
+    fallback pointer to memory_lab_retrieval_search for low-confidence outcomes.
+    Superseded memories are demoted below the current decision of the same
+    current-state scope unless the question asks about history.
+
+    enable_provider_synthesis=true requests provider-backed rewording of the
+    deterministic answer. It takes effect only when the deployment gate
+    (MEMORY_LAB_ASK_PROVIDER_SYNTHESIS_ENABLED) is on and a provider is configured;
+    otherwise the response reports mode="degraded" with failure_reason
+    "provider_disabled" and the deterministic answer is retained. The provider may
+    only reword — citations stay bounded to retrieved workspace evidence.
+    """
+    kwargs: Dict[str, Any] = {"query": query, "workspace_id": workspace_id}
+    if enable_provider_synthesis:
+        kwargs["enable_provider_synthesis"] = True
+    return _enrich_query_memory_result(_call_api(_client().ask, **kwargs))
 
 
 def list_hubs(status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """List the workspace's hubs filtered by status ('active' default, or
+    'archived'). The usual entry point for discovering hub ids and topics."""
     return _call_api(_client().hub_list, status=status, workspace_id=workspace_id)
 
 
@@ -241,6 +302,9 @@ def update_hub(
     status: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Update hub fields; only supplied fields change. Investing in aliases and
+    related_terms pays off directly: they drive retrieval corroboration,
+    edge-inference quality and automatic current-state scope resolution."""
     return _call_api(
         _client().hub_update,
         hub_id=hub_id,
@@ -263,6 +327,8 @@ def update_hub_edge(
     confidence: Optional[float] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Update a hub-to-hub edge's type, status, note, reason or confidence;
+    only supplied fields change. Use memory_lab_edge_archive to retire an edge."""
     return _call_api(
         _client().edge_update,
         edge_id=edge_id,
@@ -284,6 +350,10 @@ def approve_inferred_edge(
     note: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Approve a machine-proposed (inferred) hub edge, promoting it into the
+    curated graph. This is the human gate of edge inference: nothing an agent or
+    job proposes becomes curated without this call. Optional reason/confidence/
+    note are recorded on the approved edge."""
     return _call_api(
         _client().approve_inferred_edge,
         source_hub_id=source_hub_id,
@@ -304,6 +374,8 @@ def reject_inferred_edge(
     note: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Reject a machine-proposed (inferred) hub edge. Rejections are durable:
+    the edge-inference job never silently resurrects a rejected proposal."""
     return _call_api(
         _client().reject_inferred_edge,
         source_hub_id=source_hub_id,
@@ -324,12 +396,14 @@ def save_and_link_to_hub(
     scope_hint: Optional[str] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    # save_purpose and content_url have no counterpart in the public minimal API
-    # (no classify/governance ingest pipeline), so they are accepted for production
-    # tool-signature parity and reported as unsupported when supplied. quick_summary
-    # IS persisted via the content quick-summary setter after the content node is saved.
-    # scope_hint IS threaded through to the current-state resolver to prevent
-    # scope-collapse (FV-5 fix).
+    """Save one content item and link it to a hub in a single call (the daily
+    write-path shortcut). quick_summary is persisted after the save; scope_hint
+    explicitly pins the current-state scope (recommended for decisions).
+
+    Honest contract: save_purpose and content_url have no counterpart in the
+    public minimal API — they are accepted for production tool-signature parity
+    and reported back as unsupported when supplied.
+    """
     return _call_api(
         _client().save_and_link_to_hub,
         content=content,
@@ -365,6 +439,9 @@ def list_graph_snapshot(include_inferred: bool = True, include_curated: bool = T
 
 
 def load_graph_node_full(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Load one content node in full graph context: content fields plus its hub
+    memberships and graph neighborhood. Heavier than memory_lab_content_get —
+    use search_graph_preview first to find the right node."""
     return _call_api(_client().graph_node_full, content_id=content_id, workspace_id=workspace_id)
 
 
@@ -375,6 +452,9 @@ def search_graph_preview(
     limit: int = 10,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Search graph nodes by free text with optional node_type / hub_id filters.
+    Returns a lightweight preview list for navigation; follow up with
+    load_graph_node_full for the complete node."""
     return _call_api(
         _client().graph_search_preview,
         query=query,
@@ -401,6 +481,11 @@ def create_decision_memory(
     decision_tags: Optional[List[str]] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Create a first-class decision node with reason, context, alternatives,
+    confidence_level and lineage. Prefer this over a plain content save for
+    decisions the workspace must track: supersedes_decision_id builds an explicit
+    supersession chain (the old decision is marked superseded automatically),
+    and explain_decision / get_decision_lineage read it back."""
     payload: Dict[str, Any] = {
         "title": title,
         "decision_reason": decision_reason,
@@ -428,6 +513,9 @@ def create_decision_memory(
 
 
 def explain_decision(decision_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch one decision with its full explainability envelope: reason, context,
+    why_this_matters, alternatives considered, contradicting evidence,
+    confidence_level, status and lineage summary."""
     return _call_api(_client().decision_get, decision_id, workspace_id=workspace_id)
 
 
@@ -437,10 +525,15 @@ def list_decisions(
     limit: int = 20,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """List decision nodes, optionally filtered by status and/or linked hub.
+    Use get_decision_timeline for a chronological view across the workspace."""
     return _call_api(_client().decision_list, status=status, hub_id=hub_id, limit=limit, workspace_id=workspace_id)
 
 
 def update_decision_status(decision_id: str, decision_status: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Transition a decision's lifecycle status (e.g. active → superseded or
+    deprecated). For replacing a decision with a new one, prefer
+    create_decision_memory with supersedes_decision_id so lineage is preserved."""
     return _call_api(
         _client().decision_update_status,
         decision_id=decision_id,
@@ -450,10 +543,15 @@ def update_decision_status(decision_id: str, decision_status: str, workspace_id:
 
 
 def get_decision_lineage(decision_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Get the supersession lineage of one decision: the ancestors it replaced
+    and the descendants that replaced it, with statuses and timestamps."""
     return _call_api(_client().decision_lineage, decision_id, workspace_id=workspace_id)
 
 
 def list_decision_conflicts(workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """List computed contradiction candidates between decisions. Read-only and
+    non-arbitrating: it surfaces potential conflicts for a human to resolve,
+    it never decides which side is true."""
     return _call_api(_client().decision_conflicts, workspace_id=workspace_id)
 
 
@@ -463,6 +561,9 @@ def get_decision_timeline(
     limit: int = 50,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Chronological timeline of the workspace's decisions, newest first,
+    optionally filtered by hub or comma-separated tags. The fastest way to
+    answer 'what has been decided here recently?'."""
     return _call_api(_client().decision_timeline, hub_id=hub_id, tags=tags, limit=limit, workspace_id=workspace_id)
 
 

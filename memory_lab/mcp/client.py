@@ -252,10 +252,18 @@ class MemoryLabApiClient:
         return self._request("POST", "/v1/retrieval/search", json_body=payload, workspace_id=workspace_id)
 
 
-    def ask(self, query: str, top_k: Optional[int] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def ask(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        enable_provider_synthesis: Optional[bool] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"query": query}
         if top_k is not None:
             payload["top_k"] = top_k
+        if enable_provider_synthesis:
+            payload["enable_provider_synthesis"] = True
         return self._request("POST", "/v1/ask", json_body=payload, workspace_id=workspace_id)
 
     def hub_list(self, status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:
