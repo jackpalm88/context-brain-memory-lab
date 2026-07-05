@@ -51,8 +51,15 @@ def _make_embedding_backend(settings):
         return None
 
 
+# EB-2: an empty save must fail loudly, never return persisted=true. Before this
+# guard, a missing/empty body deduplicated onto a shared empty content item.
+EMPTY_CONTENT_DETAIL = "content is required and must be non-empty"
+
+
 @router.post("")
 def create_content(req: ContentCreateRequest, auth: AuthContext = Depends(require_permission("content.create"))) -> dict:
+    if req.content is None or not req.content.strip():
+        raise HTTPException(status_code=422, detail=EMPTY_CONTENT_DETAIL)
     settings = get_settings()
     adapter = ApiAdapter(settings.database_url, embedding_backend=_make_embedding_backend(settings))
     return adapter.create_content_minimal(

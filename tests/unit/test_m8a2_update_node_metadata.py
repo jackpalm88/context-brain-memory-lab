@@ -173,6 +173,10 @@ def test_api_adapter_get_content_metadata_aggregates_word_count_and_joins_domain
         "node_type": "fact",
         "quick_summary": "summary",
         "memory_type": "anchor",
+        # EB-1: current-state fields are part of every direct read
+        "is_current": None,
+        "current_state_scope": None,
+        "cs_supersedes_content_id": None,
         "domain": "governance",
         "word_count": 42,
         "created_by_subject": SUBJECT,

@@ -361,4 +361,7 @@ class TestCurrentStateResolverBoundary:
             resp = adapter.create_content_minimal(content="weak evidence", workspace_id=_WS_ID)
 
         mock_resolver.assert_not_called()
-        assert "current_state_status" not in resp
+        # EB-3: the skip is no longer silent — the resolver still must not run,
+        # but the response reports the noop instead of omitting the keys.
+        assert resp["current_state_status"] == "noop"
+        assert resp["current_state_reason"] == "low_confidence"

@@ -15,6 +15,11 @@ from memory_lab.api.utils.content_signatures import compute_content_hash
 from memory_lab.ingestion.semantic_enrichment import annotate
 from memory_lab.governance.tier_router import route as tier_route
 from memory_lab.providers.embedding_backend import EmbeddingBackend
+from memory_lab.current_state.projection import (
+    current_state_group_by_sql,
+    current_state_select_sql,
+    project_current_state,
+)
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 from memory_lab.conflicts.escalation import evaluate_and_escalate_on_ingest
 
@@ -241,6 +246,10 @@ class ApiAdapter:
                         content_text=content or "",
                     )
                 current_state_meta = resolution.to_dict()
+            else:
+                # EB-3: a skipped resolver must be visible, not silent — otherwise a
+                # caller-supplied scope_hint is discarded with no observable signal.
+                current_state_meta = {"status": "noop", "reason": "low_confidence"}
         except Exception as exc:
             logger.warning("[api_adapter] current-state resolve failed for %s: %s", row["content_id"], exc)
             current_state_meta = {"status": "deferred", "reason": "resolver_error"}
@@ -502,6 +511,7 @@ class ApiAdapter:
                            ci.node_type,
                            ci.quick_summary,
                            ci.memory_type,
+                           {current_state_select_sql("ci")},
                            dd.domain_name AS domain,
                            COALESCE(sum(ch.word_count), 0)::int AS word_count,
                            ci.created_by_subject,
@@ -511,7 +521,7 @@ class ApiAdapter:
                       LEFT JOIN cb_discovered_domains dd ON dd.domain_id = ci.domain_id
                       LEFT JOIN content_chunks ch ON ch.content_id = ci.content_id
                      WHERE {' AND '.join(conditions)}
-                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary, ci.memory_type, dd.domain_name, ci.created_by_subject, ci.created_at, ci.updated_at
+                     GROUP BY ci.content_id, ci.node_type, ci.quick_summary, ci.memory_type, {current_state_group_by_sql("ci")}, dd.domain_name, ci.created_by_subject, ci.created_at, ci.updated_at
                     """,
                     tuple(params),
                 )
@@ -524,6 +534,7 @@ class ApiAdapter:
             "node_type": row.get("node_type"),
             "quick_summary": row.get("quick_summary"),
             "memory_type": row.get("memory_type"),
+            **project_current_state(row),
             "domain": row.get("domain"),
             "word_count": row.get("word_count") or 0,
             "created_by_subject": row.get("created_by_subject"),
@@ -555,7 +566,8 @@ class ApiAdapter:
                            score_confidence,
                            circuit_open,
                            retrieval_count,
-                           last_retrieved_at
+                           last_retrieved_at,
+                           {current_state_select_sql("content_items")}
                       FROM content_items
                      WHERE {' AND '.join(conditions)}
                     """,
@@ -586,6 +598,7 @@ class ApiAdapter:
             "circuit_open": row.get("circuit_open"),
             "retrieval_count": row.get("retrieval_count"),
             "last_retrieved_at": _iso(row.get("last_retrieved_at")),
+            **project_current_state(row),
         }
 
     def create_hub(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, workspace_source: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:

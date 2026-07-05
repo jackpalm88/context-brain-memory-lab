@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
 from memory_lab.api.dependencies.auth import require_permission
+from memory_lab.api.routers.content import EMPTY_CONTENT_DETAIL
 from memory_lab.api.services.api_adapter import ApiAdapter
 from memory_lab.providers.openai_embedding import OpenAIEmbeddingBackend
 
@@ -65,6 +66,13 @@ def batch_create(
     summary = {"total": len(req.items), "persisted": 0, "deduplicated": 0, "discarded": 0, "failed": 0}
 
     for idx, item in enumerate(req.items):
+        # EB-2 parity with the single-item route: empty content is an inline
+        # item failure (batch contract: failures never abort the batch), not a
+        # silent dedup onto the shared empty item.
+        if item.content is None or not item.content.strip():
+            results.append({"index": idx, "ok": False, "error": EMPTY_CONTENT_DETAIL})
+            summary["failed"] += 1
+            continue
         try:
             result = adapter.create_content_minimal(
                 content=item.content,
