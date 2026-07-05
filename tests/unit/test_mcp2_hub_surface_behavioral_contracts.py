@@ -7,7 +7,7 @@ Tools under test:
   - memory_lab_hub_create      :: callable; shape {hub_id, title, type, status}; WS isolation
   - memory_lab_hub_get         :: callable; shape {hub_id, title}; 404→structured error; WS isolation
   - memory_lab_hub_link_content:: callable; shape {hub_id, content_id, linked}; 404→structured error
-  - list_hubs                  :: callable; shape []; WS-scoped list; no cross-WS leakage
+  - list_hubs                  :: callable; shape {hubs, count}; WS-scoped list; no cross-WS leakage
   - update_hub                 :: callable; mutation visible via get; 404→structured error; WS isolation
   - save_and_link_to_hub       :: callable; creates content+link; shape {content_id, linked, hub_id}
 
@@ -569,9 +569,11 @@ def test_hub_link_H3_4_link_visible_in_hub_get(
 def test_list_hubs_H4_1_callable_without_exception(
     hermetic_client_hubs: MCPHermeticClient,
 ) -> None:
-    """H4.1 — list_hubs is callable and never raises a raw exception."""
+    """H4.1 — list_hubs is callable and returns the declared dict envelope."""
     result = mcp_tools.list_hubs(workspace_id=WS_A)
-    assert isinstance(result, (dict, list))
+    assert isinstance(result, dict)
+    assert isinstance(result.get("hubs"), list)
+    assert result.get("count") == len(result["hubs"])
 
 
 def test_list_hubs_H4_2_returns_created_hub(
@@ -580,8 +582,8 @@ def test_list_hubs_H4_2_returns_created_hub(
     """H4.2 — created hub appears in list_hubs for same workspace."""
     created = mcp_tools.memory_lab_hub_create(title="Listed Hub", workspace_id=WS_A)
     result = mcp_tools.list_hubs(workspace_id=WS_A)
-    # list_hubs may return a list directly or wrap in {hubs: [...]}
-    hubs = result if isinstance(result, list) else result.get("hubs", [])
+    hubs = result.get("hubs", [])
+    assert result.get("count") == len(hubs)
     hub_ids = [h.get("hub_id") for h in hubs]
     assert created["hub_id"] in hub_ids, (
         f"created hub_id {created['hub_id']} not in list: {hub_ids}"
@@ -598,8 +600,10 @@ def test_list_hubs_H4_3_workspace_isolation(
     list_a = mcp_tools.list_hubs(workspace_id=WS_A)
     list_b = mcp_tools.list_hubs(workspace_id=WS_B)
 
-    ids_a = {h["hub_id"] for h in (list_a if isinstance(list_a, list) else list_a.get("hubs", []))}
-    ids_b = {h["hub_id"] for h in (list_b if isinstance(list_b, list) else list_b.get("hubs", []))}
+    ids_a = {h["hub_id"] for h in list_a.get("hubs", [])}
+    ids_b = {h["hub_id"] for h in list_b.get("hubs", [])}
+    assert list_a.get("count") == len(list_a.get("hubs", []))
+    assert list_b.get("count") == len(list_b.get("hubs", []))
 
     assert hub_a["hub_id"] in ids_a, "WS_A hub missing from WS_A list"
     assert hub_b["hub_id"] not in ids_a, "WS_B hub leaked into WS_A list"
@@ -613,8 +617,10 @@ def test_list_hubs_H4_4_empty_list_for_new_workspace(
     """H4.4 — freshly-isolated workspace returns empty hub list without error."""
     fresh_ws = "00000000-0000-0000-0001-000000000099"
     result = mcp_tools.list_hubs(workspace_id=fresh_ws)
-    hubs = result if isinstance(result, list) else result.get("hubs", [])
-    assert isinstance(hubs, list), f"list_hubs must return a list, got {type(hubs)}"
+    assert isinstance(result, dict), f"list_hubs must return a dict envelope, got {type(result)}"
+    hubs = result.get("hubs", [])
+    assert isinstance(hubs, list), f"list_hubs.hubs must be a list, got {type(hubs)}"
+    assert result.get("count") == len(hubs)
     assert len(hubs) == 0, f"Expected empty list for fresh workspace, got {hubs}"
 
 

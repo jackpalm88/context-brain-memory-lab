@@ -288,8 +288,16 @@ def query_memory(
 
 def list_hubs(status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:
     """List the workspace's hubs filtered by status ('active' default, or
-    'archived'). The usual entry point for discovering hub ids and topics."""
-    return _call_api(_client().hub_list, status=status, workspace_id=workspace_id)
+    'archived'). The usual entry point for discovering hub ids and topics.
+
+    The underlying public REST endpoint returns a top-level JSON list. MCP tool
+    output schemas generated for Hermes require a dictionary-shaped result, so
+    normalize successful list responses into a stable envelope.
+    """
+    result = _call_api(_client().hub_list, status=status, workspace_id=workspace_id)
+    if isinstance(result, list):
+        return {"hubs": result, "count": len(result)}
+    return result
 
 
 def update_hub(
