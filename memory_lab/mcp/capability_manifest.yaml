@@ -1,0 +1,497 @@
+# OpenCB Capability Manifest — machine-readable tool semantics for agent routers.
+#
+# Contract (ratified 2026-07-06, design: engineering OPENCB_CAPABILITY_MANIFEST_V0):
+# - This is the MACHINE layer; tool docstrings remain the human layer. A hermetic
+#   drift test (tests/unit/test_capability_manifest.py) keeps this file in lockstep
+#   with memory_lab.mcp.tools.APPROVED_TOOLS — names, signatures and vocabularies.
+# - Additive surface: nothing here changes tool behavior.
+# - answers are EN-only (locale mirrors are a display concern, not router contract).
+# - suggested_followups are prose in v0 (machine-form conditions deferred).
+# - manifest_version is independent of opencb_version; bump only on schema change.
+#
+# Field vocabulary:
+#   role:        liveness | write | read | search | answer | curate | govern | lineage | diagnose
+#   determinism: deterministic | deterministic_core | provider_opt_in
+#   output_kind: status | id_envelope | record | record_list | ranked_evidence |
+#                answer_envelope | graph_snapshot | preview_list | lineage_tree |
+#                timeline | conflict_list | ack
+#   routing:     normal (default) | discouraged | alias
+#
+# Shared failure envelope (all tools): API errors return
+#   {ok: false, error: {type, message, method, url, status_code, body_json}} with
+#   secrets redacted. 422 = stated-contract violation; 401/403 = auth; 404 = wrong
+#   id or wrong workspace. memory_lab_health disambiguates backend-down.
+#
+# Shared write-path governance signals: persisted, discarded (mode=governed_discarded),
+#   duplicate, tier, classify_confidence, conflict_escalation_id + conflict_severity,
+#   current_state_status/reason (noop/low_confidence = resolver skipped; scope_hint
+#   did NOT take effect), current_state_scope + current_state_scope_source.
+
+manifest_version: "0.1"
+opencb_version: "1.0.0"
+
+tools:
+
+  - name: memory_lab_health
+    role: liveness
+    answers:
+      - "Is the memory backend reachable?"
+      - "What version is running?"
+    use_when: "First call of a session, or when any tool sequence fails unexpectedly."
+    avoid_when: "As a no-op filler between calls."
+    determinism: deterministic
+    required_inputs: []
+    output_kind: status
+    key_signals: [status, version]
+    suggested_followups:
+      - tool: list_hubs
+        when: "backend healthy and you need workspace orientation"
+    failure: "status=unavailable with reason=database_url_not_configured when the DB is absent."
+
+  - name: memory_lab_content_create_id
+    role: write
+    answers:
+      - "Remember this."
+      - "Save this note, finding, or observation."
+    use_when: "Persisting substantive prose worth remembering; use decision:/finding: vocabulary for decisions and findings."
+    avoid_when: "Content belongs to a known hub (save_and_link_to_hub); recording a tracked decision (create_decision_memory); low-signal one-liners (governed-discarded by design)."
+    determinism: deterministic_core
+    required_inputs: [content]
+    optional_inputs: [scope_hint]
+    output_kind: id_envelope
+    key_signals: [persisted, discarded, duplicate, tier, conflict_escalation_id, current_state_status, current_state_scope, current_state_scope_source]
+    suggested_followups:
+      - tool: set_quick_summary
+        when: "persisted=true and the body is long"
+      - tool: memory_lab_hub_link_content
+        when: "a relevant hub exists"
+      - tool: list_decision_conflicts
+        when: "conflict_escalation_id is present"
+    failure: "Empty content returns 422 (never silent). Low-signal content returns persisted=false, mode=governed_discarded. current_state_status=noop with reason=low_confidence means any scope_hint did NOT take effect."
+
+  - name: save_and_link_to_hub
+    role: write
+    answers:
+      - "Remember this under topic X."
+      - "Save and file this in one step."
+    use_when: "The daily write path when the target hub is already known."
+    avoid_when: "No hub exists yet — create one first (memory_lab_hub_create) or use plain memory_lab_content_create_id."
+    determinism: deterministic_core
+    required_inputs: [content, hub_id, save_purpose]
+    optional_inputs: [quick_summary, scope_hint, content_url]
+    output_kind: id_envelope
+    key_signals: [persisted, conflict_escalation_id, current_state_status]
+    suggested_followups:
+      - tool: query_memory
+        when: "verifying the memory is now answerable"
+    failure: "Same governance semantics as memory_lab_content_create_id."
+    honest_contract: "save_purpose and content_url are accepted for production tool-signature parity and reported back as unsupported."
+
+  - name: create_decision_memory
+    role: write
+    answers:
+      - "Record that we decided X."
+      - "Replace decision A with decision B."
+    use_when: "Any decision the workspace must track; supersedes_decision_id builds the explicit lineage chain (the predecessor is auto-marked superseded)."
+    avoid_when: "Free-form notes (memory_lab_content_create_id); changing only a lifecycle status (update_decision_status)."
+    determinism: deterministic
+    required_inputs: [title, decision_reason]
+    optional_inputs: [supersedes_decision_id, decision_context, alternatives_considered, confidence_level, linked_hub_ids, decision_tags]
+    output_kind: id_envelope
+    key_signals: [decision_id, decision_status]
+    suggested_followups:
+      - tool: get_decision_lineage
+        when: "supersedes_decision_id was used — verify the chain"
+      - tool: explain_decision
+        when: "echoing the decision back to the user"
+    failure: "422 on missing title or decision_reason; no governance discard (decisions are explicit writes)."
+
+  - name: memory_lab_content_get
+    role: read
+    answers:
+      - "Show me item <id> exactly as stored."
+      - "Is item <id> still current?"
+    use_when: "You hold a content_id and need the stored record including currency fields."
+    avoid_when: "You only have text — use memory_lab_retrieval_search."
+    determinism: deterministic
+    required_inputs: [content_id]
+    output_kind: record
+    key_signals: [is_current, current_state_scope, cs_supersedes_content_id, tier]
+    suggested_followups:
+      - tool: memory_lab_retrieval_search
+        when: "is_current=false — locate the superseding item"
+      - tool: load_graph_node_full
+        when: "graph context (hubs, neighbors) is needed"
+    failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design)."
+
+  - name: update_node_metadata
+    role: read
+    answers:
+      - "What metadata does node <id> carry?"
+    use_when: "Lightweight metadata inspection."
+    avoid_when: "You expected to WRITE metadata — no public mutation path exists."
+    determinism: deterministic
+    required_inputs: [content_id]
+    output_kind: record
+    key_signals: [read_only, mutation]
+    suggested_followups: []
+    failure: "404 semantics as memory_lab_content_get."
+    honest_contract: "Production-parity NAME ONLY: this tool does NOT mutate. Response carries read_only=true, mutation=none."
+    routing: discouraged
+
+  - name: classify_content_node
+    role: curate
+    answers:
+      - "Mark item <id> as a decision, fact, hypothesis, or other node type."
+    use_when: "Caller knowingly assigns a node_type from the fixed vocabulary (decision, fact, hypothesis, question, playbook, concept, source, task, event, raw_note)."
+    avoid_when: "Expecting automatic/AI classification — that happens at save time, separately."
+    determinism: deterministic
+    required_inputs: [content_id, node_type]
+    output_kind: ack
+    key_signals: [classification_mode]
+    suggested_followups: []
+    failure: "422 on invalid node_type (the allowed list is echoed in the error)."
+    honest_contract: "CALLER-SPECIFIED deterministic assignment, not provider classification."
+
+  - name: set_quick_summary
+    role: curate
+    answers:
+      - "Give item <id> a scannable one-line summary."
+    use_when: "After saving long content; summaries make previews and navigation usable."
+    determinism: deterministic
+    required_inputs: [content_id, quick_summary]
+    output_kind: ack
+    key_signals: [updated]
+    suggested_followups: []
+    failure: "422 over 500 characters; 404 semantics as memory_lab_content_get."
+
+  - name: memory_lab_hub_create
+    role: curate
+    answers:
+      - "Create a topic or project container named X."
+    use_when: "A recurring topic has no hub yet. Invest in aliases/related_terms: they drive retrieval corroboration, edge inference AND automatic current-state scope resolution."
+    avoid_when: "A matching hub may exist — run list_hubs first (duplicate hubs split scopes)."
+    determinism: deterministic
+    required_inputs: [title]
+    optional_inputs: [hub_type, description]
+    output_kind: id_envelope
+    key_signals: [hub_id]
+    suggested_followups:
+      - tool: update_hub
+        when: "adding aliases/related_terms right after creation"
+      - tool: memory_lab_hub_link_content
+        when: "existing content belongs here"
+    failure: "Standard envelope."
+
+  - name: memory_lab_hub_get
+    role: read
+    answers:
+      - "What is hub <id>?"
+    use_when: "You hold a hub_id and need title, aliases, related_terms, or status."
+    determinism: deterministic
+    required_inputs: [hub_id]
+    output_kind: record
+    key_signals: [aliases, related_terms, status]
+    suggested_followups:
+      - tool: memory_lab_edge_list
+        when: "exploring how this hub relates to others"
+    failure: "404 semantics."
+
+  - name: list_hubs
+    role: diagnose
+    answers:
+      - "What topics does this workspace organize?"
+      - "Which hub should I link to?"
+    use_when: "Workspace orientation; ALWAYS before creating a new hub."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [status]
+    output_kind: record_list
+    suggested_followups:
+      - tool: memory_lab_hub_create
+        when: "no suitable hub exists"
+    failure: "Standard envelope."
+
+  - name: update_hub
+    role: curate
+    answers:
+      - "Rename hub X."
+      - "Add aliases or related terms to hub X."
+    use_when: "Improving hub metadata — only supplied fields change."
+    determinism: deterministic
+    required_inputs: [hub_id]
+    optional_inputs: [title, aliases, related_terms, description, status, hub_type]
+    output_kind: record
+    suggested_followups: []
+    failure: "404 semantics."
+
+  - name: memory_lab_hub_link_content
+    role: curate
+    answers:
+      - "File item <id> under hub X."
+    use_when: "Right after a save, or when curating older content. Manual links earn a fixed recall boost — curation is a ranked signal."
+    determinism: deterministic
+    required_inputs: [hub_id, content_id]
+    output_kind: ack
+    key_signals: [linked]
+    suggested_followups: []
+    failure: "404 on either id."
+
+  - name: memory_lab_edge_create
+    role: curate
+    answers:
+      - "Hubs A and B are related (as <type>)."
+    use_when: "Human-curated relationship between two hubs."
+    avoid_when: "Responding to a machine proposal — use approve_inferred_edge instead."
+    determinism: deterministic
+    required_inputs: [source_hub_id, target_hub_id, edge_type]
+    output_kind: id_envelope
+    suggested_followups: []
+    failure: "Standard envelope."
+
+  - name: memory_lab_edge_get
+    role: read
+    answers:
+      - "What is edge <id>?"
+    use_when: "Inspecting one edge's type, status, confidence, or reason."
+    determinism: deterministic
+    required_inputs: [edge_id]
+    output_kind: record
+    suggested_followups: []
+    failure: "404 semantics."
+
+  - name: memory_lab_edge_list
+    role: diagnose
+    answers:
+      - "How is hub X connected?"
+      - "What machine proposals are pending?"
+    use_when: "Graph neighborhood review; status=inferred rows are pending human decisions."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [hub_id, include_archived]
+    output_kind: record_list
+    suggested_followups:
+      - tool: approve_inferred_edge
+        when: "an inferred proposal is correct (requires user confirmation)"
+      - tool: reject_inferred_edge
+        when: "an inferred proposal is wrong (requires user confirmation)"
+    failure: "Standard envelope."
+
+  - name: update_hub_edge
+    role: curate
+    answers:
+      - "Change edge <id>'s type, note, or confidence."
+    use_when: "Adjusting a curated edge; only supplied fields change."
+    determinism: deterministic
+    required_inputs: [edge_id]
+    optional_inputs: [edge_type, status, note, reason, confidence]
+    output_kind: record
+    suggested_followups: []
+    failure: "404 semantics."
+
+  - name: memory_lab_edge_archive
+    role: curate
+    answers:
+      - "Retire edge <id> from the active graph."
+    use_when: "Soft-delete; the edge stays auditable."
+    determinism: deterministic
+    required_inputs: [edge_id]
+    output_kind: ack
+    suggested_followups: []
+    failure: "404 semantics."
+
+  - name: approve_inferred_edge
+    role: govern
+    answers:
+      - "Accept the machine-proposed edge A to B."
+    use_when: "THE human gate of edge inference — nothing machine-proposed becomes curated without this. Agents must confirm with the user before calling."
+    determinism: deterministic
+    required_inputs: [source_hub_id, target_hub_id, edge_type]
+    optional_inputs: [reason, confidence, note]
+    output_kind: ack
+    suggested_followups: []
+    failure: "Standard envelope; approving a non-existent proposal errors."
+
+  - name: reject_inferred_edge
+    role: govern
+    answers:
+      - "Reject the machine-proposed edge A to B."
+    use_when: "Durable rejection — the inference job never resurrects a rejected proposal. Agents must confirm with the user before calling."
+    determinism: deterministic
+    required_inputs: [source_hub_id, target_hub_id, edge_type]
+    optional_inputs: [reason, note]
+    output_kind: ack
+    suggested_followups: []
+    failure: "Standard envelope."
+
+  - name: memory_lab_retrieval_search
+    role: search
+    answers:
+      - "What do we have about X?"
+      - "Find raw evidence for X."
+    use_when: "Evidence gathering with full provenance; the fallback query_memory itself recommends on low confidence."
+    avoid_when: "You want a synthesized answer — use query_memory."
+    determinism: deterministic
+    required_inputs: [query]
+    optional_inputs: [limit, debug, only_clean]
+    output_kind: ranked_evidence
+    key_signals: [result_trust, ranking_reason, source_path, confidence, score_components]
+    suggested_followups:
+      - tool: memory_lab_content_get
+        when: "a result needs its full stored record or a currency check"
+      - tool: load_graph_node_full
+        when: "a result needs graph context"
+    failure: "An empty result list is a valid outcome, not an error. result_trust=low means weak evidence — corroborate before relying on it."
+    honest_contract: "memory_type filters exist on the API but are not forwarded by this MCP wrapper (stated limitation); only_clean is accepted as a compatibility no-op."
+
+  - name: query_memory
+    role: answer
+    answers:
+      - "Answer X from workspace memory."
+      - "What did we decide about X?"
+    use_when: "The user asks a question the memory should answer; superseded memories are demoted below current ones unless the question is historical."
+    avoid_when: "You need raw evidence lists or provenance detail — use memory_lab_retrieval_search."
+    determinism: provider_opt_in
+    required_inputs: [query]
+    optional_inputs: [enable_provider_synthesis]
+    output_kind: answer_envelope
+    key_signals: [answer, citations, confidence, has_citations, no_context, mode, fallback]
+    suggested_followups:
+      - tool: memory_lab_retrieval_search
+        when: "no_context=true or fallback.suggested=true"
+      - tool: get_decision_lineage
+        when: "the answer cites a decision whose history matters"
+    failure: "no_context=true is an honest empty (distinct from an error). Provider opt-in with the deployment gate off returns mode=degraded, failure_reason=provider_disabled, deterministic answer retained. Citations are bounded to retrieved evidence in every mode."
+
+  - name: search_graph_preview
+    role: search
+    answers:
+      - "Which nodes mention X?"
+      - "Navigate the graph by keyword."
+    use_when: "Cheap navigation before loading full nodes."
+    determinism: deterministic
+    required_inputs: [query]
+    optional_inputs: [node_type, hub_id, limit]
+    output_kind: preview_list
+    suggested_followups:
+      - tool: load_graph_node_full
+        when: "a preview row is the right node"
+    failure: "An empty list is valid."
+
+  - name: load_graph_node_full
+    role: read
+    answers:
+      - "Show node <id> with its full graph context."
+    use_when: "After search_graph_preview or retrieval, when hub memberships and neighbors matter."
+    avoid_when: "A plain record read — memory_lab_content_get is cheaper."
+    determinism: deterministic
+    required_inputs: [content_id]
+    output_kind: record
+    suggested_followups: []
+    failure: "404 semantics."
+
+  - name: get_graph_snapshot
+    role: diagnose
+    answers:
+      - "What does the whole workspace graph look like?"
+    use_when: "Overviews, audits, visualization; filter by edge class."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [include_inferred, include_curated]
+    output_kind: graph_snapshot
+    suggested_followups: []
+    failure: "Both filters false yields an empty edge set (valid)."
+
+  - name: list_graph_snapshot
+    role: diagnose
+    answers:
+      - "(alias of get_graph_snapshot)"
+    use_when: "Only for production-parity callers expecting this name."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [include_inferred, include_curated]
+    output_kind: graph_snapshot
+    suggested_followups: []
+    failure: "As get_graph_snapshot."
+    honest_contract: "Flag-forwarding alias; identical behavior."
+    routing: alias
+
+  - name: explain_decision
+    role: read
+    answers:
+      - "Why did we decide X?"
+      - "Show decision <id> with its reasoning."
+    use_when: "Echoing a decision with reason, context, alternatives, and confidence."
+    determinism: deterministic
+    required_inputs: [decision_id]
+    output_kind: record
+    key_signals: [decision_status, confidence_level]
+    suggested_followups:
+      - tool: get_decision_lineage
+        when: "the decision may have been superseded"
+    failure: "404 semantics."
+
+  - name: list_decisions
+    role: diagnose
+    answers:
+      - "What decisions exist for hub X or with status Y?"
+    use_when: "Decision inventory; newest first."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [status, hub_id, limit]
+    output_kind: record_list
+    suggested_followups:
+      - tool: get_decision_timeline
+        when: "a chronological narrative is wanted"
+    failure: "An empty list is valid."
+
+  - name: update_decision_status
+    role: govern
+    answers:
+      - "Mark decision <id> as superseded, deprecated, or active."
+    use_when: "Pure lifecycle transition. Agents must confirm with the user before calling."
+    avoid_when: "Replacing with a NEW decision — use create_decision_memory with supersedes_decision_id (preserves lineage)."
+    determinism: deterministic
+    required_inputs: [decision_id, decision_status]
+    output_kind: ack
+    suggested_followups: []
+    failure: "422 on invalid status; 404 semantics."
+
+  - name: get_decision_lineage
+    role: lineage
+    answers:
+      - "What replaced decision <id>?"
+      - "What did decision <id> replace?"
+    use_when: "Tracing a supersession chain in either direction."
+    determinism: deterministic
+    required_inputs: [decision_id]
+    output_kind: lineage_tree
+    key_signals: [ancestors, descendants, depth_limit_reached]
+    suggested_followups:
+      - tool: explain_decision
+        when: "a lineage node needs its full reasoning"
+    failure: "404 semantics; depth_limit_reached=true means the chain continues beyond the response."
+
+  - name: get_decision_timeline
+    role: lineage
+    answers:
+      - "What has been decided here recently?"
+    use_when: "Chronological catch-up, optionally per hub or tags."
+    determinism: deterministic
+    required_inputs: []
+    optional_inputs: [hub_id, tags, limit]
+    output_kind: timeline
+    suggested_followups: []
+    failure: "An empty timeline is valid."
+
+  - name: list_decision_conflicts
+    role: lineage
+    answers:
+      - "Do any decisions contradict each other?"
+    use_when: "Surfacing computed contradiction candidates for HUMAN review."
+    determinism: deterministic
+    required_inputs: []
+    output_kind: conflict_list
+    suggested_followups: []
+    failure: "An empty list is valid."
+    honest_contract: "Read-only and non-arbitrating — it never decides which side is true."
