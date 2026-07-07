@@ -151,6 +151,6 @@ def test_content_update_permission_allows_writer_surface():
 
 def test_set_quick_summary_tool_registered_and_counted():
     assert APPROVED_TOOLS["set_quick_summary"]
-    assert len(APPROVED_TOOLS) == 32
+    assert len(APPROVED_TOOLS) == 33  # 32 parity + list_current_state_anchors (CF-003)
     server_source = Path("memory_lab/mcp/server.py").read_text()
     assert "APPROVED_TOOLS[\"set_quick_summary\"]" in server_source

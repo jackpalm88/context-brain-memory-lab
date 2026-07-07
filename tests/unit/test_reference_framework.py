@@ -30,7 +30,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.provider_optional, pytest.mark.publi
 
 def test_manifest_loads_all_tools_and_filters_routable():
     manifest = load_manifest()
-    assert len(manifest.tools) == 32
+    # 32 production-parity tools + list_current_state_anchors (CF-003, public-only)
+    assert len(manifest.tools) == 33
     routable = manifest.routable()
     assert "update_node_metadata" not in routable          # discouraged
     assert "list_graph_snapshot" not in routable           # alias
@@ -148,25 +149,58 @@ class Registry(dict):
         return call
 
 
-def test_verify_current_state_chases_successor_once():
+_ANCHOR_RESPONSE = {"anchors": [
+    {"content_id": "new-1", "supersedes_content_id": "old-1",
+     "scope": "message-queue", "memory_type": "decision",
+     "is_current": True, "current_state_scope": "message-queue",
+     "quick_summary": "RabbitMQ is the message queue"},
+], "count": 1, "scope": "message-queue"}
+
+
+def _content_get_response(kwargs):
+    if kwargs["content_id"] == "old-1":
+        return {"content_id": "old-1", "is_current": False, "current_state_scope": "message-queue"}
+    return {"content_id": "new-1", "is_current": True, "current_state_scope": "message-queue"}
+
+
+def test_verify_current_state_chases_successor_via_anchor():
     registry = Registry({
         "memory_lab_retrieval_search": {"results": [
             {"content_id": "old-1", "text": "Decision: adopt Kafka…"},
             {"content_id": "new-1", "text": "Decision: switch to RabbitMQ…"},
         ]},
-        "memory_lab_content_get": lambda kwargs: (
-            {"content_id": "old-1", "is_current": False, "current_state_scope": "message-queue"}
-            if kwargs["content_id"] == "old-1"
-            else {"content_id": "new-1", "is_current": True, "current_state_scope": "message-queue"}
-        ),
+        "list_current_state_anchors": _ANCHOR_RESPONSE,
+        "memory_lab_content_get": _content_get_response,
     })
     state = execute(route("which message queue do we use now?"), registry)
     called = [name for name, _ in registry.calls]
-    assert called == ["memory_lab_retrieval_search", "memory_lab_content_get", "memory_lab_content_get"]
+    assert called == ["memory_lab_retrieval_search", "memory_lab_content_get",
+                      "list_current_state_anchors", "memory_lab_content_get"]
+    assert registry.calls[2][1].get("scope") == "message-queue"
     package = build_package(state)["evidence_package"]
     statuses = {i["source"]["source_id"]: i["currency"]["status"]
                 for i in package["items"] if i["kind"] == "content_record"}
     assert statuses == {"old-1": "superseded", "new-1": "current"}
+
+
+def test_verify_current_state_finds_successor_retrieval_missed():
+    # The exact case the v0 bounded probe could NOT handle (CF-003): retrieval
+    # surfaces only the superseded item; the successor comes from the anchor.
+    registry = Registry({
+        "memory_lab_retrieval_search": {"results": [
+            {"content_id": "old-1", "text": "Decision: adopt Kafka…"},
+        ]},
+        "list_current_state_anchors": _ANCHOR_RESPONSE,
+        "memory_lab_content_get": _content_get_response,
+    })
+    state = execute(route("which message queue do we use now?"), registry)
+    called = [name for name, _ in registry.calls]
+    assert called == ["memory_lab_retrieval_search", "memory_lab_content_get",
+                      "list_current_state_anchors", "memory_lab_content_get"]
+    package = build_package(state)["evidence_package"]
+    current_ids = {i["source"]["source_id"] for i in package["items"]
+                   if i["currency"]["status"] == "current"}
+    assert "new-1" in current_ids
 
 
 def test_historical_skips_successor_chase():

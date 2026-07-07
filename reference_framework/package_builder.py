@@ -25,6 +25,8 @@ _AUTHORITY = {
     "query_memory": ("derived", False),
     "memory_lab_retrieval_search": ("governed_save", False),
     "memory_lab_content_get": ("governed_save", False),
+    # resolver-written system state, deterministic but not human-gated (CF-003)
+    "list_current_state_anchors": ("derived", False),
 }
 
 _TRUST_BASIS = {
@@ -109,6 +111,15 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
         statement = str(result.get("quick_summary") or result.get("content_id") or "")
         items.append(_item(nxt(), "content_record", statement, tool,
                            str(result.get("content_id")), ref, result))
+
+    elif tool == "list_current_state_anchors":
+        # CF-003: each active anchor is the forward pointer of a supersession
+        # chain — transcribed, like everything else, never composed.
+        for row in _rows(result, "anchors"):
+            statement = str(row.get("quick_summary") or row.get("content_id") or "").strip()
+            if statement:
+                items.append(_item(nxt(), "content_record", statement, tool,
+                                   str(row.get("content_id")), ref, row))
 
     elif tool in ("get_decision_timeline", "list_decisions") and step.outcome == "ok":
         rows = _timeline_rows(result) if tool == "get_decision_timeline" else _rows(result, "decisions", "items")

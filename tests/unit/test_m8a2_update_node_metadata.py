@@ -248,6 +248,6 @@ def test_mcp_client_update_node_metadata_path():
 
 def test_update_node_metadata_tool_registered_and_counted():
     assert APPROVED_TOOLS["update_node_metadata"]
-    assert len(APPROVED_TOOLS) == 32
+    assert len(APPROVED_TOOLS) == 33  # 32 parity + list_current_state_anchors (CF-003)
     server_source = Path("memory_lab/mcp/server.py").read_text()
     assert "APPROVED_TOOLS[\"update_node_metadata\"]" in server_source

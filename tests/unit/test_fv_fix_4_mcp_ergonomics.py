@@ -26,7 +26,7 @@ _MIN_DESCRIPTION_LEN = 40
 # ---------------------------------------------------------------------------
 
 def test_all_approved_tools_have_useful_docstrings():
-    assert len(APPROVED_TOOLS) == 32
+    assert len(APPROVED_TOOLS) == 33  # 32 parity + list_current_state_anchors (CF-003)
     missing = {
         name
         for name, fn in APPROVED_TOOLS.items()
@@ -39,7 +39,7 @@ def test_fastmcp_server_exposes_all_descriptions():
     from memory_lab.mcp.server import server
 
     tools = asyncio.run(server.list_tools())
-    assert len(tools) == 32
+    assert len(tools) == 33  # 32 parity + list_current_state_anchors (CF-003)
     empty = [t.name for t in tools if len((t.description or "").strip()) < _MIN_DESCRIPTION_LEN]
     assert not empty, f"registered tools with empty/short description: {empty}"
 

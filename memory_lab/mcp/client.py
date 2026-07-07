@@ -174,6 +174,17 @@ class MemoryLabApiClient:
     def get_content_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/v1/content/{content_id}/metadata", workspace_id=workspace_id)
 
+    def current_state_anchor_list(
+        self,
+        scope: str,
+        memory_type: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"scope": scope}
+        if memory_type is not None:
+            params["memory_type"] = memory_type
+        return self._request("GET", "/v1/current-state/anchors", params=params, workspace_id=workspace_id)
+
     def update_node_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self.get_content_metadata(content_id=content_id, workspace_id=workspace_id)
 

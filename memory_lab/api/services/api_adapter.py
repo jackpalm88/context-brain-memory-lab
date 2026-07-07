@@ -601,6 +601,75 @@ class ApiAdapter:
             **project_current_state(row),
         }
 
+    def list_current_state_anchors(
+        self,
+        *,
+        scope: str,
+        memory_type: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """CF-003: read the ACTIVE current-state anchor(s) of a scope.
+
+        The resolver keeps at most one active anchor per (workspace, memory_type,
+        scope); without a memory_type filter a scope can return one row per
+        memory_type. Anchors are workspace-owned rows — no workspace means no
+        readable anchors (never an unscoped cross-workspace read).
+        """
+        if not workspace_id:
+            return []
+        conditions = [
+            "a.workspace_id = %s::uuid",
+            "a.scope = %s",
+            "a.state_status = 'active'",
+        ]
+        params: List[Any] = [workspace_id, scope]
+        if memory_type:
+            conditions.append("a.memory_type = %s")
+            params.append(memory_type)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT a.anchor_id::text AS anchor_id,
+                           a.memory_type,
+                           a.scope,
+                           a.content_id::text AS content_id,
+                           a.supersedes_content_id::text AS supersedes_content_id,
+                           a.state_status,
+                           a.set_by,
+                           a.valid_from,
+                           a.valid_until,
+                           ci.quick_summary,
+                           {current_state_select_sql("ci")}
+                      FROM cb_current_state_anchors a
+                      LEFT JOIN content_items ci ON ci.content_id = a.content_id
+                     WHERE {' AND '.join(conditions)}
+                     ORDER BY a.canonical_rank ASC, a.valid_from DESC, a.memory_type ASC
+                    """,
+                    tuple(params),
+                )
+                rows = cur.fetchall()
+
+        def _iso(v):
+            return v.isoformat() if v else None
+
+        return [
+            {
+                "anchor_id": row["anchor_id"],
+                "memory_type": row.get("memory_type"),
+                "scope": row.get("scope"),
+                "content_id": row.get("content_id"),
+                "supersedes_content_id": row.get("supersedes_content_id"),
+                "state_status": row.get("state_status"),
+                "set_by": row.get("set_by"),
+                "valid_from": _iso(row.get("valid_from")),
+                "valid_until": _iso(row.get("valid_until")),
+                "quick_summary": row.get("quick_summary"),
+                **project_current_state(row),
+            }
+            for row in rows
+        ]
+
     def create_hub(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, workspace_source: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         hub = self.hub_store.create_hub(
             title=payload["title"],

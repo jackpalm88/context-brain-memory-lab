@@ -118,11 +118,28 @@ tools:
     output_kind: record
     key_signals: [is_current, current_state_scope, cs_supersedes_content_id, tier]
     suggested_followups:
-      - tool: memory_lab_retrieval_search
-        when: "is_current=false — locate the superseding item"
+      - tool: list_current_state_anchors
+        when: "is_current=false — read what superseded it via its current_state_scope"
       - tool: load_graph_node_full
         when: "graph context (hubs, neighbors) is needed"
     failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design)."
+
+  - name: list_current_state_anchors
+    role: read
+    answers:
+      - "What is the current item of scope X?"
+      - "Item <id> is superseded — what replaced it?"
+    use_when: "You hold a scope (e.g. a superseded item's current_state_scope) and need the forward pointer: the ACTIVE anchor(s) holding what IS current there."
+    avoid_when: "You only have free text and no scope — search first; or you need history (this reads active anchors only, not the superseded chain)."
+    determinism: deterministic
+    required_inputs: [scope]
+    optional_inputs: [memory_type]
+    output_kind: record_list
+    key_signals: [anchors, count, scope, content_id, supersedes_content_id, quick_summary]
+    suggested_followups:
+      - tool: memory_lab_content_get
+        when: "the full body or tier/score fields of the current item are needed"
+    failure: "422 on empty scope or unknown memory_type. count=0 means no active anchor exists for that (normalized) scope — an unclaimed scope, not an error."
 
   - name: update_node_metadata
     role: read

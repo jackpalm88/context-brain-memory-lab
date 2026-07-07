@@ -144,6 +144,6 @@ def test_tool_classify_content_node_forwards_deterministically(monkeypatch):
 
 def test_classify_content_node_registered_and_count_is_32():
     assert APPROVED_TOOLS["classify_content_node"]
-    assert len(APPROVED_TOOLS) == 32
+    assert len(APPROVED_TOOLS) == 33  # 32 parity + list_current_state_anchors (CF-003)
     server_source = Path("memory_lab/mcp/server.py").read_text()
     assert "APPROVED_TOOLS[\"classify_content_node\"]" in server_source

@@ -3,6 +3,12 @@
 Status: parity CLOSED at 32/32 (2026-06-28, through M8E). Sections below are the original read-only audit plus appended M7-M8E outcome notes; the public surface now matches production.
 Method: ground truth from source AND the live connected `context-brain-v2` MCP client.
 
+UPDATE (2026-07-08, CF-003): the public surface is now **33** — `list_current_state_anchors`
+(`GET /v1/current-state/anchors`) is the first public-only tool with NO production counterpart.
+It is a kernel evolution driven by the Reference Framework consumer (CF-003:
+cb_current_state_anchors was written but never publicly readable), not a parity item.
+Production remains at 32; parity of the shared 32 is unchanged.
+
 ## Counts (verified)
 
 | Surface | Count | Evidence |

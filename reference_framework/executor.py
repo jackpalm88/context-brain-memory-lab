@@ -206,6 +206,24 @@ def _x_next_result_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _x_superseded_scope(state: ExecutionState) -> Optional[Dict[str, Any]]:
+    top = _top_content(state)
+    scope = (top or {}).get("current_state_scope")
+    if not scope:
+        return None
+    return {"scope": str(scope)}
+
+
+def _x_anchor_content_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
+    fetched = {str((r or {}).get("content_id")) for r in state.results_for("memory_lab_content_get")}
+    for result in state.results_for("list_current_state_anchors"):
+        for row in _rows(result, "anchors"):
+            cid = row.get("content_id")
+            if cid and str(cid) not in fetched:
+                return {"content_id": str(cid)}
+    return None
+
+
 def _x_matched_decision_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     matches = _matched_decisions(state)
     if len(matches) != 1:
@@ -246,6 +264,8 @@ def _x_save_plain(state: ExecutionState) -> Optional[Dict[str, Any]]:
 EXTRACTORS: Dict[str, Callable[[ExecutionState], Optional[Dict[str, Any]]]] = {
     "top_result_id": _x_top_result_id,
     "next_result_id": _x_next_result_id,
+    "superseded_scope": _x_superseded_scope,
+    "anchor_content_id": _x_anchor_content_id,
     "matched_decision_id": _x_matched_decision_id,
     "matched_hub_id": _x_matched_hub_id,
     "save_with_matched_hub": _x_save_with_matched_hub,
@@ -264,13 +284,13 @@ def _digest(args: Dict[str, Any]) -> str:
 def _classify_outcome(result: Any) -> str:
     if isinstance(result, dict) and result.get("ok") is False:
         return "error"
-    rows = _rows(result, "results", "items", "hubs", "decisions", "evidence", "edges", "conflicts", "timeline")
+    rows = _rows(result, "results", "items", "hubs", "decisions", "evidence", "edges", "conflicts", "timeline", "anchors")
     if isinstance(result, (list,)) and not result:
         return "empty"
     if isinstance(result, dict) and not result:
         return "empty"
     if rows == [] and isinstance(result, dict) and any(
-        k in result for k in ("results", "items", "hubs", "decisions", "evidence", "edges", "conflicts")
+        k in result for k in ("results", "items", "hubs", "decisions", "evidence", "edges", "conflicts", "anchors")
     ):
         return "empty"
     return "ok"

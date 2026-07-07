@@ -133,9 +133,14 @@ def _verify_current_state(question: str, historical: bool) -> RoutePlan:
                  condition="HAS_RESULTS", reason="currency fields are the point"),
     ]
     if not historical:
-        steps.append(PlanStep("memory_lab_content_get", args_from="next_result_id",
+        # CF-003 closed: the successor is read from the scope's active anchor,
+        # not probed from retrieval ranking (the v0 bounded-probe workaround).
+        steps.append(PlanStep("list_current_state_anchors", args_from="superseded_scope",
                               condition="TOP_SUPERSEDED",
-                              reason="fetch a candidate for what IS current (bounded: 1 extra)"))
+                              reason="read the superseded item's scope anchor — deterministic successor (CF-003)"))
+        steps.append(PlanStep("memory_lab_content_get", args_from="anchor_content_id",
+                              condition="TOP_SUPERSEDED",
+                              reason="fetch the item the anchor names as current"))
     return _plan(steps)
 
 

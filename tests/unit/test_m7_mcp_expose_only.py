@@ -23,7 +23,9 @@ M7_TOOL_NAMES = {
 
 def test_m7_tools_are_registered_in_approved_surface_and_server_entrypoint():
     assert M7_TOOL_NAMES.issubset(APPROVED_TOOLS)
-    assert len(APPROVED_TOOLS) == 32
+    # 32 = production parity (closed 2026-06-28) + list_current_state_anchors,
+    # the first public-only kernel capability (CF-003) — public now LEADS production.
+    assert len(APPROVED_TOOLS) == 33
 
     server_source = Path("memory_lab/mcp/server.py").read_text()
     for name in M7_TOOL_NAMES:

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **CF-003 — current-state anchors are now readable.** New
+  `GET /v1/current-state/anchors?scope=…[&memory_type=…]` returns the ACTIVE
+  anchor(s) of a scope from `cb_current_state_anchors` — the forward pointer
+  of the supersession chain the resolver has always written but nothing public
+  could read. The scope is normalized with the same slugifier as the write
+  path. Exposed as MCP tool `list_current_state_anchors` (the first
+  public-only tool: 33 vs production's 32; see MCP_PARITY_TABLE.md) with a
+  capability-manifest entry, and added to the curated GPT Actions OpenAPI.
+  The Reference Framework's `verify_current_state` intent now reads the
+  successor of a superseded item from the anchor instead of the v0 bounded
+  retrieval probe — it finds the successor even when retrieval does not
+  surface it.
+
+### Fixed
+
+- Test hygiene (pre-existing, surfaced by the CF-003 gate run): the OpenAI
+  adapter unit tests now restore `sys.modules` identity at teardown (leaving
+  the adapter module popped split the `OpenAIEmbeddingBackend` class identity
+  and failed unrelated tests order-dependently), and the classify-wiring
+  low-confidence test asserts the EB-era explicit
+  `current_state_status=noop/low_confidence` response instead of key absence.
+
 ## 1.0.0 — Feature-Complete, field-validated (2026-07-05)
 
 First stable release. Covers everything since tag `v0.2.0a1` (73 commits):

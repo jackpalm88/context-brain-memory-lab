@@ -20,7 +20,7 @@ info:
     **Base URL:** configure per deployment (see `docs/GPT_ACTIONS.md`).
 
     **MCP alternative:** if your client supports MCP streamable-http transport,
-    connect to `POST /mcp` with the same Bearer token — all 32 tools are
+    connect to `POST /mcp` with the same Bearer token — all 33 tools are
     available with identical semantics to this REST surface.
   version: "1.0.0"
   contact:
@@ -214,6 +214,70 @@ components:
       properties:
         node_type:
           $ref: "#/components/schemas/NodeType"
+
+    CurrentStateAnchor:
+      type: object
+      properties:
+        anchor_id:
+          type: string
+          format: uuid
+        memory_type:
+          type: string
+        scope:
+          type: string
+        content_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "The item that IS current for this (memory_type, scope)."
+        supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+        state_status:
+          type: string
+          enum: [active]
+          description: "This read surface returns active anchors only."
+        set_by:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+        quick_summary:
+          type: string
+          nullable: true
+        is_current:
+          type: boolean
+          nullable: true
+        current_state_scope:
+          type: string
+          nullable: true
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    CurrentStateAnchorsResponse:
+      type: object
+      properties:
+        anchors:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrentStateAnchor"
+        count:
+          type: integer
+        scope:
+          type: string
+          description: "The normalized scope actually queried."
+        workspace_id:
+          type: string
+          format: uuid
+          nullable: true
 
     # ── Hubs ─────────────────────────────────────────────────────────────────
     HubCreateRequest:
@@ -883,6 +947,47 @@ paths:
                 $ref: "#/components/schemas/ContentResponse"
         "422":
           description: "Invalid node_type"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Current state ──────────────────────────────────────────────────────────
+  /v1/current-state/anchors:
+    get:
+      operationId: list_current_state_anchors
+      summary: "Read the active current-state anchor(s) of a scope"
+      description: |
+        Forward pointer of the supersession chain (CF-003): given a scope
+        (e.g. a superseded item's current_state_scope), returns what IS
+        current there — at most one active anchor per memory_type. The scope
+        is normalized server-side with the same slugifier the write path
+        uses, so raw scope hints match their stored form. count=0 means no
+        active anchor exists for that scope (an unclaimed scope, not an error).
+      tags: [content]
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: memory_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [milestone, decision, principle, anchor, evidence, plan_roadmap, raw_memory]
+      responses:
+        "200":
+          description: "Active anchors for the (normalized) scope"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentStateAnchorsResponse"
+        "422":
+          description: "Empty scope or unknown memory_type"
           content:
             application/json:
               schema:

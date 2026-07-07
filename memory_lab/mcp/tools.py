@@ -79,6 +79,24 @@ def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) 
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
+def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Read the ACTIVE current-state anchor(s) of a scope — the forward pointer
+    of the supersession chain (CF-003).
+
+    Given a scope (e.g. a superseded item's current_state_scope), returns what IS
+    current there: at most one anchor per memory_type, each carrying content_id,
+    supersedes_content_id and quick_summary. The scope is normalized server-side
+    with the same slugifier the write path uses, so raw scope hints match their
+    stored form. Empty anchors means no active anchor exists for that scope.
+    """
+    return _call_api(
+        _client().current_state_anchor_list,
+        scope=scope,
+        memory_type=memory_type,
+        workspace_id=workspace_id,
+    )
+
+
 def set_quick_summary(content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
     """Set or replace the short human-readable quick_summary of an existing
     content item. Good summaries make retrieval results scannable for agents."""
@@ -579,6 +597,7 @@ APPROVED_TOOLS = {
     "memory_lab_health": memory_lab_health,
     "memory_lab_content_create_id": memory_lab_content_create_id,
     "memory_lab_content_get": memory_lab_content_get,
+    "list_current_state_anchors": list_current_state_anchors,
     "set_quick_summary": set_quick_summary,
     "update_node_metadata": update_node_metadata,
     "memory_lab_hub_create": memory_lab_hub_create,
