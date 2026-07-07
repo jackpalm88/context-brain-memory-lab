@@ -79,6 +79,12 @@ class TestOpenAIEmbeddingAdapter(unittest.TestCase):
         # Ensure clean env
         os.environ.pop("OPENAI_API_KEY", None)
         os.environ.pop("OPENAI_EMBEDDING_MODEL", None)
+        # Save the process-wide module objects so tearDown can RESTORE identity:
+        # leaving the adapter module popped makes later imports mint a NEW
+        # OpenAIEmbeddingBackend class while earlier importers (the content
+        # router) keep the old one — isinstance checks then fail suite-wide.
+        self._saved_openai = sys.modules.get("openai")
+        self._saved_adapter = sys.modules.get("memory_lab.providers.openai_embedding")
         _remove_openai()
         # Re-remove cached adapter module
         sys.modules.pop("memory_lab.providers.openai_embedding", None)
@@ -88,6 +94,10 @@ class TestOpenAIEmbeddingAdapter(unittest.TestCase):
         os.environ.pop("OPENAI_EMBEDDING_MODEL", None)
         _remove_openai()
         sys.modules.pop("memory_lab.providers.openai_embedding", None)
+        if self._saved_openai is not None:
+            sys.modules["openai"] = self._saved_openai
+        if self._saved_adapter is not None:
+            sys.modules["memory_lab.providers.openai_embedding"] = self._saved_adapter
 
     # -----------------------------------------------------------------------
     # Identity / configuration
