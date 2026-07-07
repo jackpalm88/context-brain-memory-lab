@@ -475,7 +475,11 @@ def test_low_confidence_no_current_state_writes(test_dsn, conn):
             content="unit test result but weak evidence only", workspace_id=ws_id,
         )
 
-    assert "current_state_status" not in resp
+    # EB-era contract: the resolver's skip is EXPLICIT in the response (the
+    # capability manifest documents current_state_status=noop/low_confidence),
+    # not silent absence as this test originally asserted.
+    assert resp["current_state_status"] == "noop"
+    assert resp["current_state_reason"] == "low_confidence"
     with conn.cursor(cursor_factory=_real_dict_cursor()) as cur:
         cur.execute(
             "SELECT is_current, current_state_scope, cs_supersedes_content_id "
