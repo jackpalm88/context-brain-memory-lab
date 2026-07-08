@@ -46,6 +46,10 @@ class PlanStep:
     args_from: Optional[str] = None   # executor extractor name (deterministic registry)
     condition: Optional[str] = None   # executor predicate name; None = unconditional
     reason: str = ""                  # trigger description — every step names its why
+    # CF-005 (EP v0.2): the router DECLARES each step's epistemic role — steps
+    # that exist to resolve arguments / match candidates are "lookup"; their
+    # rows are minted marked, so the Reasoner can tell locators from evidence.
+    role: str = "evidence"            # evidence (default) | lookup
 
 
 @dataclass(frozen=True)
@@ -110,13 +114,13 @@ def _explain_decision(question: str, historical: bool) -> RoutePlan:
     # matching kept as the declared fallback — the reason strings name which
     # path resolved (referential vs lexical).
     return _plan([
-        PlanStep("memory_lab_retrieval_search", {"query": question, "limit": 5},
+        PlanStep("memory_lab_retrieval_search", {"query": question, "limit": 5}, role="lookup",
                  reason="referential entry (CF-002): locate the decision's content first"),
         PlanStep("list_decisions_for_content", args_from="top_result_id",
-                 condition="HAS_RESULTS",
+                 condition="HAS_RESULTS", role="lookup",
                  reason="content→decision join — referential, not lexical (CF-002)"),
-        PlanStep("list_decisions", {"limit": 20}, condition="NO_DECISION_LINKED",
-                 reason="lexical fallback — title match (3.2)"),
+        PlanStep("list_decisions", {"limit": 20}, condition="NO_DECISION_LINKED", role="lookup",
+                 reason="lexical fallback — title match (3.2); rows feed matching, not evidence (CF-005)"),
         PlanStep("explain_decision", args_from="resolved_decision_id",
                  condition="DECISION_RESOLVED",
                  reason="referential link or unique lexical title match"),
@@ -134,7 +138,7 @@ def _explain_topic(question: str, historical: bool) -> RoutePlan:
                  reason="query_memory's own fallback pointer (no_context/fallback.suggested)"),
         # CF-002 restores the §3.3 follow-up that v0 dropped: evidence → decision.
         PlanStep("list_decisions_for_content", args_from="top_evidence_content_id",
-                 condition="HAS_ASK_EVIDENCE",
+                 condition="HAS_ASK_EVIDENCE", role="lookup",
                  reason="§3.3 restored (CF-002): join top evidence to its decision node"),
         PlanStep("get_decision_lineage", args_from="linked_decision_id",
                  condition="DECISION_LINKED",
@@ -183,7 +187,8 @@ def _save_memory(question: str, historical: bool) -> RoutePlan:
                      reason="decision-shaped save (3.6); lineage via explicit API when predecessor known"),
         ])
     return _plan([
-        PlanStep("list_hubs", {"status": "active"}, reason="term-match topic for hub filing (3.6)"),
+        PlanStep("list_hubs", {"status": "active"}, role="lookup",
+                 reason="term-match topic for hub filing (3.6)"),
         PlanStep("save_and_link_to_hub", args_from="save_with_matched_hub",
                  condition="HUB_MATCHED", reason="unique hub match — file under it, scope_hint set"),
         PlanStep("memory_lab_content_create_id", args_from="save_plain",

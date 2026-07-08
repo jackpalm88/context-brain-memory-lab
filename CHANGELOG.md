@@ -4,6 +4,17 @@
 
 ### Added
 
+- **CF-005 — Evidence Package v0.2: lookup items are marked, not mixed in.**
+  The Intent Router now declares each plan step's epistemic role
+  (`evidence` default | `lookup` for steps that resolve arguments or match
+  candidates — the lexical decision lookup, the CF-002 by-content joins, the
+  referential-entry retrieval, save-path hub term-matching). The role flows
+  through the execution trace into the package: `package_version` 0.2, every
+  item carries `role`, lookup trace steps are marked. Append-only doctrine
+  preserved — lookup rows are kept and MARKED (ambiguity stays visible), the
+  Reasoner can now down-weight locators without guessing. Framework-only
+  change: no kernel, API, or MCP surface touched.
+
 - **CF-001 + CF-004 Stage 1 — envelope truth.** The capability manifest is now
   v0.2: every tool carries a machine-readable `response_shape` (kind,
   rows_keys, count_key, bucket_keys, context_keys) describing where rows live

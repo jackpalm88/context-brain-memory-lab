@@ -19,8 +19,12 @@ def render_trace(state: ExecutionState, package: Dict[str, Any], manifest: Manif
     for t in state.trace:
         marker = {"ok": "✓", "error": "✗", "empty": "∅", "skipped": "·"}.get(t.outcome, "?")
         condition = f" [{t.condition}={'fired' if t.condition_fired else 'not fired'}]" if t.condition else ""
-        lines.append(f"  {t.step_id} {marker} {t.tool}{condition} — {t.args_digest}")
-    lines.append(f"Package:          {len(ep['items'])} evidence items, "
+        role = " (lookup)" if getattr(t, "role", "evidence") == "lookup" else ""
+        lines.append(f"  {t.step_id} {marker} {t.tool}{role}{condition} — {t.args_digest}")
+    evidence_n = sum(1 for i in ep["items"] if i.get("role") != "lookup")
+    lookup_n = len(ep["items"]) - evidence_n
+    lookup_note = f" (+{lookup_n} lookup)" if lookup_n else ""
+    lines.append(f"Package:          {evidence_n} evidence items{lookup_note}, "
                  f"{len(ep['conflicts'])} conflicts, {len(ep['lineage'])} lineage chains")
     if ep["degradations"]:
         lines.append(f"Degradations:     {', '.join(sorted({d['type'] for d in ep['degradations']}))}")

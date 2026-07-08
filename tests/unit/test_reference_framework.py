@@ -424,6 +424,81 @@ def test_latest_decisions_mints_flat_timeline_without_duplicates():
 
 
 # ---------------------------------------------------------------------------
+# CF-005 — EP v0.2: router-declared roles, lookup items marked
+# ---------------------------------------------------------------------------
+
+def test_lookup_rows_are_minted_marked_not_deleted():
+    # The CF-005 register scenario: the lexical lookup lists 15 decisions and
+    # only one matches. EP append-only doctrine keeps all rows — but they are
+    # now MARKED role=lookup, and the matched decision's own record (via
+    # explain_decision) is role=evidence.
+    listed = [{"decision_id": f"d-{i}", "title": f"Unrelated topic {i}", "decision_status": "active"}
+              for i in range(14)]
+    listed.append({"decision_id": "d-14", "title": "Switch queue to RabbitMQ", "decision_status": "active"})
+    registry = Registry({
+        "memory_lab_retrieval_search": {"results": []},
+        "list_decisions_for_content": {"decisions": [], "count": 0},
+        "list_decisions": {"decisions": listed, "count": 15},
+        "explain_decision": {"decision_id": "d-14", "title": "Switch queue to RabbitMQ",
+                             "decision_reason": "ops simplicity"},
+        "get_decision_lineage": {"decision_id": "d-14", "title": "Switch queue to RabbitMQ",
+                                 "ancestors": [], "descendants": [], "depth": 0},
+    })
+    state = execute(route("why did we switch the queue?"), registry)
+    ep = build_package(state)["evidence_package"]
+
+    assert ep["package_version"] == "0.2"
+    lookup_items = [i for i in ep["items"] if i["role"] == "lookup"]
+    evidence_items = [i for i in ep["items"] if i["role"] == "evidence"]
+    assert len(lookup_items) == 15                       # append-only: kept, marked
+    assert {i["source"]["tool"] for i in lookup_items} == {"list_decisions"}
+    assert [i["source"]["source_id"] for i in evidence_items] == ["d-14"]
+    assert evidence_items[0]["source"]["tool"] == "explain_decision"
+
+    trace_roles = {t["tool"]: t.get("role") for t in ep["execution_trace"]}
+    assert trace_roles["list_decisions"] == "lookup"
+    assert trace_roles["memory_lab_retrieval_search"] == "lookup"
+    assert "role" not in [t for t in ep["execution_trace"] if t["tool"] == "explain_decision"][0]
+
+
+def test_evidence_intents_mint_no_lookup_items():
+    # verify_current_state and latest_decisions carry no lookup steps: every
+    # minted item is role=evidence.
+    registry = Registry({
+        "memory_lab_retrieval_search": {"results": [
+            {"content_id": "old-1", "text": "Decision: adopt Kafka…"}]},
+        "list_current_state_anchors": _ANCHOR_RESPONSE,
+        "memory_lab_content_get": _content_get_response,
+    })
+    state = execute(route("which message queue do we use now?"), registry)
+    ep = build_package(state)["evidence_package"]
+    assert ep["items"] and all(i["role"] == "evidence" for i in ep["items"])
+    assert all("role" not in t for t in ep["execution_trace"])
+
+
+def test_derived_answer_is_evidence_even_with_lookup_in_plan():
+    # explain_topic has one lookup step (the CF-002 by-content join); the ask
+    # evidence and derived answer stay role=evidence.
+    registry = Registry({
+        "query_memory": {"answer": "RabbitMQ [ev_1]", "status": "ok", "confidence": 0.7,
+                         "no_context": False, "citations": [{"evidence_id": "ev_1"}],
+                         "evidence": [{"content_id": "c-1", "snippet": "Decision: RabbitMQ…"}],
+                         "fallback": {"suggested": False}},
+        "list_decisions_for_content": _BY_CONTENT_HIT,
+        "get_decision_lineage": {"decision_id": "d-9", "title": "Adopt RabbitMQ",
+                                 "ancestors": [], "descendants": [], "depth": 0},
+        "memory_lab_retrieval_search": {"results": []},
+    })
+    state = execute(route("what do we know about queues?"), registry)
+    ep = build_package(state)["evidence_package"]
+    by_role = {}
+    for item in ep["items"]:
+        by_role.setdefault(item["role"], []).append(item)
+    assert {i["kind"] for i in by_role["evidence"]} == {"content_evidence", "derived_answer"}
+    assert {i["source"]["tool"] for i in by_role["lookup"]} == {"list_decisions_for_content"}
+
+
+# ---------------------------------------------------------------------------
 # Evidence Package — invariants
 # ---------------------------------------------------------------------------
 

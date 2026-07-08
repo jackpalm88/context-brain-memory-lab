@@ -26,6 +26,7 @@ class TraceStep:
     result: Any = None
     condition: Optional[str] = None
     condition_fired: Optional[bool] = None
+    role: str = "evidence"           # evidence | lookup (router-declared, CF-005)
 
 
 @dataclass
@@ -383,12 +384,12 @@ def execute(plan: RoutePlan, tool_registry: Dict[str, Callable[..., Any]]) -> Ex
             if not fired:
                 state.trace.append(TraceStep(step_id, planned.tool, "(condition not fired)",
                                              "skipped", planned.reason, None,
-                                             planned.condition, False))
+                                             planned.condition, False, planned.role))
                 continue
 
         if state.calls_made >= plan.max_calls:
             state.trace.append(TraceStep(step_id, planned.tool, "(budget exhausted)",
-                                         "skipped", planned.reason))
+                                         "skipped", planned.reason, role=planned.role))
             state.gaps.append(f"follow-up {planned.tool} skipped: budget ({plan.max_calls} calls)")
             continue
 
@@ -398,7 +399,8 @@ def execute(plan: RoutePlan, tool_registry: Dict[str, Callable[..., Any]]) -> Ex
             if extracted is None:
                 state.trace.append(TraceStep(step_id, planned.tool, "(extractor found no target)",
                                              "skipped", planned.reason,
-                                             None, planned.condition, planned.condition is not None))
+                                             None, planned.condition, planned.condition is not None,
+                                             planned.role))
                 state.gaps.append(f"{planned.tool} skipped: {planned.args_from} unresolved")
                 continue
             args.update({k: v for k, v in extracted.items() if v is not None})
@@ -406,7 +408,7 @@ def execute(plan: RoutePlan, tool_registry: Dict[str, Callable[..., Any]]) -> Ex
         call_key = (planned.tool, _digest(args))
         if call_key in state.seen_calls:
             state.trace.append(TraceStep(step_id, planned.tool, _digest(args),
-                                         "skipped", "no-repeat guard (§6.2)"))
+                                         "skipped", "no-repeat guard (§6.2)", role=planned.role))
             continue
         state.seen_calls.add(call_key)
 
@@ -418,7 +420,8 @@ def execute(plan: RoutePlan, tool_registry: Dict[str, Callable[..., Any]]) -> Ex
         outcome = _classify_outcome(planned.tool, result)
         state.trace.append(TraceStep(step_id, planned.tool, _digest(args), outcome,
                                      planned.reason, result,
-                                     planned.condition, True if planned.condition else None))
+                                     planned.condition, True if planned.condition else None,
+                                     planned.role))
         if outcome == "error":
             state.degradations.append({
                 "type": "tool_error", "call_ref": step_id,

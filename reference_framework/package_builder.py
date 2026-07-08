@@ -13,7 +13,9 @@ from typing import Any, Dict, List, Optional
 
 from reference_framework.executor import ExecutionState, TraceStep, _rows, _rows_for
 
-PACKAGE_VERSION = "0.1"
+# 0.2 = CF-005: router-declared step roles; every item carries role
+# (evidence | lookup) so the Reasoner can tell locators from evidence.
+PACKAGE_VERSION = "0.2"
 MAX_ITEMS_DEFAULT = 50
 
 # Mechanical authority ladder (EP §6): source tool -> level. Never content-derived.
@@ -69,7 +71,7 @@ def _trust(row: Dict[str, Any], tool: str) -> Dict[str, Any]:
 
 def _item(item_no: int, kind: str, statement: str, tool: str, source_id: str,
           call_ref: str, row: Dict[str, Any], statement_kind: str = "verbatim",
-          derived_from: Optional[List[str]] = None) -> Dict[str, Any]:
+          derived_from: Optional[List[str]] = None, role: str = "evidence") -> Dict[str, Any]:
     level, gated = _AUTHORITY.get(tool, ("governed_save", False))
     provenance = {k: row[k] for k in
                   ("retrieval_path", "source_path", "ranking_reason", "score_components", "knowledge_path")
@@ -77,6 +79,7 @@ def _item(item_no: int, kind: str, statement: str, tool: str, source_id: str,
     item = {
         "item_id": f"evi_{item_no:03d}",
         "kind": kind,
+        "role": role,
         "statement": statement,
         "statement_kind": statement_kind,
         "source": {"tool": tool, "source_id": source_id,
@@ -100,18 +103,19 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
         return counter[0]
 
     result, tool, ref = step.result, step.tool, step.step_id
+    role = step.role
 
     if tool == "memory_lab_retrieval_search":
         for row in _rows_for(tool, result):
             statement = str(row.get("text") or row.get("snippet") or "").strip()
             if statement:
                 items.append(_item(nxt(), "content_evidence", statement, tool,
-                                   str(row.get("content_id") or row.get("id")), ref, row))
+                                   str(row.get("content_id") or row.get("id")), ref, row, role=role))
 
     elif tool == "memory_lab_content_get" and isinstance(result, dict):
         statement = str(result.get("quick_summary") or result.get("content_id") or "")
         items.append(_item(nxt(), "content_record", statement, tool,
-                           str(result.get("content_id")), ref, result))
+                           str(result.get("content_id")), ref, result, role=role))
 
     elif tool == "list_current_state_anchors":
         # CF-003: each active anchor is the forward pointer of a supersession
@@ -120,19 +124,19 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
             statement = str(row.get("quick_summary") or row.get("content_id") or "").strip()
             if statement:
                 items.append(_item(nxt(), "content_record", statement, tool,
-                                   str(row.get("content_id")), ref, row))
+                                   str(row.get("content_id")), ref, row, role=role))
 
     elif tool in ("get_decision_timeline", "list_decisions", "list_decisions_for_content") and step.outcome == "ok":
         rows = _rows_for(tool, result)
         for row in rows:
             statement = str(row.get("title") or "")
             items.append(_item(nxt(), "decision_record", statement, tool,
-                               str(row.get("decision_id")), ref, row))
+                               str(row.get("decision_id")), ref, row, role=role))
 
     elif tool == "explain_decision" and isinstance(result, dict):
         statement = " — ".join(s for s in (result.get("title"), result.get("decision_reason")) if s)
         items.append(_item(nxt(), "decision_record", statement, tool,
-                           str(result.get("decision_id")), ref, result))
+                           str(result.get("decision_id")), ref, result, role=role))
 
     elif tool == "query_memory" and isinstance(result, dict) and result.get("ok") is not False:
         evidence_refs: List[str] = []
@@ -140,7 +144,7 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
             statement = str(row.get("snippet") or "").strip()
             if statement:
                 evidence_item = _item(nxt(), "content_evidence", statement,
-                                      "query_memory", str(row.get("content_id")), ref, row)
+                                      "query_memory", str(row.get("content_id")), ref, row, role=role)
                 evidence_item["authority"] = {"level": "governed_save", "human_gated": False}
                 items.append(evidence_item)
                 evidence_refs.append(evidence_item["item_id"])
@@ -207,6 +211,7 @@ def build_package(state: ExecutionState, *, max_items: int = MAX_ITEMS_DEFAULT) 
             "execution_trace": [
                 {"step": t.step_id, "tool": t.tool, "args_digest": t.args_digest,
                  "outcome": t.outcome, "reason": t.reason,
+                 **({"role": t.role} if t.role != "evidence" else {}),
                  **({"condition": t.condition, "condition_fired": t.condition_fired}
                     if t.condition else {})}
                 for t in state.trace
