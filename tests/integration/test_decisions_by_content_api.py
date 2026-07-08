@@ -228,6 +228,32 @@ def test_workspace_isolation(app_env):
     assert other["count"] == 0 and other["decisions"] == []
 
 
+def test_timeline_carries_flat_view_alongside_buckets(app_env):
+    # CF-001 additive completion: /decisions/timeline returns the SAME rows
+    # twice — status buckets (legacy `total`) AND flat `decisions` + `count`.
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    d1 = _create_decision(client, "Old queue decision", [])
+    d2 = _create_decision(client, "New queue decision", [])
+    resp = client.post("/decisions/", json={
+        "title": "Newest queue decision", "decision_reason": "supersedes d2",
+        "supersedes_decision_id": d2,
+    })
+    assert resp.status_code == 201, resp.text
+    d3 = resp.json()["decision_id"]
+
+    body = client.get("/decisions/timeline").json()
+    assert body["count"] == body["total"] == 3
+    flat_ids = [d["decision_id"] for d in body["decisions"]]
+    assert flat_ids == [d3, d2, d1]                     # newest first
+    bucket_ids = {d["decision_id"]
+                  for bucket in ("active", "superseded", "reversed", "draft")
+                  for d in body[bucket]}
+    assert bucket_ids == set(flat_ids)                  # same rows, two views
+    superseded_ids = {d["decision_id"] for d in body["superseded"]}
+    assert d2 in superseded_ids
+
+
 def test_gin_index_applied(app_env):
     conn = _psycopg2().connect(app_env)
     try:

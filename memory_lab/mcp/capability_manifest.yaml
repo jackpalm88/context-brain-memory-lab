@@ -17,6 +17,19 @@
 #                timeline | conflict_list | ack
 #   routing:     normal (default) | discouraged | alias
 #
+# response_shape (v0.2, CF-001/004): the MECHANICAL layer — where rows live in a
+#   successful response, so consumers stop rediscovering shapes by failure.
+#   kind:         keyed_list | status_buckets | record | answer_envelope |
+#                 graph_snapshot | id_envelope | status | ack | lineage_tree
+#   rows_keys:    keys holding row arrays (keyed_list/graph_snapshot/lineage_tree;
+#                 answer_envelope: evidence rows; status_buckets: the flat list)
+#   count_key:    name of the row count (keyed_list/status_buckets)
+#   bucket_keys:  status_buckets only — per-status row arrays, same rows as flat
+#   context_keys: non-row payload keys worth knowing (documents warts truthfully:
+#                 retrieval's legacy result_count duplicate, timeline's total)
+#   Coherence is drift-tested. Envelope convention for NEW surfaces (ratified,
+#   docs/ARCHITECTURE_BOUNDARIES.md doctrine 6): {"<plural>": rows, "count": n, ...context}.
+#
 # Shared failure envelope (all tools): API errors return
 #   {ok: false, error: {type, message, method, url, status_code, body_json}} with
 #   secrets redacted. 422 = stated-contract violation; 401/403 = auth; 404 = wrong
@@ -27,7 +40,7 @@
 #   current_state_status/reason (noop/low_confidence = resolver skipped; scope_hint
 #   did NOT take effect), current_state_scope + current_state_scope_source.
 
-manifest_version: "0.1"
+manifest_version: "0.2"
 opencb_version: "1.0.0"
 
 tools:
@@ -42,6 +55,8 @@ tools:
     determinism: deterministic
     required_inputs: []
     output_kind: status
+    response_shape:
+      kind: status
     key_signals: [status, version]
     suggested_followups:
       - tool: list_hubs
@@ -59,6 +74,8 @@ tools:
     required_inputs: [content]
     optional_inputs: [scope_hint]
     output_kind: id_envelope
+    response_shape:
+      kind: id_envelope
     key_signals: [persisted, discarded, duplicate, tier, conflict_escalation_id, current_state_status, current_state_scope, current_state_scope_source]
     suggested_followups:
       - tool: set_quick_summary
@@ -80,6 +97,8 @@ tools:
     required_inputs: [content, hub_id, save_purpose]
     optional_inputs: [quick_summary, scope_hint, content_url]
     output_kind: id_envelope
+    response_shape:
+      kind: id_envelope
     key_signals: [persisted, conflict_escalation_id, current_state_status]
     suggested_followups:
       - tool: query_memory
@@ -98,6 +117,8 @@ tools:
     required_inputs: [title, decision_reason]
     optional_inputs: [supersedes_decision_id, decision_context, alternatives_considered, confidence_level, linked_hub_ids, decision_tags]
     output_kind: id_envelope
+    response_shape:
+      kind: id_envelope
     key_signals: [decision_id, decision_status]
     suggested_followups:
       - tool: get_decision_lineage
@@ -116,6 +137,8 @@ tools:
     determinism: deterministic
     required_inputs: [content_id]
     output_kind: record
+    response_shape:
+      kind: record
     key_signals: [is_current, current_state_scope, cs_supersedes_content_id, tier]
     suggested_followups:
       - tool: list_current_state_anchors
@@ -137,6 +160,11 @@ tools:
     required_inputs: [scope]
     optional_inputs: [memory_type]
     output_kind: record_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [anchors]
+      count_key: count
+      context_keys: [scope, workspace_id]
     key_signals: [anchors, count, scope, content_id, supersedes_content_id, quick_summary]
     suggested_followups:
       - tool: memory_lab_content_get
@@ -152,6 +180,8 @@ tools:
     determinism: deterministic
     required_inputs: [content_id]
     output_kind: record
+    response_shape:
+      kind: record
     key_signals: [read_only, mutation]
     suggested_followups: []
     failure: "404 semantics as memory_lab_content_get."
@@ -167,6 +197,8 @@ tools:
     determinism: deterministic
     required_inputs: [content_id, node_type]
     output_kind: ack
+    response_shape:
+      kind: ack
     key_signals: [classification_mode]
     suggested_followups: []
     failure: "422 on invalid node_type (the allowed list is echoed in the error)."
@@ -180,6 +212,8 @@ tools:
     determinism: deterministic
     required_inputs: [content_id, quick_summary]
     output_kind: ack
+    response_shape:
+      kind: ack
     key_signals: [updated]
     suggested_followups: []
     failure: "422 over 500 characters; 404 semantics as memory_lab_content_get."
@@ -194,6 +228,8 @@ tools:
     required_inputs: [title]
     optional_inputs: [hub_type, description]
     output_kind: id_envelope
+    response_shape:
+      kind: id_envelope
     key_signals: [hub_id]
     suggested_followups:
       - tool: update_hub
@@ -210,6 +246,8 @@ tools:
     determinism: deterministic
     required_inputs: [hub_id]
     output_kind: record
+    response_shape:
+      kind: record
     key_signals: [aliases, related_terms, status]
     suggested_followups:
       - tool: memory_lab_edge_list
@@ -226,6 +264,10 @@ tools:
     required_inputs: []
     optional_inputs: [status]
     output_kind: record_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [hubs]
+      count_key: count
     suggested_followups:
       - tool: memory_lab_hub_create
         when: "no suitable hub exists"
@@ -241,6 +283,8 @@ tools:
     required_inputs: [hub_id]
     optional_inputs: [title, aliases, related_terms, description, status, hub_type]
     output_kind: record
+    response_shape:
+      kind: record
     suggested_followups: []
     failure: "404 semantics."
 
@@ -252,6 +296,8 @@ tools:
     determinism: deterministic
     required_inputs: [hub_id, content_id]
     output_kind: ack
+    response_shape:
+      kind: ack
     key_signals: [linked]
     suggested_followups: []
     failure: "404 on either id."
@@ -265,6 +311,8 @@ tools:
     determinism: deterministic
     required_inputs: [source_hub_id, target_hub_id, edge_type]
     output_kind: id_envelope
+    response_shape:
+      kind: id_envelope
     suggested_followups: []
     failure: "Standard envelope."
 
@@ -276,6 +324,8 @@ tools:
     determinism: deterministic
     required_inputs: [edge_id]
     output_kind: record
+    response_shape:
+      kind: record
     suggested_followups: []
     failure: "404 semantics."
 
@@ -289,6 +339,11 @@ tools:
     required_inputs: []
     optional_inputs: [hub_id, include_archived]
     output_kind: record_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [edges]
+      count_key: count
+      context_keys: [workspace_id]
     suggested_followups:
       - tool: approve_inferred_edge
         when: "an inferred proposal is correct (requires user confirmation)"
@@ -305,6 +360,8 @@ tools:
     required_inputs: [edge_id]
     optional_inputs: [edge_type, status, note, reason, confidence]
     output_kind: record
+    response_shape:
+      kind: record
     suggested_followups: []
     failure: "404 semantics."
 
@@ -316,6 +373,8 @@ tools:
     determinism: deterministic
     required_inputs: [edge_id]
     output_kind: ack
+    response_shape:
+      kind: ack
     suggested_followups: []
     failure: "404 semantics."
 
@@ -328,6 +387,8 @@ tools:
     required_inputs: [source_hub_id, target_hub_id, edge_type]
     optional_inputs: [reason, confidence, note]
     output_kind: ack
+    response_shape:
+      kind: ack
     suggested_followups: []
     failure: "Standard envelope; approving a non-existent proposal errors."
 
@@ -340,6 +401,8 @@ tools:
     required_inputs: [source_hub_id, target_hub_id, edge_type]
     optional_inputs: [reason, note]
     output_kind: ack
+    response_shape:
+      kind: ack
     suggested_followups: []
     failure: "Standard envelope."
 
@@ -354,6 +417,11 @@ tools:
     required_inputs: [query]
     optional_inputs: [limit, debug, only_clean]
     output_kind: ranked_evidence
+    response_shape:
+      kind: keyed_list
+      rows_keys: [results]
+      count_key: count
+      context_keys: [query, result_count, limit, debug]
     key_signals: [result_trust, ranking_reason, source_path, confidence, score_components]
     suggested_followups:
       - tool: memory_lab_content_get
@@ -374,6 +442,10 @@ tools:
     required_inputs: [query]
     optional_inputs: [enable_provider_synthesis]
     output_kind: answer_envelope
+    response_shape:
+      kind: answer_envelope
+      rows_keys: [evidence]
+      context_keys: [answer, citations, confidence, no_context, fallback, mode]
     key_signals: [answer, citations, confidence, has_citations, no_context, mode, fallback]
     suggested_followups:
       - tool: memory_lab_retrieval_search
@@ -394,6 +466,11 @@ tools:
     required_inputs: [query]
     optional_inputs: [node_type, hub_id, limit]
     output_kind: preview_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [results]
+      count_key: count
+      context_keys: [workspace_id]
     suggested_followups:
       - tool: load_graph_node_full
         when: "a preview row is the right node"
@@ -408,6 +485,8 @@ tools:
     determinism: deterministic
     required_inputs: [content_id]
     output_kind: record
+    response_shape:
+      kind: record
     suggested_followups: []
     failure: "404 semantics."
 
@@ -420,6 +499,9 @@ tools:
     required_inputs: []
     optional_inputs: [include_inferred, include_curated]
     output_kind: graph_snapshot
+    response_shape:
+      kind: graph_snapshot
+      rows_keys: [nodes, edges]
     suggested_followups: []
     failure: "Both filters false yields an empty edge set (valid)."
 
@@ -432,6 +514,9 @@ tools:
     required_inputs: []
     optional_inputs: [include_inferred, include_curated]
     output_kind: graph_snapshot
+    response_shape:
+      kind: graph_snapshot
+      rows_keys: [nodes, edges]
     suggested_followups: []
     failure: "As get_graph_snapshot."
     honest_contract: "Flag-forwarding alias; identical behavior."
@@ -446,6 +531,8 @@ tools:
     determinism: deterministic
     required_inputs: [decision_id]
     output_kind: record
+    response_shape:
+      kind: record
     key_signals: [decision_status, confidence_level]
     suggested_followups:
       - tool: get_decision_lineage
@@ -461,6 +548,10 @@ tools:
     required_inputs: []
     optional_inputs: [status, hub_id, limit]
     output_kind: record_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [decisions]
+      count_key: count
     suggested_followups:
       - tool: get_decision_timeline
         when: "a chronological narrative is wanted"
@@ -475,6 +566,8 @@ tools:
     determinism: deterministic
     required_inputs: [decision_id, decision_status]
     output_kind: ack
+    response_shape:
+      kind: record
     suggested_followups: []
     failure: "422 on invalid status; 404 semantics."
 
@@ -487,6 +580,10 @@ tools:
     determinism: deterministic
     required_inputs: [decision_id]
     output_kind: lineage_tree
+    response_shape:
+      kind: lineage_tree
+      rows_keys: [ancestors, descendants]
+      context_keys: [decision_id, title, depth, depth_limit_reached]
     key_signals: [ancestors, descendants, depth_limit_reached]
     suggested_followups:
       - tool: explain_decision
@@ -504,6 +601,11 @@ tools:
     required_inputs: [content_id]
     optional_inputs: [limit]
     output_kind: record_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [decisions]
+      count_key: count
+      context_keys: [content_id, workspace_id]
     key_signals: [decisions, count, link_role, also_source, content_id]
     suggested_followups:
       - tool: explain_decision
@@ -521,8 +623,15 @@ tools:
     required_inputs: []
     optional_inputs: [hub_id, tags, limit]
     output_kind: timeline
+    response_shape:
+      kind: status_buckets
+      rows_keys: [decisions]
+      count_key: count
+      bucket_keys: [active, superseded, reversed, draft]
+      context_keys: [total]
+    key_signals: [decisions, count, total]
     suggested_followups: []
-    failure: "An empty timeline is valid."
+    failure: "An empty timeline is valid. Rows appear TWICE by design (CF-001): flat under `decisions` (newest first, with conventional `count`) and grouped in the four status buckets (`total` is the legacy count name) — consume one view, not both."
 
   - name: list_decision_conflicts
     role: lineage
@@ -532,6 +641,10 @@ tools:
     determinism: deterministic
     required_inputs: []
     output_kind: conflict_list
+    response_shape:
+      kind: keyed_list
+      rows_keys: [conflicts]
+      count_key: count
     suggested_followups: []
     failure: "An empty list is valid."
     honest_contract: "Read-only and non-arbitrating — it never decides which side is true."

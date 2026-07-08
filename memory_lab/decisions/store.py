@@ -144,10 +144,17 @@ class DecisionStore:
                     (workspace_id, workspace_id, str(hub_id) if hub_id else None, str(hub_id) if hub_id else None, tag_list or None, tag_list or None, limit),
                 )
                 rows = cur.fetchall()
+        flat = [self._row_to_summary(row) for row in rows]  # already newest-first
         grouped: Dict[str, List[DecisionSummary]] = {s: [] for s in VALID_STATUSES}
-        for row in rows:
-            grouped[row["decision_status"]].append(self._row_to_summary(row))
-        return DecisionTimelineResponse(active=grouped["active"], superseded=grouped["superseded"], reversed=grouped["reversed"], draft=grouped["draft"], total=len(rows))
+        for summary in flat:
+            grouped[summary.decision_status].append(summary)
+        # CF-001 additive completion: the same rows flat (decisions) with a
+        # conventional count, ALONGSIDE the status buckets — never instead.
+        return DecisionTimelineResponse(
+            active=grouped["active"], superseded=grouped["superseded"],
+            reversed=grouped["reversed"], draft=grouped["draft"],
+            total=len(flat), decisions=flat, count=len(flat),
+        )
 
     def list_decisions(self, status: Optional[str], hub_id: Optional[UUID], limit: int, workspace_id: Optional[str] = None) -> DecisionListResponse:
         conditions: List[str] = []

@@ -347,6 +347,83 @@ def test_tool_error_becomes_degradation_never_raises():
 
 
 # ---------------------------------------------------------------------------
+# CF-001/004 — manifest-driven shape extraction (response_shape v0.2)
+# ---------------------------------------------------------------------------
+
+def test_rows_for_locates_every_inventory_shape():
+    from reference_framework.executor import _rows_for
+
+    row = {"content_id": "c-1"}
+    # keyed_list family
+    assert _rows_for("list_current_state_anchors", {"anchors": [row], "count": 1}) == [row]
+    assert _rows_for("memory_lab_edge_list", {"edges": [row], "count": 1}) == [row]
+    assert _rows_for("list_decisions", {"decisions": [row], "count": 1}) == [row]
+    assert _rows_for("list_hubs", {"hubs": [row], "count": 1}) == [row]
+    assert _rows_for("memory_lab_retrieval_search", {"results": [row], "count": 1, "result_count": 1}) == [row]
+    # answer_envelope: evidence rows
+    assert _rows_for("query_memory", {"answer": "x", "evidence": [row]}) == [row]
+    # status_buckets: flat view wins; bucket fallback still works (CF-001 as data)
+    both = {"decisions": [row], "active": [{"content_id": "dup"}], "superseded": [], "total": 1, "count": 1}
+    assert _rows_for("get_decision_timeline", both) == [row]
+    buckets_only = {"active": [row], "superseded": [], "reversed": [], "draft": [], "total": 1}
+    assert _rows_for("get_decision_timeline", buckets_only) == [row]
+    # graph_snapshot: both row arrays
+    snap = {"nodes": [row], "edges": [{"source_hub_id": "h1"}]}
+    assert len(_rows_for("get_graph_snapshot", snap)) == 2
+    # bare list tolerance for unknown tools (test registries)
+    assert _rows_for("not_a_tool", [row]) == [row]
+
+
+def test_classify_outcome_is_shape_driven():
+    from reference_framework.executor import _classify_outcome
+
+    assert _classify_outcome("list_decisions", {"ok": False, "error": {}}) == "error"
+    assert _classify_outcome("list_decisions", {"decisions": [], "count": 0}) == "empty"
+    assert _classify_outcome("get_decision_timeline",
+                             {"decisions": [], "active": [], "superseded": [],
+                              "reversed": [], "draft": [], "total": 0, "count": 0}) == "empty"
+    assert _classify_outcome("memory_lab_content_get", {"content_id": "c-1"}) == "ok"
+    # lineage_tree is NOT empty-detectable: an empty chain is a valid answer
+    assert _classify_outcome("get_decision_lineage",
+                             {"decision_id": "d-1", "ancestors": [], "descendants": [],
+                              "depth": 0}) == "ok"
+
+
+def test_response_shape_coherence_rejected_by_loader():
+    from reference_framework.manifest import ManifestError, _parse_response_shape
+
+    with pytest.raises(ManifestError):
+        _parse_response_shape("t", None)                       # required in v0.2
+    with pytest.raises(ManifestError):
+        _parse_response_shape("t", {"kind": "surprise_list"})  # closed vocabulary
+    with pytest.raises(ManifestError):
+        _parse_response_shape("t", {"kind": "keyed_list", "rows_keys": ["a", "b"], "count_key": "count"})
+    with pytest.raises(ManifestError):
+        _parse_response_shape("t", {"kind": "record", "rows_keys": ["rows"]})
+    shape = _parse_response_shape("t", {"kind": "keyed_list", "rows_keys": ["items"], "count_key": "count"})
+    assert shape.rows_keys == ("items",)
+
+
+def test_latest_decisions_mints_flat_timeline_without_duplicates():
+    # CF-001 closed: the kernel's flat `decisions` view is minted directly;
+    # bucket rows are the SAME rows and must not double-mint.
+    rows = [
+        {"decision_id": "d-2", "title": "Second", "decision_status": "active"},
+        {"decision_id": "d-1", "title": "First", "decision_status": "superseded"},
+    ]
+    registry = Registry({
+        "get_decision_timeline": {"decisions": rows, "count": 2, "total": 2,
+                                  "active": [rows[0]], "superseded": [rows[1]],
+                                  "reversed": [], "draft": []},
+        "list_decision_conflicts": {"conflicts": []},
+    })
+    state = execute(route("what was decided recently?"), registry)
+    ep = build_package(state)["evidence_package"]
+    minted = [i["source"]["source_id"] for i in ep["items"] if i["kind"] == "decision_record"]
+    assert minted == ["d-2", "d-1"]
+
+
+# ---------------------------------------------------------------------------
 # Evidence Package — invariants
 # ---------------------------------------------------------------------------
 

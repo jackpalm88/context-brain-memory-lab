@@ -18,6 +18,17 @@ boundary decisions are mechanical, not re-negotiated per pull request.
 4. **Determinism over tunability.** Admission thresholds for graph-derived
    candidates are module constants (see `memory_lab/graph/hybrid_search.py`),
    not runtime parameters.
+5. **Read-before-semantics (post-1.0 CF evolution, ratified 2026-07-08).**
+   State, relationships, and contracts that already exist in the kernel become
+   publicly readable / machine-readable before new semantics are introduced
+   (CF-003 anchors, CF-002 decision↔content, CF-001/004 response shapes).
+6. **The envelope convention (ratified with CF-001/004 Stage 1).** Every NEW or
+   materially changed list-shaped surface returns
+   `{"<plural_noun>": [rows], "count": <int>, ...context}` — never a bare JSON
+   list, never an unnamed count. Existing v1.0 surfaces are NOT retrofitted
+   under the freeze; their true shapes are described machine-readably in the
+   capability manifest's per-tool `response_shape` (v0.2). REST-level
+   normalization of legacy shapes belongs to a future API rev with its own GO.
 
 ## The graph authority model
 

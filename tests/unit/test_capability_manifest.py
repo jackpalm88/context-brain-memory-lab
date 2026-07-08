@@ -29,7 +29,14 @@ OUTPUT_KINDS = {"status", "id_envelope", "record", "record_list", "ranked_eviden
                 "timeline", "conflict_list", "ack"}
 ROUTING = {"normal", "discouraged", "alias"}
 REQUIRED_FIELDS = ("name", "role", "answers", "use_when", "determinism",
-                   "required_inputs", "output_kind", "suggested_followups", "failure")
+                   "required_inputs", "output_kind", "suggested_followups", "failure",
+                   "response_shape")
+
+# CF-001/004 v0.2: the mechanical layer — where rows live in a successful response.
+SHAPE_KINDS = {"keyed_list", "status_buckets", "record", "answer_envelope",
+               "graph_snapshot", "id_envelope", "status", "ack", "lineage_tree"}
+SHAPE_FIELDS = {"kind", "rows_keys", "count_key", "bucket_keys", "context_keys"}
+ROWLESS_KINDS = {"record", "id_envelope", "status", "ack"}
 
 # workspace_id is ambient (resolved from auth/env) — never listed per-tool.
 AMBIENT_PARAMS = {"workspace_id"}
@@ -45,7 +52,8 @@ def _entries():
 
 def test_manifest_parses_and_versions():
     manifest = _manifest()
-    assert manifest["manifest_version"] == "0.1"
+    # 0.2 = CF-001/004 Stage 1: per-tool response_shape (schema change → bump)
+    assert manifest["manifest_version"] == "0.2"
     assert manifest["opencb_version"] == __version__, (
         "opencb_version must track memory_lab.version.__version__"
     )
@@ -72,6 +80,42 @@ def test_every_entry_has_required_fields_and_vocabularies():
         assert all(isinstance(a, str) and a.strip() for a in entry["answers"]), f"{name}: blank answer"
         assert isinstance(entry["use_when"], str) and len(entry["use_when"]) >= 20, f"{name}: thin use_when"
         assert isinstance(entry["failure"], str) and len(entry["failure"]) >= 10, f"{name}: thin failure"
+
+
+def test_response_shapes_are_coherent():
+    """CF-001/004: every tool declares WHERE rows live, with closed vocabulary
+    and coherence rules — keyed_list must name rows+count; status_buckets must
+    name buckets+flat rows+count; row-less kinds must not claim rows."""
+    for name, entry in _entries().items():
+        shape = entry["response_shape"]
+        assert isinstance(shape, dict), f"{name}: response_shape must be a mapping"
+        unknown = set(shape) - SHAPE_FIELDS
+        assert not unknown, f"{name}: unknown response_shape fields {sorted(unknown)}"
+        kind = shape.get("kind")
+        assert kind in SHAPE_KINDS, f"{name}: bad response_shape.kind {kind!r}"
+
+        rows_keys = shape.get("rows_keys")
+        if rows_keys is not None:
+            assert isinstance(rows_keys, list) and rows_keys and all(
+                isinstance(k, str) and k for k in rows_keys
+            ), f"{name}: rows_keys must be a non-empty string list"
+
+        if kind == "keyed_list":
+            assert rows_keys, f"{name}: keyed_list requires rows_keys"
+            assert len(rows_keys) == 1, f"{name}: keyed_list holds ONE row array"
+            assert shape.get("count_key"), f"{name}: keyed_list requires count_key"
+        elif kind == "status_buckets":
+            assert shape.get("bucket_keys"), f"{name}: status_buckets requires bucket_keys"
+            assert rows_keys, f"{name}: status_buckets requires the flat rows_keys (CF-001)"
+            assert shape.get("count_key"), f"{name}: status_buckets requires count_key"
+        elif kind == "graph_snapshot":
+            assert rows_keys and len(rows_keys) >= 2, f"{name}: graph_snapshot names its row arrays"
+        elif kind in ROWLESS_KINDS:
+            assert not rows_keys, f"{name}: {kind} must not declare rows_keys"
+            assert not shape.get("count_key"), f"{name}: {kind} must not declare count_key"
+            assert not shape.get("bucket_keys"), f"{name}: {kind} must not declare bucket_keys"
+        if kind != "status_buckets":
+            assert not shape.get("bucket_keys"), f"{name}: bucket_keys is status_buckets-only"
 
 
 def test_followups_reference_approved_tools():

@@ -132,3 +132,7 @@ class DecisionTimelineResponse(BaseModel):
     reversed: List[DecisionSummary] = Field(default_factory=list)
     draft: List[DecisionSummary] = Field(default_factory=list)
     total: int
+    # CF-001 additive completion: same rows flat (newest first) + conventional
+    # count (== total). Buckets remain the semantic view; nothing removed.
+    decisions: List[DecisionSummary] = Field(default_factory=list)
+    count: int = 0

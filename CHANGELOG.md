@@ -4,6 +4,23 @@
 
 ### Added
 
+- **CF-001 + CF-004 Stage 1 — envelope truth.** The capability manifest is now
+  v0.2: every tool carries a machine-readable `response_shape` (kind,
+  rows_keys, count_key, bucket_keys, context_keys) describing where rows live
+  in a successful response — including the warts (timeline's bucketed shape
+  with legacy `total`, retrieval's `result_count` duplicate), drift-tested for
+  coherence. `/decisions/timeline` additively gains a flat `decisions` view
+  (newest first) and conventional `count` ALONGSIDE the status buckets —
+  nothing renamed or removed. The envelope convention for NEW surfaces
+  (`{"<plural>": rows, "count": n, ...context}`) is ratified as doctrine 6 in
+  docs/ARCHITECTURE_BOUNDARIES.md, together with doctrine 5
+  (read-before-semantics, the CF-evolution principle). The Reference Framework
+  deletes its four hand-rolled shape-tolerance sites (including the CF-001
+  bucket workaround) in favor of manifest-driven extraction. Bare-list REST
+  surfaces (`/v1/hubs`, `/v1/escalations`) are documented, not reshaped —
+  REST normalization belongs to a future API rev with its own GO. Design:
+  engineering CF-001-004_DESIGN_PROPOSAL.
+
 - **CF-002 Stage 1 — the content→decision join is now readable.** New
   `GET /decisions/by-content/{content_id}` returns the decision nodes that
   reference a content item, each with `link_role: canonical|source` — the

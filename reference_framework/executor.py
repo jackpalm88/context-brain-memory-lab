@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional
 
 from reference_framework.hub_match import match_hubs
@@ -49,10 +50,13 @@ class ExecutionState:
 
 
 # ---------------------------------------------------------------------------
-# Result-shape helpers (tolerant of list vs envelope responses)
+# Result-shape helpers — manifest-driven since CF-001/004 (response_shape v0.2).
+# The hand-rolled per-surface key tolerance this file used to carry (including
+# the CF-001 bucket workaround) now lives as DATA in the capability manifest.
 # ---------------------------------------------------------------------------
 
 def _rows(result: Any, *keys: str) -> List[Dict[str, Any]]:
+    """Low-level extraction: rows at the named keys (or a bare list result)."""
     if isinstance(result, list):
         return [r for r in result if isinstance(r, dict)]
     if isinstance(result, dict):
@@ -63,22 +67,34 @@ def _rows(result: Any, *keys: str) -> List[Dict[str, Any]]:
     return []
 
 
-def _timeline_rows(result: Any) -> List[Dict[str, Any]]:
-    """get_decision_timeline returns STATUS-BUCKETED lists (active/superseded/
-    reversed/draft + total) — a consumer finding from the live smoke; the
-    manifest's output_kind does not describe this granularity."""
-    rows = _rows(result, "decisions", "timeline", "items")
-    if rows:
+@lru_cache(maxsize=1)
+def _shapes() -> Dict[str, Any]:
+    from reference_framework.manifest import load_manifest
+
+    return {name: spec.response_shape for name, spec in load_manifest().tools.items()}
+
+
+def _rows_for(tool: str, result: Any) -> List[Dict[str, Any]]:
+    """The rows of one tool's result, located by its declared response_shape."""
+    shape = _shapes().get(tool)
+    if shape is None:
+        return _rows(result)
+    if shape.kind in ("graph_snapshot", "lineage_tree") and isinstance(result, dict):
+        # multiple SIBLING row arrays (nodes+edges, ancestors+descendants) — union
+        rows: List[Dict[str, Any]] = []
+        for key in shape.rows_keys:
+            rows.extend(r for r in (result.get(key) or []) if isinstance(r, dict))
         return rows
-    if isinstance(result, dict):
-        for bucket in ("active", "superseded", "reversed", "draft"):
+    rows = _rows(result, *shape.rows_keys)
+    if not rows and shape.kind == "status_buckets" and isinstance(result, dict):
+        for bucket in shape.bucket_keys:
             rows.extend(r for r in (result.get(bucket) or []) if isinstance(r, dict))
     return rows
 
 
 def _search_rows(state: ExecutionState) -> List[Dict[str, Any]]:
     for result in state.results_for("memory_lab_retrieval_search"):
-        rows = _rows(result, "results", "evidence", "items")
+        rows = _rows_for("memory_lab_retrieval_search", result)
         if rows:
             return rows
     return []
@@ -86,7 +102,7 @@ def _search_rows(state: ExecutionState) -> List[Dict[str, Any]]:
 
 def _hub_rows(state: ExecutionState) -> List[Dict[str, Any]]:
     for result in state.results_for("list_hubs"):
-        rows = _rows(result, "hubs", "items", "results")
+        rows = _rows_for("list_hubs", result)
         if rows:
             return rows
     return []
@@ -98,7 +114,7 @@ def _matched_hubs(state: ExecutionState) -> List[Dict[str, Any]]:
 
 def _decision_rows(state: ExecutionState) -> List[Dict[str, Any]]:
     for result in state.results_for("list_decisions"):
-        rows = _rows(result, "decisions", "items", "results")
+        rows = _rows_for("list_decisions", result)
         if rows:
             return rows
     return []
@@ -130,7 +146,7 @@ def _top_content(state: ExecutionState) -> Optional[Dict[str, Any]]:
 
 def _p_has_conflicted(state: ExecutionState) -> bool:
     for result in state.results_for("get_decision_timeline"):
-        for row in _timeline_rows(result):
+        for row in _rows_for("get_decision_timeline", result):
             if row.get("decision_status") == "conflicted" or row.get("conflict_escalation_id"):
                 return True
     return False
@@ -160,9 +176,7 @@ def _p_top_superseded(state: ExecutionState) -> bool:
 
 def _p_has_ask_evidence(state: ExecutionState) -> bool:
     for result in state.results_for("query_memory"):
-        if isinstance(result, dict) and any(
-            isinstance(row, dict) and row.get("content_id") for row in result.get("evidence") or []
-        ):
+        if any(row.get("content_id") for row in _rows_for("query_memory", result)):
             return True
     return bool(_search_rows(state))
 
@@ -170,7 +184,7 @@ def _p_has_ask_evidence(state: ExecutionState) -> bool:
 def _decision_link_rows(state: ExecutionState) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for result in state.results_for("list_decisions_for_content"):
-        rows.extend(_rows(result, "decisions"))
+        rows.extend(_rows_for("list_decisions_for_content", result))
     return rows
 
 
@@ -249,7 +263,7 @@ def _x_superseded_scope(state: ExecutionState) -> Optional[Dict[str, Any]]:
 def _x_anchor_content_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     fetched = {str((r or {}).get("content_id")) for r in state.results_for("memory_lab_content_get")}
     for result in state.results_for("list_current_state_anchors"):
-        for row in _rows(result, "anchors"):
+        for row in _rows_for("list_current_state_anchors", result):
             cid = row.get("content_id")
             if cid and str(cid) not in fetched:
                 return {"content_id": str(cid)}
@@ -265,10 +279,9 @@ def _x_matched_decision_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
 
 def _x_top_evidence_content_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     for result in state.results_for("query_memory"):
-        if isinstance(result, dict):
-            for row in result.get("evidence") or []:
-                if isinstance(row, dict) and row.get("content_id"):
-                    return {"content_id": str(row["content_id"])}
+        for row in _rows_for("query_memory", result):
+            if row.get("content_id"):
+                return {"content_id": str(row["content_id"])}
     rows = _search_rows(state)
     if rows:
         return {"content_id": str(rows[0].get("content_id") or rows[0].get("id"))}
@@ -340,18 +353,19 @@ def _digest(args: Dict[str, Any]) -> str:
     return " ".join(f"{k}={str(v)[:60]}" for k, v in sorted(args.items())) or "(no args)"
 
 
-def _classify_outcome(result: Any) -> str:
+_EMPTY_DETECTABLE_KINDS = {"keyed_list", "status_buckets", "answer_envelope", "graph_snapshot"}
+
+
+def _classify_outcome(tool: str, result: Any) -> str:
     if isinstance(result, dict) and result.get("ok") is False:
         return "error"
-    rows = _rows(result, "results", "items", "hubs", "decisions", "evidence", "edges", "conflicts", "timeline", "anchors")
-    if isinstance(result, (list,)) and not result:
+    if isinstance(result, (list, dict)) and not result:
         return "empty"
-    if isinstance(result, dict) and not result:
-        return "empty"
-    if rows == [] and isinstance(result, dict) and any(
-        k in result for k in ("results", "items", "hubs", "decisions", "evidence", "edges", "conflicts", "anchors")
-    ):
-        return "empty"
+    shape = _shapes().get(tool)
+    if shape is not None and shape.kind in _EMPTY_DETECTABLE_KINDS and isinstance(result, dict):
+        listish_keys = tuple(shape.rows_keys) + tuple(shape.bucket_keys)
+        if not _rows_for(tool, result) and any(k in result for k in listish_keys):
+            return "empty"
     return "ok"
 
 
@@ -401,7 +415,7 @@ def execute(plan: RoutePlan, tool_registry: Dict[str, Callable[..., Any]]) -> Ex
             result = tool_registry[planned.tool](**args)
         except Exception as exc:                      # tool layer normally never raises
             result = {"ok": False, "error": {"type": "framework_call_error", "message": str(exc)}}
-        outcome = _classify_outcome(result)
+        outcome = _classify_outcome(planned.tool, result)
         state.trace.append(TraceStep(step_id, planned.tool, _digest(args), outcome,
                                      planned.reason, result,
                                      planned.condition, True if planned.condition else None))

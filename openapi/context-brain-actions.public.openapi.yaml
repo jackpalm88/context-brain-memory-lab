@@ -1450,11 +1450,42 @@ paths:
             maximum: 200
       responses:
         "200":
-          description: "Timeline grouped by status"
+          description: |
+            Timeline in two views of the SAME rows (CF-001): grouped by status
+            (active/superseded/reversed/draft, with legacy `total`) and flat
+            under `decisions` (newest first, with conventional `count`).
+            Consume one view, not both.
           content:
             application/json:
               schema:
                 type: object
+                properties:
+                  active:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  superseded:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  reversed:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  draft:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  total:
+                    type: integer
+                    description: "Legacy count name (== count)."
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                    description: "CF-001 additive flat view, newest first."
+                  count:
+                    type: integer
 
   /decisions/{decision_id}:
     get:

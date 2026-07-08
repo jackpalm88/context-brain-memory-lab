@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from reference_framework.executor import ExecutionState, TraceStep, _rows, _timeline_rows
+from reference_framework.executor import ExecutionState, TraceStep, _rows, _rows_for
 
 PACKAGE_VERSION = "0.1"
 MAX_ITEMS_DEFAULT = 50
@@ -102,7 +102,7 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
     result, tool, ref = step.result, step.tool, step.step_id
 
     if tool == "memory_lab_retrieval_search":
-        for row in _rows(result, "results", "evidence", "items"):
+        for row in _rows_for(tool, result):
             statement = str(row.get("text") or row.get("snippet") or "").strip()
             if statement:
                 items.append(_item(nxt(), "content_evidence", statement, tool,
@@ -116,14 +116,14 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
     elif tool == "list_current_state_anchors":
         # CF-003: each active anchor is the forward pointer of a supersession
         # chain — transcribed, like everything else, never composed.
-        for row in _rows(result, "anchors"):
+        for row in _rows_for(tool, result):
             statement = str(row.get("quick_summary") or row.get("content_id") or "").strip()
             if statement:
                 items.append(_item(nxt(), "content_record", statement, tool,
                                    str(row.get("content_id")), ref, row))
 
     elif tool in ("get_decision_timeline", "list_decisions", "list_decisions_for_content") and step.outcome == "ok":
-        rows = _timeline_rows(result) if tool == "get_decision_timeline" else _rows(result, "decisions", "items")
+        rows = _rows_for(tool, result)
         for row in rows:
             statement = str(row.get("title") or "")
             items.append(_item(nxt(), "decision_record", statement, tool,
@@ -136,7 +136,7 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
 
     elif tool == "query_memory" and isinstance(result, dict) and result.get("ok") is not False:
         evidence_refs: List[str] = []
-        for row in result.get("evidence") or []:
+        for row in _rows_for(tool, result):
             statement = str(row.get("snippet") or "").strip()
             if statement:
                 evidence_item = _item(nxt(), "content_evidence", statement,
@@ -168,7 +168,7 @@ def build_package(state: ExecutionState, *, max_items: int = MAX_ITEMS_DEFAULT) 
     conflicts: List[Dict[str, Any]] = []
     for step in state.trace:
         if step.tool == "list_decision_conflicts" and step.outcome == "ok":
-            for row in _rows(step.result, "conflicts", "items", "results", "candidates"):
+            for row in _rows_for("list_decision_conflicts", step.result):
                 conflicts.append({**row, "resolution": "none"})
     for item in items:
         if item["currency"]["status"] == "pending_review":
@@ -246,7 +246,7 @@ def _graph_context(state: ExecutionState) -> Optional[Dict[str, Any]]:
             continue
         if step.tool == "list_hubs" and state.plan.intent == "relationship_map":
             hubs = [{"hub_id": h.get("hub_id"), "title": h.get("title"), "aliases": h.get("aliases")}
-                    for h in _rows(step.result, "hubs", "items", "results")]
+                    for h in _rows_for("list_hubs", step.result)]
         if step.tool in ("memory_lab_edge_list", "get_graph_snapshot"):
             edges = [{k: e.get(k) for k in ("source_hub_id", "target_hub_id", "type", "status", "origin", "confidence")}
                      for e in _rows(step.result, "edges", "items", "results")]
