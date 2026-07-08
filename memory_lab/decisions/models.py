@@ -77,6 +77,27 @@ class DecisionListResponse(BaseModel):
     count: int
 
 
+class DecisionContentLink(DecisionSummary):
+    """CF-002: one decision as seen from a content item.
+
+    link_role names how the decision references the content: 'canonical' (the
+    decision's own narrative representation, cb_decision_nodes.content_id) or
+    'source' (caller-declared supporting evidence, source_content_ids). Rows are
+    unique per decision_id; when both roles hold, canonical wins and
+    also_source=True records the second role.
+    """
+
+    link_role: str
+    also_source: bool = False
+
+
+class DecisionsByContentResponse(BaseModel):
+    decisions: List[DecisionContentLink]
+    count: int
+    content_id: str
+    workspace_id: Optional[str] = None
+
+
 class LineageNode(BaseModel):
     decision_id: str
     title: str

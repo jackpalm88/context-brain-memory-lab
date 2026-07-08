@@ -20,6 +20,7 @@ MAX_ITEMS_DEFAULT = 50
 _AUTHORITY = {
     "get_decision_timeline": ("curated", True),
     "list_decisions": ("curated", True),
+    "list_decisions_for_content": ("curated", True),
     "explain_decision": ("curated", True),
     "get_decision_lineage": ("curated", True),
     "query_memory": ("derived", False),
@@ -121,7 +122,7 @@ def _mint_items(step: TraceStep, counter: List[int]) -> List[Dict[str, Any]]:
                 items.append(_item(nxt(), "content_record", statement, tool,
                                    str(row.get("content_id")), ref, row))
 
-    elif tool in ("get_decision_timeline", "list_decisions") and step.outcome == "ok":
+    elif tool in ("get_decision_timeline", "list_decisions", "list_decisions_for_content") and step.outcome == "ok":
         rows = _timeline_rows(result) if tool == "get_decision_timeline" else _rows(result, "decisions", "items")
         for row in rows:
             statement = str(row.get("title") or "")

@@ -574,6 +574,24 @@ def get_decision_lineage(decision_id: str, workspace_id: Optional[str] = None) -
     return _call_api(_client().decision_lineage, decision_id, workspace_id=workspace_id)
 
 
+def list_decisions_for_content(content_id: str, limit: int = 50, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Which decisions reference this content item? (CF-002)
+
+    The content→decision join: given a content_id (e.g. a retrieval or ask
+    evidence hit), returns the decision nodes that link it, each with
+    link_role='canonical' (the decision's own narrative representation) or
+    'source' (caller-declared supporting evidence). count=0 means no decision
+    references it — an unlinked item, not an error. Follow up with
+    explain_decision / get_decision_lineage for authority and lineage.
+    """
+    return _call_api(
+        _client().decisions_by_content,
+        content_id=content_id,
+        limit=limit,
+        workspace_id=workspace_id,
+    )
+
+
 def list_decision_conflicts(workspace_id: Optional[str] = None) -> Dict[str, Any]:
     """List computed contradiction candidates between decisions. Read-only and
     non-arbitrating: it surfaces potential conflicts for a human to resolve,
@@ -625,6 +643,7 @@ APPROVED_TOOLS = {
     "list_decisions": list_decisions,
     "update_decision_status": update_decision_status,
     "get_decision_lineage": get_decision_lineage,
+    "list_decisions_for_content": list_decisions_for_content,
     "list_decision_conflicts": list_decision_conflicts,
     "get_decision_timeline": get_decision_timeline,
     "classify_content_node": classify_content_node,

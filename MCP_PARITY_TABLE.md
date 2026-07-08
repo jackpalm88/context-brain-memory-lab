@@ -9,6 +9,12 @@ It is a kernel evolution driven by the Reference Framework consumer (CF-003:
 cb_current_state_anchors was written but never publicly readable), not a parity item.
 Production remains at 32; parity of the shared 32 is unchanged.
 
+UPDATE (2026-07-08, CF-002 Stage 1): public surface **34** — `list_decisions_for_content`
+(`GET /decisions/by-content/{content_id}`) is the second public-only tool, minted by the
+same CF loop (CF-002: the decision↔content link existed in the schema — content_id column,
+source_content_ids array — but was never publicly readable in the content→decision
+direction). Production remains at 32.
+
 ## Counts (verified)
 
 | Surface | Count | Evidence |

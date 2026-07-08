@@ -93,7 +93,7 @@ def test_s5_http_server_32_tools():
         # FastMCP stores tools in ._tool_manager._tools dict
         tool_mgr = hs._server._tool_manager
         tools = tool_mgr._tools
-        assert len(tools) == 33, f"Expected 33 tools on HTTP server, got {len(tools)}: {sorted(tools)}"
+        assert len(tools) == 34, f"Expected 34 tools on HTTP server, got {len(tools)}: {sorted(tools)}"
 
 
 # ─── S6: stdio server unchanged ──────────────────────────────────────────────
@@ -105,7 +105,7 @@ def test_s6_stdio_server_unchanged():
 
     tool_mgr = stdio_server.server._tool_manager
     tools = tool_mgr._tools
-    assert len(tools) == 33, f"Expected 33 tools on stdio server, got {len(tools)}"
+    assert len(tools) == 34, f"Expected 34 tools on stdio server, got {len(tools)}"
     # server.py must not import http_server — transport isolation
     import inspect
     src = inspect.getsource(stdio_server)

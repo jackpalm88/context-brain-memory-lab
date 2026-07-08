@@ -15,6 +15,7 @@ from memory_lab.decisions import (
     DecisionFull,
     DecisionLineageResponse,
     DecisionListResponse,
+    DecisionsByContentResponse,
     DecisionStatusUpdate,
     DecisionTimelineResponse,
     DecisionStore,
@@ -63,6 +64,24 @@ def create_decision_memory(payload: DecisionCreate, auth: AuthContext = Depends(
         title=row["title"],
         decision_status=row["decision_status"],
         created_at=row["created_at"],
+    )
+
+
+@router.get("/by-content/{content_id}", response_model=DecisionsByContentResponse)
+def list_decisions_for_content(
+    content_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    auth: AuthContext = Depends(require_permission("decisions.read")),
+):
+    """CF-002 Stage 1: which decisions reference this content item?
+
+    The derived reverse read over the two existing link columns — canonical
+    content_id (Stage-2-activated) and caller-declared source_content_ids.
+    Unknown or foreign-workspace content ids return 200 with count=0, never
+    404: the empty list neither confirms nor denies the content's existence.
+    """
+    return _store().list_decisions_for_content(
+        content_id=content_id, limit=limit, workspace_id=auth.workspace_id
     )
 
 

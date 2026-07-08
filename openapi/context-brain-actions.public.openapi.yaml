@@ -20,7 +20,7 @@ info:
     **Base URL:** configure per deployment (see `docs/GPT_ACTIONS.md`).
 
     **MCP alternative:** if your client supports MCP streamable-http transport,
-    connect to `POST /mcp` with the same Bearer token — all 33 tools are
+    connect to `POST /mcp` with the same Bearer token — all 34 tools are
     available with identical semantics to this REST surface.
   version: "1.0.0"
   contact:
@@ -676,6 +676,36 @@ components:
         created_at:
           type: string
           format: date-time
+
+    DecisionContentLink:
+      allOf:
+        - $ref: "#/components/schemas/DecisionSummary"
+        - type: object
+          properties:
+            link_role:
+              type: string
+              enum: [canonical, source]
+              description: "How the decision references the content: its canonical narrative representation, or declared supporting evidence."
+            also_source:
+              type: boolean
+              description: "True when a canonical-role decision also lists the content among its sources."
+
+    DecisionsByContentResponse:
+      type: object
+      properties:
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecisionContentLink"
+        count:
+          type: integer
+        content_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+          nullable: true
 
     DecisionFull:
       allOf:
@@ -1452,6 +1482,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /decisions/by-content/{content_id}:
+    get:
+      operationId: list_decisions_for_content
+      summary: "Which decisions reference this content item?"
+      description: |
+        The content→decision join (CF-002): given a content_id (e.g. a
+        retrieval or ask evidence hit), returns the decision nodes that link
+        it. link_role says how — canonical (the decision's own narrative
+        representation) or source (caller-declared supporting evidence).
+        count=0 means no decision references it: an unlinked item, not an
+        error; unknown ids also return count=0 so the read never leaks
+        whether content exists.
+      tags: [decisions]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: "Decisions linking the content item, newest first"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionsByContentResponse"
 
   /decisions/{decision_id}/lineage:
     get:

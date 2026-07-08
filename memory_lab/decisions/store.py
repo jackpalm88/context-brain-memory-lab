@@ -10,10 +10,12 @@ from psycopg2.extras import Json, RealDictCursor
 from .models import (
     ConflictPair,
     DecisionConflictsResponse,
+    DecisionContentLink,
     DecisionCreate,
     DecisionFull,
     DecisionLineageResponse,
     DecisionListResponse,
+    DecisionsByContentResponse,
     DecisionSummary,
     DecisionTimelineResponse,
     LineageNode,
@@ -175,6 +177,51 @@ class DecisionStore:
                 )
                 rows = cur.fetchall()
         return DecisionListResponse(decisions=[self._row_to_summary(r) for r in rows], count=len(rows))
+
+    def list_decisions_for_content(
+        self, content_id: UUID, limit: int = 50, workspace_id: Optional[str] = None
+    ) -> DecisionsByContentResponse:
+        """CF-002 Stage 1: the derived content→decision reverse read.
+
+        Matches the two existing link columns (canonical content_id OR
+        membership in source_content_ids) — no denormalized backlink exists or
+        is wanted. Unknown/foreign content ids yield count=0, never 404: "which
+        decisions reference X" has the honest answer "none" without leaking
+        whether X exists.
+        """
+        conditions = ["(content_id = %s::uuid OR %s::uuid = ANY(source_content_ids))"]
+        params: List[Any] = [str(content_id), str(content_id)]
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            params.append(workspace_id)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT decision_id, title, decision_status, reversible,
+                           confidence_level, decision_tags, created_by_subject, created_at,
+                           (content_id = %s::uuid) AS is_canonical,
+                           (%s::uuid = ANY(source_content_ids)) AS is_source
+                      FROM cb_decision_nodes
+                     WHERE {' AND '.join(conditions)}
+                     ORDER BY created_at DESC
+                     LIMIT %s
+                    """,
+                    tuple([str(content_id), str(content_id)] + params + [limit]),
+                )
+                rows = cur.fetchall()
+        links = [
+            DecisionContentLink(
+                **self._row_to_summary(row).model_dump(),
+                link_role="canonical" if row.get("is_canonical") else "source",
+                also_source=bool(row.get("is_canonical") and row.get("is_source")),
+            )
+            for row in rows
+        ]
+        return DecisionsByContentResponse(
+            decisions=links, count=len(links),
+            content_id=str(content_id), workspace_id=workspace_id,
+        )
 
     def create_decision(self, payload: DecisionCreate, workspace_id: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         with self._conn() as conn:

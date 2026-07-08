@@ -30,8 +30,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.provider_optional, pytest.mark.publi
 
 def test_manifest_loads_all_tools_and_filters_routable():
     manifest = load_manifest()
-    # 32 production-parity tools + list_current_state_anchors (CF-003, public-only)
-    assert len(manifest.tools) == 33
+    # 32 production-parity tools + CF-003 anchors + CF-002 decisions-by-content (public-only)
+    assert len(manifest.tools) == 34
     routable = manifest.routable()
     assert "update_node_metadata" not in routable          # discouraged
     assert "list_graph_snapshot" not in routable           # alias
@@ -201,6 +201,97 @@ def test_verify_current_state_finds_successor_retrieval_missed():
     current_ids = {i["source"]["source_id"] for i in package["items"]
                    if i["currency"]["status"] == "current"}
     assert "new-1" in current_ids
+
+
+_BY_CONTENT_HIT = {"decisions": [
+    {"decision_id": "d-9", "title": "Adopt RabbitMQ", "decision_status": "active",
+     "link_role": "source", "also_source": False},
+], "count": 1, "content_id": "c-1"}
+
+_BY_CONTENT_MISS = {"decisions": [], "count": 0, "content_id": "c-1"}
+
+
+def test_explain_decision_referential_entry_beats_lexical():
+    # CF-002: the content→decision join resolves the decision; the lexical
+    # list_decisions fallback must NOT run.
+    registry = Registry({
+        "memory_lab_retrieval_search": {"results": [{"content_id": "c-1", "text": "queue decision…"}]},
+        "list_decisions_for_content": _BY_CONTENT_HIT,
+        "explain_decision": {"decision_id": "d-9", "title": "Adopt RabbitMQ",
+                             "decision_reason": "ops simplicity"},
+        "get_decision_lineage": {"decision_id": "d-9", "title": "Adopt RabbitMQ",
+                                 "ancestors": [], "descendants": [], "depth": 0},
+        "list_decisions": {"decisions": [], "count": 0},
+    })
+    state = execute(route("why did we choose the queue?"), registry)
+    called = [name for name, _ in registry.calls]
+    assert called == ["memory_lab_retrieval_search", "list_decisions_for_content",
+                      "explain_decision", "get_decision_lineage"]
+    assert registry.calls[2][1].get("decision_id") == "d-9"
+    lexical = [t for t in state.trace if t.tool == "list_decisions"]
+    assert lexical and lexical[0].outcome == "skipped"
+
+
+def test_explain_decision_lexical_fallback_when_unlinked():
+    registry = Registry({
+        "memory_lab_retrieval_search": {"results": [{"content_id": "c-1", "text": "queue decision…"}]},
+        "list_decisions_for_content": _BY_CONTENT_MISS,
+        "list_decisions": {"decisions": [
+            {"decision_id": "d-7", "title": "Switch queue to RabbitMQ", "decision_status": "active"},
+        ], "count": 1},
+        "explain_decision": {"decision_id": "d-7", "title": "Switch queue to RabbitMQ",
+                             "decision_reason": "…"},
+        "get_decision_lineage": {"decision_id": "d-7", "title": "Switch queue to RabbitMQ",
+                                 "ancestors": [], "descendants": [], "depth": 0},
+    })
+    state = execute(route("why did we switch the queue?"), registry)
+    called = [name for name, _ in registry.calls]
+    assert called == ["memory_lab_retrieval_search", "list_decisions_for_content",
+                      "list_decisions", "explain_decision", "get_decision_lineage"]
+    assert registry.calls[3][1].get("decision_id") == "d-7"
+
+
+def test_explain_topic_restored_3_3_followup():
+    # CF-002 restores the §3.3 follow-up v0 dropped: evidence → decision → lineage.
+    registry = Registry({
+        "query_memory": {"answer": "RabbitMQ [ev_1]", "status": "ok", "confidence": 0.7,
+                         "no_context": False, "citations": [{"evidence_id": "ev_1"}],
+                         "evidence": [{"content_id": "c-1", "snippet": "Decision: RabbitMQ…",
+                                       "is_current": True}],
+                         "fallback": {"suggested": False}},
+        "list_decisions_for_content": _BY_CONTENT_HIT,
+        "get_decision_lineage": {"decision_id": "d-9", "title": "Adopt RabbitMQ",
+                                 "ancestors": [{"decision_id": "d-1", "decision_status": "superseded"}],
+                                 "descendants": [], "depth": 1},
+        "memory_lab_retrieval_search": {"results": []},
+    })
+    state = execute(route("what do we know about queues?"), registry)
+    called = [name for name, _ in registry.calls]
+    assert called == ["query_memory", "list_decisions_for_content", "get_decision_lineage"]
+    assert registry.calls[1][1].get("content_id") == "c-1"
+    ep = build_package(state)["evidence_package"]
+    linked = [i for i in ep["items"]
+              if i["source"]["tool"] == "list_decisions_for_content"]
+    assert linked and linked[0]["kind"] == "decision_record"
+    assert linked[0]["authority"] == {"level": "curated", "human_gated": True}
+    assert ep["lineage"], "restored follow-up must surface the lineage chain"
+
+
+def test_explain_topic_unlinked_evidence_skips_lineage():
+    registry = Registry({
+        "query_memory": {"answer": "…", "status": "ok", "confidence": 0.7,
+                         "no_context": False, "citations": [],
+                         "evidence": [{"content_id": "c-1", "snippet": "note…"}],
+                         "fallback": {"suggested": False}},
+        "list_decisions_for_content": _BY_CONTENT_MISS,
+        "get_decision_lineage": {"decision_id": "x"},
+        "memory_lab_retrieval_search": {"results": []},
+    })
+    state = execute(route("what do we know about queues?"), registry)
+    called = [name for name, _ in registry.calls]
+    assert "get_decision_lineage" not in called
+    lineage = [t for t in state.trace if t.tool == "get_decision_lineage"]
+    assert lineage and lineage[0].outcome == "skipped" and lineage[0].condition == "DECISION_LINKED"
 
 
 def test_historical_skips_successor_chase():

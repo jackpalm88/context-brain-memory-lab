@@ -120,6 +120,8 @@ tools:
     suggested_followups:
       - tool: list_current_state_anchors
         when: "is_current=false — read what superseded it via its current_state_scope"
+      - tool: list_decisions_for_content
+        when: "the item is decision-shaped — join it to its decision node (CF-002)"
       - tool: load_graph_node_full
         when: "graph context (hubs, neighbors) is needed"
     failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design)."
@@ -376,6 +378,8 @@ tools:
     suggested_followups:
       - tool: memory_lab_retrieval_search
         when: "no_context=true or fallback.suggested=true"
+      - tool: list_decisions_for_content
+        when: "evidence looks decision-shaped — join it to its decision node (CF-002)"
       - tool: get_decision_lineage
         when: "the answer cites a decision whose history matters"
     failure: "no_context=true is an honest empty (distinct from an error). Provider opt-in with the deployment gate off returns mode=degraded, failure_reason=provider_disabled, deterministic answer retained. Citations are bounded to retrieved evidence in every mode."
@@ -488,6 +492,25 @@ tools:
       - tool: explain_decision
         when: "a lineage node needs its full reasoning"
     failure: "404 semantics; depth_limit_reached=true means the chain continues beyond the response."
+
+  - name: list_decisions_for_content
+    role: read
+    answers:
+      - "Which decisions reference content item <id>?"
+      - "This evidence looks decision-shaped — where is its decision node?"
+    use_when: "You hold a content_id (retrieval or ask evidence hit) and need the decision node(s) behind it — the content→decision join (CF-002). link_role says how: canonical (the decision's own narrative representation) or source (declared supporting evidence)."
+    avoid_when: "You already hold a decision_id — explain_decision is the direct read; or you want decisions by topic — list_decisions/get_decision_timeline."
+    determinism: deterministic
+    required_inputs: [content_id]
+    optional_inputs: [limit]
+    output_kind: record_list
+    key_signals: [decisions, count, link_role, also_source, content_id]
+    suggested_followups:
+      - tool: explain_decision
+        when: "a linked decision's rationale is needed"
+      - tool: get_decision_lineage
+        when: "a linked decision's supersession history matters"
+    failure: "count=0 means no decision references this content — an unlinked item, not an error (unknown ids also return count=0; the read never leaks whether content exists). link_role=canonical rows appear only after Stage 2 write-side canonicalization."
 
   - name: get_decision_timeline
     role: lineage

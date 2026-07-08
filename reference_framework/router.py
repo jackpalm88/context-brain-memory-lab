@@ -106,12 +106,22 @@ def _latest_decisions(question: str, historical: bool) -> RoutePlan:
 
 
 def _explain_decision(question: str, historical: bool) -> RoutePlan:
+    # CF-002: referential entry first (content→decision join), lexical title
+    # matching kept as the declared fallback — the reason strings name which
+    # path resolved (referential vs lexical).
     return _plan([
-        PlanStep("list_decisions", {"limit": 20}, reason="decision_id unknown — title match"),
-        PlanStep("explain_decision", args_from="matched_decision_id",
-                 condition="DECISION_MATCH_UNIQUE", reason="unique title match"),
-        PlanStep("get_decision_lineage", args_from="matched_decision_id",
-                 condition="DECISION_MATCH_UNIQUE",
+        PlanStep("memory_lab_retrieval_search", {"query": question, "limit": 5},
+                 reason="referential entry (CF-002): locate the decision's content first"),
+        PlanStep("list_decisions_for_content", args_from="top_result_id",
+                 condition="HAS_RESULTS",
+                 reason="content→decision join — referential, not lexical (CF-002)"),
+        PlanStep("list_decisions", {"limit": 20}, condition="NO_DECISION_LINKED",
+                 reason="lexical fallback — title match (3.2)"),
+        PlanStep("explain_decision", args_from="resolved_decision_id",
+                 condition="DECISION_RESOLVED",
+                 reason="referential link or unique lexical title match"),
+        PlanStep("get_decision_lineage", args_from="resolved_decision_id",
+                 condition="DECISION_RESOLVED",
                  reason="ALWAYS with rationale — lineage prevents overreach (3.2)"),
     ])
 
@@ -122,6 +132,13 @@ def _explain_topic(question: str, historical: bool) -> RoutePlan:
         PlanStep("memory_lab_retrieval_search", {"query": question, "limit": 10},
                  condition="NO_CONTEXT_OR_FALLBACK",
                  reason="query_memory's own fallback pointer (no_context/fallback.suggested)"),
+        # CF-002 restores the §3.3 follow-up that v0 dropped: evidence → decision.
+        PlanStep("list_decisions_for_content", args_from="top_evidence_content_id",
+                 condition="HAS_ASK_EVIDENCE",
+                 reason="§3.3 restored (CF-002): join top evidence to its decision node"),
+        PlanStep("get_decision_lineage", args_from="linked_decision_id",
+                 condition="DECISION_LINKED",
+                 reason="§3.3 restored (CF-002): lineage of the decision behind the evidence"),
     ])
 
 

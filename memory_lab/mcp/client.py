@@ -455,6 +455,16 @@ class MemoryLabApiClient:
     def decision_lineage(self, decision_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/decisions/{decision_id}/lineage", workspace_id=workspace_id)
 
+    def decisions_by_content(
+        self, content_id: str, limit: Optional[int] = None, workspace_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        if limit is not None:
+            params["limit"] = limit
+        return self._request(
+            "GET", f"/decisions/by-content/{content_id}", params=params or None, workspace_id=workspace_id
+        )
+
     def decision_conflicts(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", "/decisions/conflicts", workspace_id=workspace_id)
 

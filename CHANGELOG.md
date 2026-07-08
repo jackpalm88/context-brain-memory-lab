@@ -4,6 +4,24 @@
 
 ### Added
 
+- **CF-002 Stage 1 — the content→decision join is now readable.** New
+  `GET /decisions/by-content/{content_id}` returns the decision nodes that
+  reference a content item, each with `link_role: canonical|source` — the
+  derived reverse read over the two link columns the schema always had
+  (`cb_decision_nodes.content_id`, never yet written by any writer, and
+  caller-declared `source_content_ids`, previously write-only-in). Unknown ids
+  return 200 with `count: 0` (never 404 — the read does not leak whether
+  content exists). Migration 031 adds the GIN index that also serves the
+  pre-existing internal cleanup guard. Exposed as MCP tool
+  `list_decisions_for_content` (public surface 34 = 32 parity + two
+  CF-minted public-only tools) with manifest entry and curated OpenAPI.
+  The Reference Framework restores the §3.3 follow-up dropped in v0
+  (ask evidence → decision → lineage) and gives `explain_decision` a
+  referential entry (content→decision join) with lexical title matching as
+  the declared fallback. Stage 2 (writing the canonical `content_id` at
+  decision creation) is gated on live evidence that Stage 1 links are
+  actively consumed. Design: engineering CF-002_DESIGN_PROPOSAL.
+
 - **CF-003 — current-state anchors are now readable.** New
   `GET /v1/current-state/anchors?scope=…[&memory_type=…]` returns the ACTIVE
   anchor(s) of a scope from `cb_current_state_anchors` — the forward pointer

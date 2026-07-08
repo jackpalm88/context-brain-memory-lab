@@ -158,6 +158,34 @@ def _p_top_superseded(state: ExecutionState) -> bool:
     return bool(top) and top.get("is_current") is False
 
 
+def _p_has_ask_evidence(state: ExecutionState) -> bool:
+    for result in state.results_for("query_memory"):
+        if isinstance(result, dict) and any(
+            isinstance(row, dict) and row.get("content_id") for row in result.get("evidence") or []
+        ):
+            return True
+    return bool(_search_rows(state))
+
+
+def _decision_link_rows(state: ExecutionState) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for result in state.results_for("list_decisions_for_content"):
+        rows.extend(_rows(result, "decisions"))
+    return rows
+
+
+def _p_decision_linked(state: ExecutionState) -> bool:
+    return bool(_decision_link_rows(state))
+
+
+def _p_no_decision_linked(state: ExecutionState) -> bool:
+    return not _p_decision_linked(state)
+
+
+def _p_decision_resolved(state: ExecutionState) -> bool:
+    return bool(_decision_link_rows(state)) or len(_matched_decisions(state)) == 1
+
+
 def _p_hub_matched(state: ExecutionState) -> bool:
     return len(_matched_hubs(state)) >= 1
 
@@ -176,6 +204,10 @@ def _p_healthy(state: ExecutionState) -> bool:
 CONDITIONS: Dict[str, Callable[[ExecutionState], bool]] = {
     "HAS_CONFLICTED": _p_has_conflicted,
     "DECISION_MATCH_UNIQUE": _p_decision_match_unique,
+    "HAS_ASK_EVIDENCE": _p_has_ask_evidence,
+    "DECISION_LINKED": _p_decision_linked,
+    "NO_DECISION_LINKED": _p_no_decision_linked,
+    "DECISION_RESOLVED": _p_decision_resolved,
     "NO_CONTEXT_OR_FALLBACK": _p_no_context_or_fallback,
     "HAS_RESULTS": _p_has_results,
     "TOP_SUPERSEDED": _p_top_superseded,
@@ -231,6 +263,30 @@ def _x_matched_decision_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     return {"decision_id": str(matches[0].get("decision_id"))}
 
 
+def _x_top_evidence_content_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
+    for result in state.results_for("query_memory"):
+        if isinstance(result, dict):
+            for row in result.get("evidence") or []:
+                if isinstance(row, dict) and row.get("content_id"):
+                    return {"content_id": str(row["content_id"])}
+    rows = _search_rows(state)
+    if rows:
+        return {"content_id": str(rows[0].get("content_id") or rows[0].get("id"))}
+    return None
+
+
+def _x_linked_decision_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
+    rows = _decision_link_rows(state)
+    if not rows:
+        return None
+    return {"decision_id": str(rows[0].get("decision_id"))}
+
+
+def _x_resolved_decision_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
+    # referential (CF-002 by-content join) beats lexical title matching
+    return _x_linked_decision_id(state) or _x_matched_decision_id(state)
+
+
 def _x_matched_hub_id(state: ExecutionState) -> Optional[Dict[str, Any]]:
     hubs = _matched_hubs(state)
     if not hubs:
@@ -267,6 +323,9 @@ EXTRACTORS: Dict[str, Callable[[ExecutionState], Optional[Dict[str, Any]]]] = {
     "superseded_scope": _x_superseded_scope,
     "anchor_content_id": _x_anchor_content_id,
     "matched_decision_id": _x_matched_decision_id,
+    "top_evidence_content_id": _x_top_evidence_content_id,
+    "linked_decision_id": _x_linked_decision_id,
+    "resolved_decision_id": _x_resolved_decision_id,
     "matched_hub_id": _x_matched_hub_id,
     "save_with_matched_hub": _x_save_with_matched_hub,
     "save_plain": _x_save_plain,
