@@ -19,17 +19,28 @@ self-hosted OpenCB instance.
 
 ## 1. Schema URL
 
-Upload or reference the public schema file:
+**Recommended for GPT Actions:** the MINIMAL curated schema — 10 well-described
+read/answer operations. GPT tool selection is measurably better with a small
+surface than with the full API:
+
+```
+openapi/gpt-actions.minimal.openapi.yaml
+```
+
+The full public REST schema (including write paths) remains available for
+wider non-MCP integrations:
 
 ```
 openapi/context-brain-actions.public.openapi.yaml
 ```
 
-Or host it at a stable URL, e.g.:
+Host either at a stable HTTPS URL, e.g.:
 
 ```
 https://your-opencb-host/openapi.yaml
 ```
+
+(`scripts/deploy_openapi_dev.sh` publishes both to the api-dev host.)
 
 ---
 
@@ -47,20 +58,27 @@ is the only credential exposed to the action.
 
 ---
 
-## 3. Recommended actions for a first GPT
+## 3. The minimal action set (what the recommended schema contains)
 
-For a knowledge-retrieval GPT, enable these operations:
+`gpt-actions.minimal.openapi.yaml` ships exactly these 10 read/answer
+operations (camelCase operationIds; all marked `x-openai-isConsequential:
+false` so GPT never interrupts for confirmation):
 
 | operationId | Use |
 |---|---|
-| `health_check` | Verify connectivity |
-| `query_memory` | Ask questions against saved knowledge |
-| `search_raw_chunks` | Retrieve raw evidence with scores |
-| `search_graph_preview` | Browse the knowledge graph cheaply |
-| `list_hubs` | Show available topic clusters |
-| `get_hub` | Inspect a specific hub |
+| `checkMemoryHealth` | Verify connectivity (no auth) |
+| `answerFromMemory` | Ask questions against saved knowledge (cited answers) |
+| `retrieveMemoryEvidence` | Raw ranked evidence with scores and currency |
+| `getContentById` | Fetch one stored item incl. currency fields |
+| `listHubs` | Show available topic clusters |
+| `listDecisions` | List tracked decisions |
+| `explainDecision` | Full decision rationale |
+| `getDecisionLineage` | What replaced what — the supersession chain |
+| `listCurrentStateAnchors` | What is CURRENT for a scope right now (CF-003) |
+| `listDecisionsForContent` | Which decisions rest on this content (CF-002) |
 
-For a knowledge-writing GPT, also enable:
+For a knowledge-WRITING GPT, import the full schema instead and additionally
+enable:
 
 | operationId | Use |
 |---|---|
@@ -77,13 +95,16 @@ After adding the action, try these prompts:
 
 ```
 What topics are covered in this knowledge base?
-→ calls list_hubs
+→ calls listHubs
 
 Tell me about [topic from demo seed]
-→ calls query_memory or search_raw_chunks
+→ calls answerFromMemory or retrieveMemoryEvidence
 
 What do you know about embeddings?
-→ calls query_memory with "embeddings"
+→ calls answerFromMemory with "embeddings"
+
+Is [decision from demo seed] still current?
+→ calls getContentById, then listCurrentStateAnchors on its scope
 ```
 
 With demo data seeded (`bash scripts/seed_demo.sh`), the knowledge base
@@ -106,7 +127,7 @@ POST https://your-opencb-host/mcp
 Authorization: Bearer <your-token>
 ```
 
-All 32 MCP tools are available with identical semantics to the REST surface.
+All 34 MCP tools are available with identical semantics to the REST surface.
 See `docs/INSTALL.md` → *MCP HTTP Transport* section.
 
 ---

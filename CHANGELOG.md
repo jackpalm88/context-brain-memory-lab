@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Minimal GPT Actions schema.** New `openapi/gpt-actions.minimal.openapi.yaml`
+  — a curated 10-operation read/answer surface for custom GPTs (GPT tool
+  selection works best with a small, well-described set): checkMemoryHealth,
+  answerFromMemory, retrieveMemoryEvidence, getContentById, listHubs,
+  listDecisions, explainDecision, getDecisionLineage, listCurrentStateAnchors,
+  listDecisionsForContent. camelCase operationIds, Bearer auth (health opts
+  out), every operation `x-openai-isConsequential: false`, api-dev server URL
+  baked in. Pinned by a dedicated smoke suite (OAS-2: exactly these 10 ops,
+  read-only, descriptions required). `scripts/deploy_openapi_dev.sh` now
+  publishes the minimal schema as the GPT schema and the full curated schema
+  separately; docs/GPT_ACTIONS.md updated accordingly. The full public schema
+  is unchanged and remains the wider non-MCP integration surface.
+
 - **CF-005 — Evidence Package v0.2: lookup items are marked, not mixed in.**
   The Intent Router now declares each plan step's epistemic role
   (`evidence` default | `lookup` for steps that resolve arguments or match
