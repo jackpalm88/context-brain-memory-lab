@@ -70,13 +70,107 @@ components:
           type: string
           format: date-time
 
+    EvidenceItem:
+      type: object
+      description: >-
+        One normalized evidence hit. content_id identifies the stored item; it is
+        the identifier accepted by getContentById and listDecisionsForContent.
+        Additional provenance fields may be present.
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        rank:
+          type: integer
+        snippet:
+          type: string
+        title:
+          type: string
+          nullable: true
+        score:
+          type: number
+          nullable: true
+        is_current:
+          type: boolean
+          nullable: true
+          description: "false = this item was superseded; null = unscoped."
+        current_state_scope:
+          type: string
+          nullable: true
+          description: "The scope key accepted by listCurrentStateAnchors."
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    Citation:
+      type: object
+      description: "A citation bound to one evidence item; content_id identifies the cited stored item."
+      properties:
+        evidence_id:
+          type: string
+        rank:
+          type: integer
+        content_id:
+          type: string
+          format: uuid
+        chunk_id:
+          type: string
+          nullable: true
+        score:
+          type: number
+          nullable: true
+
+    LineageNode:
+      type: object
+      description: "One decision in a supersession chain; decision_id is accepted by explainDecision and getDecisionLineage."
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        decision_status:
+          type: string
+          enum: [active, superseded, reversed, draft]
+        created_at:
+          type: string
+          format: date-time
+
+    CurrentStateAnchor:
+      type: object
+      description: >-
+        An ACTIVE current-state anchor. content_id names the item that IS current
+        for the scope (accepted by getContentById); supersedes_content_id names
+        what it replaced.
+      properties:
+        anchor_id:
+          type: string
+          format: uuid
+        memory_type:
+          type: string
+        scope:
+          type: string
+        content_id:
+          type: string
+          format: uuid
+        supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+        state_status:
+          type: string
+        quick_summary:
+          type: string
+          nullable: true
+
 paths:
   /health:
     get:
       operationId: checkMemoryHealth
       x-openai-isConsequential: false
       summary: "Is the memory backend reachable?"
-      description: "Call first when any action fails unexpectedly — distinguishes backend-down from request errors. Returns service status and version."
+      description: "Call first when any action fails unexpectedly — distinguishes backend-down from request errors. Returns service status and version. Not for: routine calls between actions."
       security: []
       responses:
         "200":
@@ -98,7 +192,7 @@ paths:
       operationId: retrieveMemoryEvidence
       x-openai-isConsequential: false
       summary: "Retrieve raw ranked evidence for a query"
-      description: "Ranked evidence snippets with scores, provenance and currency fields. Use when you need the underlying evidence list; use answerFromMemory when you want a synthesized answer with citations."
+      description: "Ranked evidence snippets with scores, provenance and currency fields. Each result carries a content_id — the identifier accepted by getContentById and listDecisionsForContent. status='no_results' with count=0 is an honest empty, not an error. Not for: questions wanting a synthesized answer — use answerFromMemory."
       requestBody:
         required: true
         content:
@@ -128,16 +222,19 @@ paths:
                   results:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/EvidenceItem"
                   count:
                     type: integer
+                  status:
+                    type: string
+                    description: "'ok' when results exist, 'no_results' when the search found nothing — an honest empty, not an error."
 
   /v1/ask:
     post:
       operationId: answerFromMemory
       x-openai-isConsequential: false
       summary: "Answer a question from workspace memory"
-      description: "Deterministic answer grounded ONLY in saved memory, with citations bounded to retrieved evidence. no_context=true is an honest empty (the memory does not know), not an error. Superseded memories are demoted below current ones unless the question is historical."
+      description: "Deterministic answer grounded ONLY in saved memory, with citations bounded to retrieved evidence. status='no_context' (with insufficient_evidence=true) is an honest empty — the memory does not know; not an error. Superseded memories are demoted below current ones unless the question is historical. Evidence items carry content identifiers that can be used to retrieve authoritative details. Not for: raw evidence lists or provenance detail — use retrieveMemoryEvidence."
       requestBody:
         required: true
         content:
@@ -164,29 +261,37 @@ paths:
                 properties:
                   answer:
                     type: string
+                  status:
+                    type: string
+                    enum: [ok, no_context, clarify, degraded, error]
+                    description: "'no_context' = the memory does not know (honest empty, not an error); 'clarify' = the question is ambiguous; 'degraded' = answered from partial evidence."
+                  insufficient_evidence:
+                    type: boolean
+                    description: "true when the retrieved evidence was too weak to support a grounded answer."
                   confidence:
                     type: number
-                  no_context:
-                    type: boolean
+                  confidence_explanation:
+                    type: string
                   citations:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/Citation"
                   evidence:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/EvidenceItem"
 
   /v1/content/{content_id}:
     get:
       operationId: getContentById
       x-openai-isConsequential: false
       summary: "Fetch one stored content item by id"
-      description: "The stored record including currency fields — is_current=false means this item was superseded; follow up with listCurrentStateAnchors on its current_state_scope to find what replaced it."
+      description: "The stored record including currency fields — is_current=false means this item was superseded; follow up with listCurrentStateAnchors on its current_state_scope to find what replaced it. Not for: text-only lookups — use retrieveMemoryEvidence to obtain a content_id from free text."
       parameters:
         - name: content_id
           in: path
           required: true
+          description: "Content item UUID — e.g. from retrieveMemoryEvidence results, answerFromMemory evidence/citations, or an anchor's content_id."
           schema:
             type: string
             format: uuid
@@ -226,6 +331,7 @@ paths:
         - name: status
           in: query
           required: false
+          description: "Hub lifecycle filter; default 'active'. Use 'archived' only when explicitly asked about retired topics."
           schema:
             type: string
             enum: [active, archived]
@@ -261,12 +367,14 @@ paths:
         - name: status
           in: query
           required: false
+          description: "Filter to one decision lifecycle status; omit to list all."
           schema:
             type: string
             enum: [active, superseded, reversed, draft]
         - name: limit
           in: query
           required: false
+          description: "Maximum number of decisions returned (newest first)."
           schema:
             type: integer
             minimum: 1
@@ -297,6 +405,7 @@ paths:
         - name: decision_id
           in: path
           required: true
+          description: "Decision node UUID — e.g. from listDecisions, listDecisionsForContent, or a lineage node."
           schema:
             type: string
             format: uuid
@@ -340,6 +449,7 @@ paths:
         - name: decision_id
           in: path
           required: true
+          description: "Decision node UUID whose supersession chain to read."
           schema:
             type: string
             format: uuid
@@ -359,11 +469,11 @@ paths:
                   ancestors:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/LineageNode"
                   descendants:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/LineageNode"
                   depth:
                     type: integer
                   depth_limit_reached:
@@ -374,11 +484,12 @@ paths:
       operationId: listCurrentStateAnchors
       x-openai-isConsequential: false
       summary: "What is CURRENT for a scope right now?"
-      description: "The forward pointer of the supersession chain: given a scope (e.g. a superseded item's current_state_scope), returns the active anchor(s) naming what IS current there. Scope is normalized server-side, so raw topic phrases match their stored form. count=0 means an unclaimed scope, not an error."
+      description: "The forward pointer of the supersession chain: given a scope (e.g. a superseded item's current_state_scope), returns the active anchor(s) naming what IS current there. Scope is normalized server-side, so raw topic phrases match their stored form. count=0 means an unclaimed scope, not an error. Not for: free-text lookups without a scope (search first), or history — this reads ACTIVE anchors only, not the superseded chain."
       parameters:
         - name: scope
           in: query
           required: true
+          description: "Current-state scope key: a current_state_scope value taken from a content item, or a plain topic phrase. Normalized with the same slugifier the write path uses, so raw wording (e.g. 'Kafka choice') matches its stored form ('kafka-choice')."
           schema:
             type: string
             minLength: 1
@@ -386,6 +497,7 @@ paths:
         - name: memory_type
           in: query
           required: false
+          description: "Optional filter to one memory type; without it the scope returns one active anchor per memory type that has one."
           schema:
             type: string
             enum: [milestone, decision, principle, anchor, evidence, plan_roadmap, raw_memory]
@@ -400,11 +512,12 @@ paths:
                   anchors:
                     type: array
                     items:
-                      type: object
+                      $ref: "#/components/schemas/CurrentStateAnchor"
                   count:
                     type: integer
                   scope:
                     type: string
+                    description: "The normalized scope that was queried."
         "422":
           description: "Empty scope or unknown memory_type"
           content:
@@ -417,17 +530,19 @@ paths:
       operationId: listDecisionsForContent
       x-openai-isConsequential: false
       summary: "Which decisions reference this content item?"
-      description: "The content→decision join: given a content_id from retrieval or ask evidence, returns the decision nodes behind it (link_role: canonical = the decision's own narrative, source = declared supporting evidence). count=0 means an unlinked item, not an error. Follow with explainDecision / getDecisionLineage."
+      description: "The content→decision join: given a content_id from retrieval or ask evidence, returns the decision nodes behind it (link_role: canonical = the decision's own narrative, source = declared supporting evidence). count=0 means an unlinked item, not an error. Follow with explainDecision / getDecisionLineage. Not for: when you already hold a decision_id (explainDecision is the direct read) or browsing decisions by topic (listDecisions)."
       parameters:
         - name: content_id
           in: path
           required: true
+          description: "Content item UUID whose linked decisions to return — typically a retrieveMemoryEvidence result or answerFromMemory evidence hit."
           schema:
             type: string
             format: uuid
         - name: limit
           in: query
           required: false
+          description: "Maximum number of linked decisions returned (newest first)."
           schema:
             type: integer
             minimum: 1

@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Minimal GPT Actions schema told GPT to expect a field REST never sends.**
+  The `answerFromMemory` response schema and `docs/GPT_SYSTEM_PROMPT.md` keyed
+  the honest-empty behavior on a `no_context: true` boolean that exists only in
+  the MCP enrichment layer — the REST `/v1/ask` envelope signals it as
+  `status: "no_context"` + `insufficient_evidence: true`. Schema and prompt now
+  declare the REST truth (pinned by smoke M-9). Consumer-surface fix from the
+  2026-07-10 GPT Actions consumer UX review; no kernel change.
+
+### Changed
+
+- **Minimal GPT Actions schema: chaining keys and parameter semantics are now
+  schema-visible.** Response arrays that were opaque `type: object` items now
+  reference truthful component schemas (`EvidenceItem`, `Citation`,
+  `LineageNode`, `CurrentStateAnchor`) declaring the join keys an OpenAPI
+  consumer needs to plan multi-step reads — `content_id`, `decision_id`,
+  `is_current`, `current_state_scope` (subset of the live models, verified;
+  additional fields may appear at runtime). Every parameter carries a
+  description (notably `scope`, reusing the route's own wording), and
+  operations whose capability-manifest entry has `avoid_when` gain a matching
+  "Not for: …" line — exported from the manifest, not invented (single
+  canonical semantics source). Pinned by smoke M-10/M-11.
+  `docs/GPT_SYSTEM_PROMPT.md` rebalanced per the review: states up front that
+  all actions are read-only and safe to invoke (prefer checking over
+  guessing), `answerFromMemory` framed as the semantic entry point, playbook
+  entries carry completeness criteria (decision = rationale + lineage checked;
+  currency = `is_current` actually read), and negative claims ("memory has
+  nothing on X") are allowed only after both the ask no-context and a reworded
+  retrieval came back empty.
+
 ### Added
 
 - **Minimal GPT Actions schema.** New `openapi/gpt-actions.minimal.openapi.yaml`

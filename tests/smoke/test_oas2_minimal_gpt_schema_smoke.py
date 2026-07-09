@@ -10,6 +10,11 @@ pins that the minimal schema stays minimal, read-only, and GPT-importable:
   M-6  servers present with a concrete https URL
   M-7  Every operation has a description (tool-selection quality)
   M-8  All $ref targets resolve; no hardcoded secrets
+  M-9  answerFromMemory declares the REST truth: status + insufficient_evidence,
+       never the MCP-only no_context boolean (GPT UX review 2026-07-10, A1)
+  M-10 Every parameter carries a description (A3)
+  M-11 Response arrays declare their chaining keys — content_id / decision_id /
+       is_current are schema-visible, not opaque objects (A2)
 """
 from __future__ import annotations
 
@@ -108,6 +113,62 @@ def test_m7_descriptions_everywhere(doc):
             f"{path}: GPT tool selection needs a substantive description"
         )
         assert op.get("summary"), f"{path}: summary required"
+
+
+def _op_by_id(doc, operation_id):
+    for _, _, op in _operations(doc):
+        if op["operationId"] == operation_id:
+            return op
+    raise AssertionError(f"operation not found: {operation_id}")
+
+
+def _response_properties(op):
+    return op["responses"]["200"]["content"]["application/json"]["schema"].get("properties", {})
+
+
+def test_m9_answer_envelope_matches_rest_truth(doc):
+    props = _response_properties(_op_by_id(doc, "answerFromMemory"))
+    assert "no_context" not in props, (
+        "no_context is an MCP-layer enrichment; the REST /v1/ask response never carries it"
+    )
+    assert "status" in props and "no_context" in props["status"].get("enum", []), (
+        "the honest-empty signal on REST is status='no_context'"
+    )
+    assert "insufficient_evidence" in props
+
+
+def test_m10_every_parameter_has_a_description(doc):
+    for path, _, op in _operations(doc):
+        for param in op.get("parameters", []):
+            assert len(param.get("description", "")) >= 20, (
+                f"{path}: parameter '{param.get('name')}' needs a substantive description"
+            )
+
+
+def test_m11_response_arrays_declare_chaining_keys(doc):
+    schemas = doc["components"]["schemas"]
+    for name, keys in {
+        "EvidenceItem": ("content_id", "is_current", "current_state_scope"),
+        "Citation": ("content_id",),
+        "LineageNode": ("decision_id",),
+        "CurrentStateAnchor": ("content_id", "scope", "supersedes_content_id"),
+    }.items():
+        props = schemas[name]["properties"]
+        for key in keys:
+            assert key in props, f"components.schemas.{name} must declare '{key}'"
+    array_refs = {
+        "retrieveMemoryEvidence": {"results": "EvidenceItem"},
+        "answerFromMemory": {"evidence": "EvidenceItem", "citations": "Citation"},
+        "getDecisionLineage": {"ancestors": "LineageNode", "descendants": "LineageNode"},
+        "listCurrentStateAnchors": {"anchors": "CurrentStateAnchor"},
+    }
+    for op_id, fields in array_refs.items():
+        props = _response_properties(_op_by_id(doc, op_id))
+        for field, schema_name in fields.items():
+            ref = props[field]["items"].get("$ref", "")
+            assert ref == f"#/components/schemas/{schema_name}", (
+                f"{op_id}.{field} items must reference {schema_name}, got: {ref or 'opaque object'}"
+            )
 
 
 def test_m8_refs_resolve_and_no_secrets(doc):
