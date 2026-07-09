@@ -44,6 +44,13 @@ https://your-opencb-host/openapi.yaml
 
 ---
 
+## 1b. GPT Instructions (system prompt)
+
+Paste the ready-made instructions from `docs/GPT_SYSTEM_PROMPT.md` into the
+GPT builder's **Instructions** field — it encodes the OpenCB epistemics
+(grounded answers only, currency discipline, lineage before finality, honest
+empties) and the action-selection playbook for the 10 minimal operations.
+
 ## 2. Authentication
 
 In the GPT Action builder:
