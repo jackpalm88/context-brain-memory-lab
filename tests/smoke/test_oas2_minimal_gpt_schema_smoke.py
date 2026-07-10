@@ -112,6 +112,10 @@ def test_m7_descriptions_everywhere(doc):
         assert len(op.get("description", "")) >= 40, (
             f"{path}: GPT tool selection needs a substantive description"
         )
+        assert len(op["description"]) <= 300, (
+            f"{path}: GPT Actions builder rejects operation descriptions over "
+            f"300 chars (got {len(op['description'])})"
+        )
         assert op.get("summary"), f"{path}: summary required"
 
 

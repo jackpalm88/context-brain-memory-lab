@@ -192,7 +192,7 @@ paths:
       operationId: retrieveMemoryEvidence
       x-openai-isConsequential: false
       summary: "Retrieve raw ranked evidence for a query"
-      description: "Ranked evidence snippets with scores, provenance and currency fields. Each result carries a content_id — the identifier accepted by getContentById and listDecisionsForContent. status='no_results' with count=0 is an honest empty, not an error. Not for: questions wanting a synthesized answer — use answerFromMemory."
+      description: "Ranked evidence snippets with scores, provenance and currency fields. Each result carries a content_id accepted by getContentById and listDecisionsForContent. status='no_results' is an honest empty, not an error. Not for: synthesized answers — use answerFromMemory."
       requestBody:
         required: true
         content:
@@ -234,7 +234,7 @@ paths:
       operationId: answerFromMemory
       x-openai-isConsequential: false
       summary: "Answer a question from workspace memory"
-      description: "Deterministic answer grounded ONLY in saved memory, with citations bounded to retrieved evidence. status='no_context' (with insufficient_evidence=true) is an honest empty — the memory does not know; not an error. Superseded memories are demoted below current ones unless the question is historical. Evidence items carry content identifiers that can be used to retrieve authoritative details. Not for: raw evidence lists or provenance detail — use retrieveMemoryEvidence."
+      description: "Answers grounded ONLY in saved memory, with citations. status='no_context' is an honest empty, not an error. Superseded memories are demoted unless the question is historical. Evidence items carry content identifiers for follow-up reads. Not for: raw evidence lists — use retrieveMemoryEvidence."
       requestBody:
         required: true
         content:
@@ -484,7 +484,7 @@ paths:
       operationId: listCurrentStateAnchors
       x-openai-isConsequential: false
       summary: "What is CURRENT for a scope right now?"
-      description: "The forward pointer of the supersession chain: given a scope (e.g. a superseded item's current_state_scope), returns the active anchor(s) naming what IS current there. Scope is normalized server-side, so raw topic phrases match their stored form. count=0 means an unclaimed scope, not an error. Not for: free-text lookups without a scope (search first), or history — this reads ACTIVE anchors only, not the superseded chain."
+      description: "Given a scope (e.g. a superseded item's current_state_scope), returns the active anchor(s) naming what IS current there. count=0 means an unclaimed scope, not an error. Not for: free-text lookups without a scope (search first), or history — this reads ACTIVE anchors only."
       parameters:
         - name: scope
           in: query
@@ -530,7 +530,7 @@ paths:
       operationId: listDecisionsForContent
       x-openai-isConsequential: false
       summary: "Which decisions reference this content item?"
-      description: "The content→decision join: given a content_id from retrieval or ask evidence, returns the decision nodes behind it (link_role: canonical = the decision's own narrative, source = declared supporting evidence). count=0 means an unlinked item, not an error. Follow with explainDecision / getDecisionLineage. Not for: when you already hold a decision_id (explainDecision is the direct read) or browsing decisions by topic (listDecisions)."
+      description: "The content→decision join: given a content_id from retrieval or ask evidence, returns the decision nodes behind it. count=0 means an unlinked item, not an error. Follow with explainDecision / getDecisionLineage. Not for: a held decision_id (explainDecision) or browsing by topic (listDecisions)."
       parameters:
         - name: content_id
           in: path
@@ -566,6 +566,7 @@ paths:
                             link_role:
                               type: string
                               enum: [canonical, source]
+                              description: "canonical = the decision's own narrative representation; source = declared supporting evidence."
                             also_source:
                               type: boolean
                   count:
