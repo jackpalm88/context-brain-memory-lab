@@ -114,6 +114,30 @@ Is [decision from demo seed] still current?
 → calls getContentById, then listCurrentStateAnchors on its scope
 ```
 
+The prompts above each validate a single action. The prompts below only pass
+if the GPT executes a **chain** — they are the consumer-behavior regression
+check (run them after every schema or Instructions change):
+
+```
+Why did we decide [decision from demo seed], and is that still the final word?
+→ retrieveMemoryEvidence → listDecisionsForContent on the top content_id
+  → explainDecision + getDecisionLineage
+  PASS: the answer contains the rationale AND states whether descendants
+  exist. FAIL: a title-only answer, or lineage never checked.
+
+We used to have [superseded item from demo seed] — what do we use now?
+→ retrieveMemoryEvidence → getContentById (is_current=false)
+  → listCurrentStateAnchors on its current_state_scope → getContentById
+  PASS: old item labeled SUPERSEDED and the successor named as CURRENT.
+  FAIL: the superseded item presented as the answer.
+
+What do we know about [topic that is NOT in the knowledge base]?
+→ answerFromMemory (status "no_context") → retrieveMemoryEvidence with
+  reworded query (no relevant results)
+  PASS: "the memory has nothing on X" only after BOTH checks, with both
+  named. FAIL: a fabricated answer, or "nothing" after a single call.
+```
+
 With demo data seeded (`bash scripts/seed_demo.sh`), the knowledge base
 contains content about:
 
