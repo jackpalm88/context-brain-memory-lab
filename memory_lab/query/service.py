@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+import re
 from typing import Optional
 
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
@@ -17,6 +18,52 @@ from memory_lab.query.provider_answer import apply_provider_answer
 from memory_lab.reasoning.answer_synthesizer import synthesize_answer
 from memory_lab.reasoning.intent_detector import detect_intent
 from memory_lab.reasoning.models import AskRequest, AskResponse
+
+
+_ASK_RELEVANCE_STOPWORDS = {
+    "about",
+    "anything",
+    "from",
+    "have",
+    "know",
+    "known",
+    "memory",
+    "tell",
+    "that",
+    "the",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "with",
+}
+
+
+def _meaningful_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]{3,}", (text or "").lower())
+        if token not in _ASK_RELEVANCE_STOPWORDS
+    }
+
+
+def _has_meaningful_overlap(query: str, evidence) -> bool:
+    query_tokens = _meaningful_tokens(query)
+    if not query_tokens:
+        return True
+    for item in evidence:
+        haystack = " ".join(
+            part
+            for part in (
+                getattr(item, "snippet", "") or "",
+                getattr(item, "title", "") or "",
+            )
+            if part
+        )
+        if query_tokens & _meaningful_tokens(haystack):
+            return True
+    return False
 from memory_lab.reasoning.policy_generator import policy_for_intent
 
 
@@ -63,6 +110,8 @@ class QueryService:
             database_url=getattr(self.retrieval_adapter, "database_url", None),
             query=query,
         )
+        if not _has_meaningful_overlap(query, evidence):
+            evidence = []
         context_pack = build_support_only_context_pack_for_ask(
             request=request,
             workspace_id=workspace_id,

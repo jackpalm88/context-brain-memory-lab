@@ -221,6 +221,60 @@ class TestBackwardsCompatibility:
         req = RetrievalRequest(query="what is memory", max_hops=1, min_confidence=0.7, graph_boost=0.1)
         assert req.resolved_memory_types() is None
 
+    def test_pgvector_search_keeps_lexical_fallback_for_unembedded_chunks(self, monkeypatch):
+        import memory_lab.api.services.retrieval_adapter as retrieval_module
+        from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
+
+        adapter = RetrievalAdapter("postgresql://fake/fake", pgvector_retrieval_enabled=True)
+
+        class FakeSearchAdapter:
+            def search(self, **kwargs):
+                return [
+                    {
+                        "id": "vector-id",
+                        "content_id": "vector-id",
+                        "chunk_id": "vector-chunk",
+                        "workspace_id": "ws-1",
+                        "score": 0.9,
+                        "text": "embedded vector result",
+                        "retrieval_path": "pgvector_knn",
+                        "retrieval_mode": "pgvector_knn",
+                        "distance": 0.1,
+                    }
+                ]
+
+        adapter.adapter = FakeSearchAdapter()
+        adapter.hub_term_adapter = FakeSearchAdapter()
+        monkeypatch.setattr(adapter, "_query_embedding", lambda query: ([0.1], None))
+        monkeypatch.setattr(
+            adapter,
+            "_deterministic_vector_search",
+            lambda query, workspace_id=None, memory_types=None: [
+                {
+                    "id": "lexical-id",
+                    "content_id": "lexical-id",
+                    "chunk_id": "lexical-chunk",
+                    "workspace_id": workspace_id,
+                    "score": 0.8,
+                    "text": "notification transport WebSockets fixture",
+                    "retrieval_path": "content_chunk_workspace_scoped",
+                }
+            ],
+        )
+        monkeypatch.setattr(adapter, "_hub_linked_results", lambda *args, **kwargs: [])
+        monkeypatch.setattr(retrieval_module, "rank_by_composite", lambda rows, query: rows)
+        monkeypatch.setattr(retrieval_module, "build_ranking_signals", lambda rows: {})
+
+        results = adapter.search("notification transport", workspace_id="ws-1")
+
+        assert [row["content_id"] for row in results] == ["vector-id", "lexical-id"]
+        lexical = results[1]
+        assert lexical["retrieval_mode"] == "deterministic_fallback"
+        assert lexical["embedding_status"] == "lexical_fallback_alongside_pgvector"
+        assert adapter.last_debug_metadata["stage_metrics"]["deterministic_retrieval"][
+            "lexical_added_alongside_pgvector"
+        ] == 1
+
     def test_evidence_item_backward_compatible_fields_preserved(self):
         from memory_lab.reasoning.models import EvidenceItem
         required = (

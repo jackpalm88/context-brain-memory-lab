@@ -102,6 +102,26 @@ def test_query_service_preserves_degraded_no_evidence_behavior():
     assert response.workspace_id == WS
 
 
+def test_query_service_rejects_vector_noise_without_query_overlap():
+    rows = [
+        _row(
+            "cid-notification",
+            "chk-notification",
+            "decision: switch the notification transport to WebSockets.",
+            retrieval_path="pgvector_knn",
+            retrieval_mode="pgvector_knn",
+        )
+    ]
+    req = AskRequest(query="What do we know about the payments retry queue?", top_k=5)
+    adapter = FakeRetrievalAdapter(rows)
+
+    response = QueryService(retrieval_adapter=adapter).execute(req, workspace_id=WS)
+
+    assert response.status == "insufficient_evidence"
+    assert response.insufficient_evidence is True
+    assert response.evidence == []
+
+
 def test_support_only_context_pack_adapter_round_trips_evidence_item_exactly():
     rows = [
         _row(

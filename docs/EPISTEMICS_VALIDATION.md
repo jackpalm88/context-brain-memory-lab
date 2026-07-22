@@ -14,7 +14,9 @@ Seed the three-fragment scenario first:
 CBML_DSN="postgresql://user:pass@host:port/db" bash scripts/epistemics_validation_seed.sh
 ```
 
-This creates, in one scope (`epistemics-validation-notify-transport`):
+By default this creates an isolated validation workspace
+(`e9e00000-0000-0000-0000-0000000000f1`) and, in one scope
+(`epistemics-validation-notify-transport`):
 
 - **(a) CURRENT item** — "Notification transport: WebSockets (current)",
   `is_current: true`, anchored for the scope;
@@ -28,7 +30,9 @@ This creates, in one scope (`epistemics-validation-notify-transport`):
 The seed is idempotent and 100% synthetic. Run the scenarios with any OpenCB
 consumer that has read access to the seeded workspace (MCP tools, REST, or
 the minimal GPT actions) and has loaded the opencb-epistemics skill (or an
-equivalent rendering of it, e.g. GPT_SYSTEM_PROMPT.md).
+equivalent rendering of it, e.g. GPT_SYSTEM_PROMPT.md). REST/API runs must send
+`X-Workspace-ID: e9e00000-0000-0000-0000-0000000000f1`; otherwise the prompts
+may run against the default workspace instead of the validation fixture.
 
 ## Scenarios
 

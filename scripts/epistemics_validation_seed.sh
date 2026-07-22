@@ -16,7 +16,7 @@
 #
 # Usage:
 #   CBML_DSN="postgresql://user:pass@host:port/db" bash scripts/epistemics_validation_seed.sh
-#   SEED_WORKSPACE_ID=<uuid>  — target workspace (default: the default workspace)
+#   SEED_WORKSPACE_ID=<uuid>  — target workspace (default: isolated validation workspace)
 #
 # Exits 0 on full pass, non-zero on any failure.
 
@@ -51,11 +51,32 @@ if ! "${PSQL_CMD[@]}" -c "SELECT 1" >/dev/null 2>&1; then
 fi
 ok "DB connectivity"
 
-SEED_WS_ID="${SEED_WORKSPACE_ID:-}"
-if [[ -z "$SEED_WS_ID" ]]; then
-    SEED_WS_ID="$("${PSQL_CMD[@]}" -t -c \
-        "SELECT workspace_id FROM cb_workspaces WHERE is_default = TRUE LIMIT 1;" \
-        2>/dev/null | tr -d '[:space:]')"
+VALIDATION_WS_ID="e9e00000-0000-0000-0000-0000000000f1"
+SEED_WS_ID="${SEED_WORKSPACE_ID:-$VALIDATION_WS_ID}"
+if [[ "${SEED_WS_ID}" == "${VALIDATION_WS_ID}" ]]; then
+    "${PSQL_CMD[@]}" <<SQL
+INSERT INTO cb_workspaces (workspace_id, slug, title, status, is_default, created_by_subject)
+VALUES
+    ('$VALIDATION_WS_ID', 'opencb-epistemics-validation',
+     'OpenCB Epistemics Validation Fixture', 'active', FALSE,
+     'opencb-epistemics-validation-seed')
+ON CONFLICT (workspace_id) DO UPDATE
+    SET slug = EXCLUDED.slug,
+        title = EXCLUDED.title,
+        status = 'active',
+        is_default = FALSE,
+        updated_at = NOW();
+
+INSERT INTO workspace_memberships (workspace_id, auth_subject_id, role, status)
+SELECT '$VALIDATION_WS_ID'::uuid, auth_subject_id, 'owner', 'active'
+  FROM auth_subjects
+ WHERE status = 'active'
+ON CONFLICT (workspace_id, auth_subject_id) DO UPDATE
+    SET role = EXCLUDED.role,
+        status = 'active',
+        updated_at = NOW();
+SQL
+    ok "Isolated validation workspace ready: $SEED_WS_ID"
 fi
 if [[ -z "$SEED_WS_ID" ]]; then
     fail "No workspace found. Set SEED_WORKSPACE_ID or run migrations first."
@@ -76,7 +97,14 @@ VALUES
      '{"domain":"engineering","word_count":240,"fixture":"opencb-epistemics-e1"}'::jsonb,
      FALSE, '$SCOPE')
 ON CONFLICT (content_id) DO UPDATE
-    SET is_current = FALSE, current_state_scope = '$SCOPE', updated_at = NOW();
+    SET workspace_id = '$SEED_WS_ID',
+        node_type = EXCLUDED.node_type,
+        quick_summary = EXCLUDED.quick_summary,
+        content_title = EXCLUDED.content_title,
+        content_metadata = EXCLUDED.content_metadata,
+        is_current = FALSE,
+        current_state_scope = '$SCOPE',
+        updated_at = NOW();
 
 -- (a) CURRENT item: the decision that replaced it.
 INSERT INTO content_items (content_id, workspace_id, node_type, quick_summary, content_title,
@@ -88,7 +116,13 @@ VALUES
      '{"domain":"engineering","word_count":260,"fixture":"opencb-epistemics-e1"}'::jsonb,
      TRUE, '$SCOPE', 'e9e00001-0000-0000-0000-00000000000b')
 ON CONFLICT (content_id) DO UPDATE
-    SET is_current = TRUE, current_state_scope = '$SCOPE',
+    SET workspace_id = '$SEED_WS_ID',
+        node_type = EXCLUDED.node_type,
+        quick_summary = EXCLUDED.quick_summary,
+        content_title = EXCLUDED.content_title,
+        content_metadata = EXCLUDED.content_metadata,
+        is_current = TRUE,
+        current_state_scope = '$SCOPE',
         cs_supersedes_content_id = 'e9e00001-0000-0000-0000-00000000000b', updated_at = NOW();
 
 -- Anchor: names what IS current for the scope and what it superseded.
@@ -99,7 +133,10 @@ VALUES
      'e9e00002-0000-0000-0000-00000000000a', 'e9e00001-0000-0000-0000-00000000000b',
      'active', 'api', 'opencb-epistemics validation fixture seed')
 ON CONFLICT (anchor_id) DO UPDATE
-    SET content_id = 'e9e00002-0000-0000-0000-00000000000a',
+    SET workspace_id = '$SEED_WS_ID',
+        memory_type = 'decision',
+        scope = '$SCOPE',
+        content_id = 'e9e00002-0000-0000-0000-00000000000a',
         supersedes_content_id = 'e9e00001-0000-0000-0000-00000000000b',
         state_status = 'active';
 
@@ -113,9 +150,38 @@ VALUES
      'note re notifications',
      '{"fixture":"opencb-epistemics-e2","word_count":14}'::jsonb,
      NULL, NULL)
-ON CONFLICT (content_id) DO NOTHING;
+ON CONFLICT (content_id) DO UPDATE
+    SET workspace_id = '$SEED_WS_ID',
+        node_type = EXCLUDED.node_type,
+        quick_summary = EXCLUDED.quick_summary,
+        content_title = EXCLUDED.content_title,
+        content_metadata = EXCLUDED.content_metadata,
+        is_current = NULL,
+        current_state_scope = NULL,
+        cs_supersedes_content_id = NULL,
+        updated_at = NOW();
+
+INSERT INTO content_chunks (chunk_id, content_id, workspace_id, chunk_index, chunk_text, word_count)
+VALUES
+    ('e9e000c1-0000-0000-0000-00000000000b',
+     'e9e00001-0000-0000-0000-00000000000b', '$SEED_WS_ID', 0,
+     'decision: use long-polling for the notification transport. Chosen for simplicity over WebSockets at launch; revisit when concurrent listeners exceed the polling budget.',
+     21),
+    ('e9e000c2-0000-0000-0000-00000000000a',
+     'e9e00002-0000-0000-0000-00000000000a', '$SEED_WS_ID', 0,
+     'decision: switch the notification transport to WebSockets. Long-polling exceeded its budget at 500 concurrent listeners; WebSockets cut idle connection cost by an order of magnitude.',
+     22),
+    ('e9e000c3-0000-0000-0000-00000000000c',
+     'e9e00003-0000-0000-0000-00000000000c', '$SEED_WS_ID', 0,
+     'someone mentioned server-sent events might also work for notifications, not sure',
+     10)
+ON CONFLICT (chunk_id) DO UPDATE
+    SET workspace_id = EXCLUDED.workspace_id,
+        chunk_text = EXCLUDED.chunk_text,
+        word_count = EXCLUDED.word_count,
+        chunk_index = EXCLUDED.chunk_index;
 SQL
-ok "Three-fragment fixture seeded (scope: $SCOPE)"
+ok "Three-fragment fixture seeded with retrievable chunks (scope: $SCOPE)"
 
 # Verify the fixture is actually in the shape the scenarios assume.
 COUNT="$("${PSQL_CMD[@]}" -t -c "
@@ -130,9 +196,16 @@ ANCHOR_OK="$("${PSQL_CMD[@]}" -t -c "
        AND content_id = 'e9e00002-0000-0000-0000-00000000000a'
        AND supersedes_content_id = 'e9e00001-0000-0000-0000-00000000000b'
        AND state_status = 'active';" | tr -d '[:space:]')"
+CHUNK_COUNT="$("${PSQL_CMD[@]}" -t -c "
+    SELECT count(*) FROM content_chunks
+     WHERE workspace_id = '$SEED_WS_ID'::uuid
+       AND content_id IN ('e9e00001-0000-0000-0000-00000000000b',
+                          'e9e00002-0000-0000-0000-00000000000a',
+                          'e9e00003-0000-0000-0000-00000000000c');" | tr -d '[:space:]')"
 
 [[ "$COUNT" == "3" ]] && ok "3 fixture content rows present" || fail "expected 3 fixture rows, got $COUNT"
 [[ "$ANCHOR_OK" == "1" ]] && ok "anchor links current -> superseded" || fail "anchor row missing or mis-linked"
+[[ "$CHUNK_COUNT" == "3" ]] && ok "3 fixture chunks present" || fail "expected 3 fixture chunks, got $CHUNK_COUNT"
 
 echo ""
 if [[ $FAIL -eq 0 ]]; then

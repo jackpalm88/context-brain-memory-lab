@@ -83,3 +83,14 @@ def test_seed_script_is_valid_bash_and_matches_the_doc():
         "e9e00003-0000-0000-0000-00000000000c",
     ):
         assert fixture_id in seed_text, f"seed script lost fixture id {fixture_id}"
+
+
+def test_seed_script_isolated_workspace_and_retrievable_chunks():
+    text = SEED.read_text(encoding="utf-8")
+    assert "opencb-epistemics-validation" in text
+    assert "VALIDATION_WS_ID" in text
+    assert "INSERT INTO workspace_memberships" in text
+    assert "INSERT INTO content_chunks" in text
+    assert "workspace_id, chunk_index, chunk_text" in text
+    assert "SET workspace_id = '$SEED_WS_ID'," in text
+    assert "3 fixture chunks present" in text

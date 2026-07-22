@@ -267,6 +267,22 @@ class RetrievalAdapter:
             if query_vector is None:
                 result.setdefault("retrieval_path", "deterministic_fallback")
                 result.setdefault("embedding_status", embedding_degraded or "provider_disabled")
+        lexical_added = 0
+        if query_vector is not None:
+            seen = {str(r.get("content_id") or r.get("id")) for r in results}
+            for row in self._deterministic_vector_search(
+                query,
+                workspace_id=workspace_id,
+                memory_types=memory_types,
+            ):
+                rid = str(row.get("content_id") or row.get("id"))
+                if rid in seen:
+                    continue
+                seen.add(rid)
+                row.setdefault("retrieval_mode", "deterministic_fallback")
+                row.setdefault("embedding_status", "lexical_fallback_alongside_pgvector")
+                results.append(row)
+                lexical_added += 1
         before_hub_count = len(results)
         seen = {str(r.get("content_id") or r.get("id")) for r in results}
         hub_candidates = self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types)
@@ -301,11 +317,12 @@ class RetrievalAdapter:
                     "reason": None,
                 },
                 "deterministic_retrieval": {
-                    "attempted": query_vector is None,
+                    "attempted": True,
                     "used": deterministic_count > 0,
-                    "skipped": query_vector is not None,
+                    "skipped": deterministic_count == 0,
                     "output_count": deterministic_count,
-                    "reason": None if deterministic_count else "not_used",
+                    "reason": None if deterministic_count else "no_deterministic_results",
+                    "lexical_added_alongside_pgvector": lexical_added,
                 },
                 "pgvector": {
                     "attempted": pgvector_attempted,
