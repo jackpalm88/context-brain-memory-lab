@@ -5,7 +5,7 @@ from uuid import UUID
 import json
 
 import psycopg2
-from psycopg2.extras import Json, RealDictCursor
+from psycopg2.extras import Json, RealDictCursor, register_uuid
 
 from .models import (
     ConflictPair,
@@ -30,7 +30,13 @@ class DecisionStore:
         self.database_url = database_url
 
     def _conn(self):
-        return psycopg2.connect(self.database_url)
+        conn = psycopg2.connect(self.database_url)
+        # Without the UUID casters, psycopg2 hands uuid[] columns back as their
+        # raw '{...}' literal string, which _row_to_full then iterates
+        # character-by-character. Scoped to this connection so stores that
+        # expect plain-str uuid columns are untouched.
+        register_uuid(conn_or_curs=conn)
+        return conn
 
     @staticmethod
     def _normalize_alternatives(value: Any) -> List[Dict[str, Any]]:
