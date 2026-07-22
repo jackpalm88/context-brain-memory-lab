@@ -8,7 +8,7 @@ Baseline inspected: `/opt/cbml` HEAD `0ad1eafd5de8b4e0e5480cb0a8e6b605b5a8a73e`;
 
 Public Memory Lab is no longer merely an MCP parity scaffold. The current implementation has a modular public-beta core with these proven layers:
 
-- MCP parity surface: 32/32 approved Context Brain-compatible MCP tool names are registered in the public Memory Lab MCP surface, backed by public API/client adapter paths where applicable.
+- MCP parity surface: 32/32 approved Context Brain-compatible MCP tool names are registered in the public Memory Lab MCP surface, backed by public API/client adapter paths where applicable. *(M10.3-era figure, accurate at writing; the surface is 34 since 2026-07-08 — see MCP_PARITY_TABLE.md UPDATE note.)*
 - Workspace-aware API boundary: public routers use `AuthContext`/permission dependencies and route calls through workspace-scoped adapter paths.
 - Content persistence: submitted bodies are persisted to `content_chunks` as `chunk_index = 0` through a shared `persist_body_chunks` primitive.
 - Content dedup: `content_hash` is stored on `content_items`, with a workspace-scoped partial unique index and friendly API dedup response.

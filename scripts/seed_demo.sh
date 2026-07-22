@@ -135,7 +135,7 @@ INSERT INTO content_items (content_id, workspace_id, node_type, quick_summary, c
 VALUES
     ('c0de0001-0000-0000-0000-000000000001', '$SEED_WS_ID',
      'concept',
-     'OpenCB is an open-source persistent semantic memory layer for AI agents, exposing a 32-tool MCP surface over stdio and HTTP.',
+     'OpenCB is an open-source persistent semantic memory layer for AI agents, exposing a 34-tool MCP surface over stdio and HTTP.',
      'What is OpenCB?',
      '{"domain":"general","word_count":220}'::jsonb),
     ('c0de0002-0000-0000-0000-000000000002', '$SEED_WS_ID',
@@ -145,8 +145,8 @@ VALUES
      '{"domain":"general","word_count":310}'::jsonb),
     ('c0de0003-0000-0000-0000-000000000003', '$SEED_WS_ID',
      'fact',
-     'OpenCB exposes 32 approved MCP tools: save_memory, query_memory, create_hub, link_content_to_hub, create_hub_edge, list_hubs, get_hub, search_raw_chunks, and more.',
-     'OpenCB MCP tool surface (32 tools)',
+     'OpenCB exposes 34 MCP tools: save_memory, query_memory, create_hub, link_content_to_hub, create_hub_edge, list_hubs, get_hub, search_raw_chunks, and more.',
+     'OpenCB MCP tool surface (34 tools)',
      '{"domain":"general","word_count":180}'::jsonb),
     ('c0de0004-0000-0000-0000-000000000004', '$SEED_WS_ID',
      'playbook',
@@ -170,7 +170,7 @@ VALUES
      '{"domain":"general","word_count":195}'::jsonb),
     ('c0de0008-0000-0000-0000-000000000008', '$SEED_WS_ID',
      'concept',
-     'OpenCB exposes its 32 MCP tools over streamable-http (MCP spec 2025-11-05) via FastMCP. Bearer token auth resolves workspace from api_keys table.',
+     'OpenCB exposes its 34 MCP tools over streamable-http (MCP spec 2025-11-05) via FastMCP. Bearer token auth resolves workspace from api_keys table.',
      'MCP streamable-http transport in OpenCB',
      '{"domain":"general","word_count":230}'::jsonb)
 ON CONFLICT (content_id) DO UPDATE
@@ -189,13 +189,13 @@ echo "Stage 4 — Seed content chunks"
 INSERT INTO content_chunks (chunk_id, content_id, chunk_index, chunk_text, word_count)
 VALUES
     ('c0dec001-0000-0000-0000-000000000001', 'c0de0001-0000-0000-0000-000000000001', 0,
-     'OpenCB is an open-source persistent semantic memory layer for AI agents. It exposes a 32-tool MCP surface over stdio and streamable-http transport. Agents save content, create hubs, link content to hubs, and query by semantic similarity. OpenCB is designed for long-term agent memory across sessions and is accessible via the Model Context Protocol.',
+     'OpenCB is an open-source persistent semantic memory layer for AI agents. It exposes a 34-tool MCP surface over stdio and streamable-http transport. Agents save content, create hubs, link content to hubs, and query by semantic similarity. OpenCB is designed for long-term agent memory across sessions and is accessible via the Model Context Protocol.',
      53),
     ('c0dec002-0000-0000-0000-000000000002', 'c0de0002-0000-0000-0000-000000000002', 0,
      'Semantic retrieval in OpenCB works by chunking saved content into paragraph-sized segments, generating vector embeddings per chunk, and using KNN search with pgvector cosine similarity to rank chunks by proximity to the query embedding. When EMBEDDING_PROVIDER is unset, a deterministic keyword fallback is used. Results include hub-match signals for navigation.',
      50),
     ('c0dec003-0000-0000-0000-000000000003', 'c0de0003-0000-0000-0000-000000000003', 0,
-     'OpenCB exposes exactly 32 approved MCP tools. Key tools include: save_memory, query_memory, search_raw_chunks, search_graph_preview, load_graph_node_full, create_hub, list_hubs, get_hub, update_hub, link_content_to_hub, save_and_link_to_hub, create_hub_edge, list_hub_edges, get_graph_snapshot, create_decision_memory, list_decisions, explain_decision, health_check, and classify_content_node.',
+     'OpenCB exposes exactly 34 MCP tools. Key tools include: save_memory, query_memory, search_raw_chunks, search_graph_preview, load_graph_node_full, create_hub, list_hubs, get_hub, update_hub, link_content_to_hub, save_and_link_to_hub, create_hub_edge, list_hub_edges, get_graph_snapshot, create_decision_memory, list_decisions, explain_decision, health_check, and classify_content_node.',
      55),
     ('c0dec004-0000-0000-0000-000000000004', 'c0de0004-0000-0000-0000-000000000004', 0,
      'OpenCB quickstart in four steps: step one is clone the repo and run pip install -e with the test extra. Step two is start PostgreSQL with the pgvector extension enabled and run all migrations in order. Step three is run bash scripts/seed_demo.sh to populate this demo corpus. Step four is start the API server and connect any MCP-compatible agent via stdio or streamable-http transport.',
@@ -210,7 +210,7 @@ VALUES
      'All data in OpenCB is scoped to a workspace_id UUID. Content items, hubs, hub edges, hub-content links, and decisions all carry a workspace_id foreign key. The API enforces workspace boundaries at the query layer so a request for workspace A cannot return data from workspace B. The default workspace is created automatically by migration 017 during first setup.',
      57),
     ('c0dec008-0000-0000-0000-000000000008', 'c0de0008-0000-0000-0000-000000000008', 0,
-     'The OpenCB MCP streamable-http transport exposes all 32 tools over HTTP using the MCP specification 2025-11-05 streamable-http profile. Authentication uses Bearer tokens resolved against the api_keys table. The workspace_id is injected by the MCPBearerAuthMiddleware from the resolved API key record. The stdio transport remains fully functional alongside HTTP with identical tool contracts.',
+     'The OpenCB MCP streamable-http transport exposes all 34 tools over HTTP using the MCP specification 2025-11-05 streamable-http profile. Authentication uses Bearer tokens resolved against the api_keys table. The workspace_id is injected by the MCPBearerAuthMiddleware from the resolved API key record. The stdio transport remains fully functional alongside HTTP with identical tool contracts.',
      55)
 ON CONFLICT (chunk_id) DO UPDATE
     SET chunk_text  = EXCLUDED.chunk_text,

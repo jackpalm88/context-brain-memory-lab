@@ -15,7 +15,7 @@
 #       SM-5  Content get
 #       SM-6  query_memory → six signals
 #       SM-7  retrieval_search → deterministic list
-#       SM-8  MCP tool registry (32 tools, all callable)
+#       SM-8  MCP tool registry (34 tools, all callable)
 #       SM-9  Cross-workspace isolation
 #       SM-10 Governance tier routing
 #       SM-11 save_and_link_to_hub

@@ -1,11 +1,11 @@
 """MCP-HTTP-1 streamable-http MCP server entrypoint.
 
-Exposes the same 32 approved tools as the stdio server (server.py) over
+Exposes the same 34 tools (APPROVED_TOOLS) as the stdio server (server.py) over
 MCP streamable-http transport (MCP spec 2025-11-05).
 
 Key design decisions:
 - server.py (stdio) is NOT changed.
-- 32 tool registrations are identical to server.py.
+- 34 tool registrations are identical to server.py.
 - MCPBearerAuthMiddleware wraps the ASGI app for auth.
 - Auth mode + host/port resolved from env via http_config.
 - ASGI app is importable as `app` for uvicorn/gunicorn mount.

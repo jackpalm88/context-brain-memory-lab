@@ -15,7 +15,7 @@ Smoke checks:
   SM-5  Content get → content_id echoed, workspace-scoped
   SM-6  query_memory → answer + six signals
   SM-7  retrieval_search → list, deterministic, no DB required
-  SM-8  MCP tool registry → APPROVED_TOOLS has 32 entries, all callable
+  SM-8  MCP tool registry → APPROVED_TOOLS has 34 entries, all callable
   SM-9  Cross-workspace isolation (WS_A content invisible from WS_B)
   SM-10 Governance tier routing: discard→no persist, persistent→persist
   SM-11 save_and_link_to_hub → linked=True, hub_id present
@@ -60,7 +60,7 @@ PERMS = [
     "hubs.create", "hubs.read", "hubs.link",
     "retrieval.search",
 ]
-EXPECTED_TOOL_COUNT = 32
+EXPECTED_TOOL_COUNT = 34
 
 # ── results accumulator ────────────────────────────────────────────────────────
 _checks: list[tuple[str, bool, str]] = []

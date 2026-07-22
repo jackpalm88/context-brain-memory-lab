@@ -15,7 +15,7 @@ Retrieval is ranked by composite Scoring Model v2. Nothing you save becomes
 - REST API: `http://127.0.0.1:8088` (docker compose default) or `:8000` (dev_run_api.sh).
   Auth: `Authorization: Bearer <api key>` + optional `X-Workspace-ID: <uuid>`.
   The compose stack runs in local_dev_bypass mode — no key needed there.
-- MCP (stdio): `python -m memory_lab.mcp.server` — 32 approved tools.
+- MCP (stdio): `python -m memory_lab.mcp.server` — 34 tools.
 - MCP (streamable-http): `python -m memory_lab.mcp.http_server` (Bearer auth).
 
 ## Save (write path)
