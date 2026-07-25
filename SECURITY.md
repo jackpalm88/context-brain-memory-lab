@@ -34,7 +34,7 @@ POST /admin/content/{id}/tier/override
 POST /admin/content/{id}/tier/rollback
 ```
 
-**Do not expose port 8000 to a public network without an auth layer.**
+**Do not expose the API port (8000 for local uvicorn, 8088 for the Docker quickstart) to a public network without an auth layer.**
 
 Recommended mitigations:
 - Bind to 127.0.0.1 only in production
