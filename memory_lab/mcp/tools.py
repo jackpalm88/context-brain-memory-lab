@@ -552,8 +552,9 @@ def list_decisions(
     limit: int = 20,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """List decision nodes, optionally filtered by status and/or linked hub.
-    Use get_decision_timeline for a chronological view across the workspace."""
+    """List decision nodes, optionally filtered by linked hub or by status
+    (active, superseded, reversed, or draft). Use get_decision_timeline for a
+    chronological view across the workspace."""
     return _call_api(_client().decision_list, status=status, hub_id=hub_id, limit=limit, workspace_id=workspace_id)
 
 
