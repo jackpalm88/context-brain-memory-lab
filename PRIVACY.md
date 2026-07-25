@@ -35,8 +35,8 @@ All data stays within your local process and your PostgreSQL instance.
 
 If you configure provider keys, the matching opt-in provider path may send request text to that provider:
 
-- : save-time scoring / provider-backed wording can send content text to Anthropic.
-- : opt-in embedding paths can send text to OpenAI for embedding generation.
+- `ANTHROPIC_API_KEY`: save-time scoring / provider-backed wording can send content text to Anthropic.
+- `OPENAI_API_KEY`: opt-in embedding paths can send text to OpenAI for embedding generation.
 - Provider responses are used by this package; content text is NOT stored externally by this package.
 - You are responsible for reviewing each provider's data retention and privacy policy.
 - Disable at any time by unsetting the provider key and provider flag -- fallback paths activate automatically.
