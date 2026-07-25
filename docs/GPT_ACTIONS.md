@@ -203,4 +203,4 @@ If you need any of these for an internal agent, add them separately from the pub
 | `{"status":"unavailable","reason":"database_url_not_configured"}` | `DATABASE_URL` not set on server |
 | Empty results from `query_memory` | Seed demo data: `bash scripts/seed_demo.sh` |
 | `422` on `create_content` | Ensure request body is valid JSON with `content` field |
-| HTTPS not available | Use ngrok for local dev: `ngrok http 8000` |
+| HTTPS not available | Use ngrok for local dev: `ngrok http 8000` (or `ngrok http 8088` for the Docker quickstart port) |
