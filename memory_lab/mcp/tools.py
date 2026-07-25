@@ -557,9 +557,10 @@ def list_decisions(
 
 
 def update_decision_status(decision_id: str, decision_status: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    """Transition a decision's lifecycle status (e.g. active → superseded or
-    deprecated). For replacing a decision with a new one, prefer
-    create_decision_memory with supersedes_decision_id so lineage is preserved."""
+    """Transition a decision's lifecycle status. Valid decision_status values:
+    active, superseded, reversed, or draft. For replacing a decision with a
+    new one, prefer create_decision_memory with supersedes_decision_id so
+    lineage is preserved."""
     return _call_api(
         _client().decision_update_status,
         decision_id=decision_id,
