@@ -15,7 +15,7 @@ By default, this package makes **no external network calls**:
 - No API keys are required for the baseline runtime
 - The only external connection is to your own DATABASE_URL (local PostgreSQL)
 - No class or function initiates outbound requests unless explicitly configured
-  (LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY)
+  (for example, LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY, or EMBEDDING_PROVIDER=openai + OPENAI_API_KEY)
 
 **Fallback behavior (no key configured):**
 Scoring defaults to composite=0.30, tier=transient, fallback_reason exposed in
@@ -49,7 +49,7 @@ There is no built-in credential or token -- auth must be added externally.
 
 - Never commit .env files to version control
 - DATABASE_URL contains credentials -- use environment variables or a secrets manager
-- ANTHROPIC_API_KEY is optional; fallback scoring operates without it
+- ANTHROPIC_API_KEY and OPENAI_API_KEY are optional; deterministic fallback paths operate without them
 - No hardcoded secrets or default credentials exist in this package
 
 ---
