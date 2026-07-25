@@ -33,13 +33,13 @@ All data stays within your local process and your PostgreSQL instance.
 
 ## Optional Provider Path
 
-If you configure ANTHROPIC_API_KEY, save-time scoring sends content text to
-the Anthropic API for quality/relevance/novelty scoring:
+If you configure provider keys, the matching opt-in provider path may send request text to that provider:
 
-- Your content text is sent to Anthropic API (scoring only)
-- Score floats are returned; content text is NOT stored externally by this package
-- You are responsible for reviewing Anthropic's data retention and privacy policy
-- Disable at any time by unsetting ANTHROPIC_API_KEY -- fallback scoring activates automatically
+- : save-time scoring / provider-backed wording can send content text to Anthropic.
+- : opt-in embedding paths can send text to OpenAI for embedding generation.
+- Provider responses are used by this package; content text is NOT stored externally by this package.
+- You are responsible for reviewing each provider's data retention and privacy policy.
+- Disable at any time by unsetting the provider key and provider flag -- fallback paths activate automatically.
 
 ---
 
