@@ -508,10 +508,11 @@ def create_decision_memory(
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a first-class decision node with reason, context, alternatives,
-    confidence_level and lineage. Prefer this over a plain content save for
-    decisions the workspace must track: supersedes_decision_id builds an explicit
-    supersession chain (the old decision is marked superseded automatically),
-    and explain_decision / get_decision_lineage read it back."""
+    confidence_level and lineage. decision_status accepts active, superseded,
+    reversed, or draft. Prefer this over a plain content save for decisions the
+    workspace must track: supersedes_decision_id builds an explicit supersession
+    chain (the old decision is marked superseded automatically), and
+    explain_decision / get_decision_lineage read it back."""
     payload: Dict[str, Any] = {
         "title": title,
         "decision_reason": decision_reason,
