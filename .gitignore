@@ -16,6 +16,7 @@ scripts/deploy_openapi_dev.sh
 
 # internal audit working notes — private infra detail, not part of the public artifact
 engineering/public-repo-release-truth-audit-2026-08-10.md
+engineering/repo-archaeology-human-voice-pass-2026-08-10.md
 
 # local compose overrides — server-side feature toggles, never committed
 docker-compose.override.yml
