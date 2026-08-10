@@ -46,8 +46,9 @@ Full walkthrough (demo corpus, decision records, teardown):
 
 - **MCP** (Claude Code, Claude Desktop, any MCP agent): 34 tools over stdio or
   streamable-http — **[docs/MCP.md](docs/MCP.md)**
-- **Custom GPTs / GPT Actions**: curated 10-operation read/answer schema plus a
-  full REST schema, with a ready-made system prompt —
+- **Custom GPTs / GPT Actions**: two-part Action schema (A + B — split only
+  because ChatGPT Actions caps schemas at 30 tools, not a conceptual split),
+  with a ready-made system prompt —
   **[docs/GPT_ACTIONS.md](docs/GPT_ACTIONS.md)**,
   **[docs/GPT_SYSTEM_PROMPT.md](docs/GPT_SYSTEM_PROMPT.md)**
 - **REST**: the full FastAPI surface, self-documented at `/docs` on a running

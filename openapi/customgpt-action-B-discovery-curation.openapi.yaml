@@ -1,0 +1,893 @@
+openapi: "3.1.0"
+info:
+  title: "OpenCB Memory — CustomGPT Action B (Discovery + Graph Curation)"
+  description: |
+    CustomGPT Action B — the READ-DEEP / GRAPH-CURATION half of a two-part
+    action split (19 operations here, 16 in Action A). The split exists
+    ONLY because ChatGPT Actions enforces a maximum of 30 tools per OpenAPI
+    schema — 35 operations across the two parts cannot fit in one schema.
+    It is not a conceptual separation: together, A and B are the full
+    public OpenCB surface for CustomGPT. Origin split approved by OpenCB
+    decision `63b32b15-8d72-476d-81c4-987f19157206` (superseded); the shape
+    shipped here — including `listHubs`/`getHub` present in both actions so
+    GPT can look up a hub from either action without switching — reflects
+    the active decision `7c422dc5-87f2-4fb5-8ce8-72c07f064d96`.
+
+    Companion file: `customgpt-action-A-crud-decisions.openapi.yaml`.
+    Both must be installed in the same CustomGPT configuration so GPT can
+    chain cross-action (e.g. Action A creates a content_id; Action B reads
+    its lineage / decisions / edges). Action B alone is enough for
+    workflows B (explore memory), C (manage hubs/edges), and E (deep
+    graph inspection). Pair with Action A for workflows A (save a
+    memory) and D (decision management).
+
+    The 5 MCP-only deep-inspection tools (anchors, edge_get,
+    search_graph_preview, list_decisions_for_content, load_graph_node_full)
+    all live in this action because they pair naturally with workflow C
+    writes (curate, accept, reject, archive) — a typical sequence is
+    read-deep → decide → write.
+
+    **Auth:** API Key → Bearer. Header `Authorization: Bearer <token>` — an
+    API key minted on the server (scripts/create_api_key.sh; see
+    docs/GPT_ACTIONS.md §2).
+  version: "1.0.0"
+  contact:
+    name: "OpenCB project"
+
+servers:
+  - url: "https://your-opencb-host"
+    description: "Replace with your deployment's HTTPS URL (set in the GPT Action builder) — must match Action A's server"
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+
+    LineageNode:
+      type: object
+      description: "One decision in a supersession chain; decision_id is accepted by explainDecision and getDecisionLineage."
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        decision_status:
+          type: string
+          enum: [active, superseded, reversed, draft]
+        created_at:
+          type: string
+          format: date-time
+
+    CurrentStateAnchor:
+      type: object
+      description: >-
+        An ACTIVE current-state anchor. content_id names the item that IS current
+        for the scope (accepted by getContentById); supersedes_content_id names
+        what it replaced.
+      properties:
+        anchor_id:
+          type: string
+          format: uuid
+        memory_type:
+          type: string
+        scope:
+          type: string
+        content_id:
+          type: string
+          format: uuid
+        supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+        state_status:
+          type: string
+        quick_summary:
+          type: string
+          nullable: true
+
+    GraphPreviewItem:
+      type: object
+      description: "Lightweight searchGraphPreview result — id and title only; follow up with loadGraphNodeFull for full payload."
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        type:
+          type: string
+        node_type:
+          type: string
+          nullable: true
+
+    EdgeSummary:
+      type: object
+      description: "One edge in a hub-to-hub graph relationship."
+      properties:
+        id:
+          type: string
+        source_hub_id:
+          type: string
+          format: uuid
+        target_hub_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        status:
+          type: string
+        origin:
+          type: string
+        confidence:
+          type: number
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        edge_key:
+          type: string
+
+    GraphNodeFull:
+      type: object
+      description: "Full content node with hub memberships and graph neighborhood (loadGraphNodeFull result)."
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        hubs:
+          type: array
+          items:
+            type: object
+            properties:
+              hub_id:
+                type: string
+                format: uuid
+              title:
+                type: string
+        edges_in:
+          type: array
+          items:
+            $ref: "#/components/schemas/EdgeSummary"
+        edges_out:
+          type: array
+          items:
+            $ref: "#/components/schemas/EdgeSummary"
+
+    DecisionSummary:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        decision_status:
+          type: string
+          enum: [active, superseded, reversed, draft]
+        link_role:
+          type: string
+          enum: [canonical, source]
+          nullable: true
+          description: "canonical = the decision's own narrative representation; source = declared supporting evidence."
+
+paths:
+  /v1/hubs:
+    get:
+      operationId: listHubs
+      x-openai-isConsequential: false
+      summary: "List the workspace's topic hubs"
+      description: "Entry point for orientation. Use before createHub or getGraphSnapshot. Note: returns a bare JSON array (legacy shape), not an envelope."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "Hub lifecycle filter; default 'active'."
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
+      responses:
+        "200":
+          description: "Bare array of hubs"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    hub_id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    hub_type:
+                      type: string
+    post:
+      operationId: createHub
+      x-openai-isConsequential: false
+      summary: "Create a new hub"
+      description: "Hubs organize related content. The title, aliases, and related_terms drive retrieval corroboration and current-state scope resolution. A well-named hub keeps decisions on the same topic in one supersession chain."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                  minLength: 1
+                hub_type:
+                  type: string
+                  enum: [project, system, concept_cluster, topic]
+                  default: topic
+                description:
+                  type: string
+                aliases:
+                  type: array
+                  items:
+                    type: string
+                  default: []
+                related_terms:
+                  type: array
+                  items:
+                    type: string
+                  default: []
+      responses:
+        "201":
+          description: "Hub created"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hub_id:
+                    type: string
+                    format: uuid
+
+  /v1/hubs/{hub_id}:
+    get:
+      operationId: getHub
+      x-openai-isConsequential: false
+      summary: "Fetch one hub by id"
+      description: "Hub details (title, type, description, aliases, related_terms, status). Use this to verify a hub exists before linking content to it."
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          description: "Hub UUID — e.g. from listHubs."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Hub record"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hub_id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  hub_type:
+                    type: string
+                  description:
+                    type: string
+                    nullable: true
+    patch:
+      operationId: updateHub
+      x-openai-isConsequential: false
+      summary: "Update a hub's fields"
+      description: "Only supplied fields change. Investing in aliases and related_terms pays off directly: they drive retrieval corroboration, edge-inference quality, and automatic current-state scope resolution."
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          description: "Hub UUID."
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                hub_type:
+                  type: string
+                  enum: [project, system, concept_cluster, topic]
+                description:
+                  type: string
+                aliases:
+                  type: array
+                  items:
+                    type: string
+                related_terms:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  type: string
+                  enum: [active, archived]
+      responses:
+        "200":
+          description: "Hub updated"
+
+  /v1/current-state/anchors:
+    get:
+      operationId: listCurrentStateAnchors
+      x-openai-isConsequential: false
+      summary: "What is CURRENT for a scope right now? (MCP-only)"
+      description: "Given a scope (e.g. a superseded item's current_state_scope), returns the active anchor(s) naming what IS current there. count=0 means an unclaimed scope, not an error. Not for: free-text lookups without a scope (search first), or history — this reads ACTIVE anchors only."
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          description: "Current-state scope key: a current_state_scope value taken from a content item, or a plain topic phrase. Normalized with the same slugifier the write path uses, so raw wording (e.g. 'Kafka choice') matches its stored form ('kafka-choice')."
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: memory_type
+          in: query
+          required: false
+          description: "Optional filter to one memory type; without it the scope returns one active anchor per memory type that has one."
+          schema:
+            type: string
+            enum: [milestone, decision, principle, anchor, evidence, plan_roadmap, raw_memory]
+      responses:
+        "200":
+          description: "Active anchors for the (normalized) scope"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  anchors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CurrentStateAnchor"
+                  count:
+                    type: integer
+                  scope:
+                    type: string
+                    description: "The normalized scope that was queried."
+        "422":
+          description: "Empty scope or unknown memory_type"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/edges:
+    get:
+      operationId: listHubEdges
+      x-openai-isConsequential: false
+      summary: "List curated hub-to-hub edges"
+      description: "Optionally filtered to edges involving a specific hub. Curated edges only by default; pass include_rejected=true to also see rejected inferred edges. Pair with memoryLabEdgeGet for individual edge detail."
+      parameters:
+        - name: hub_id
+          in: query
+          required: false
+          description: "Filter to edges involving this hub."
+          schema:
+            type: string
+            format: uuid
+        - name: include_rejected
+          in: query
+          required: false
+          description: "Also return rejected inferred edges (normally hidden)."
+          schema:
+            type: boolean
+            default: false
+        - name: include_archived
+          in: query
+          required: false
+          description: "Also return archived (soft-deleted) edges (normally hidden)."
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: "Edge list"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  edges:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EdgeSummary"
+                  count:
+                    type: integer
+    post:
+      operationId: createHubEdge
+      x-openai-isConsequential: false
+      summary: "Create a manual (human-curated) edge between two hubs"
+      description: "Curated edges earn a fixed retrieval boost and appear in graph snapshots. Returns 409 if an active edge with the same (source, target, type) already exists."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_hub_id, target_hub_id, edge_type]
+              properties:
+                source_hub_id:
+                  type: string
+                  format: uuid
+                target_hub_id:
+                  type: string
+                  format: uuid
+                edge_type:
+                  type: string
+                note:
+                  type: string
+                reason:
+                  type: string
+                confidence:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+      responses:
+        "201":
+          description: "Edge created"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+
+  /v1/edges/{edge_id}:
+    get:
+      operationId: memoryLabEdgeGet
+      x-openai-isConsequential: false
+      summary: "Fetch one curated edge by id (MCP-only — REST has list, not get-by-id)"
+      description: "REST has listHubEdges but no direct get-by-id for a single edge. This endpoint is the dedicated read path. Use listHubEdges first to discover edge ids when you don't have one yet."
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          description: "Edge ID."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Single edge record"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdgeSummary"
+        "404":
+          description: "Unknown edge id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updateHubEdge
+      x-openai-isConsequential: false
+      summary: "Update mutable fields on an existing edge"
+      description: "Use this to change the type, status, note, reason, or confidence of a curated edge. To retire an edge entirely, use archiveHubEdge instead."
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          description: "Edge ID."
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                edge_type:
+                  type: string
+                status:
+                  type: string
+                note:
+                  type: string
+                reason:
+                  type: string
+                confidence:
+                  type: number
+      responses:
+        "200":
+          description: "Edge updated"
+
+  /v1/edges/{edge_id}/archive:
+    post:
+      operationId: archiveHubEdge
+      x-openai-isConsequential: false
+      summary: "Archive (soft-delete) a curated edge"
+      description: "Archived edges are hidden by default and free the edge_key for reuse. Use listHubEdges with include_archived=true to see them."
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          description: "Edge ID to archive."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Edge archived"
+
+  /v1/edges/inferred/approve:
+    post:
+      operationId: approveInferredEdge
+      x-openai-isConsequential: false
+      summary: "Persist an approved inferred edge (idempotent upsert)"
+      description: "The human gate of edge inference: nothing an agent or job proposes becomes curated without this call. Idempotent — safe to retry."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_hub_id, target_hub_id, edge_type]
+              properties:
+                source_hub_id:
+                  type: string
+                  format: uuid
+                target_hub_id:
+                  type: string
+                  format: uuid
+                edge_type:
+                  type: string
+                confidence:
+                  type: number
+                reason:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "201":
+          description: "Edge approved and persisted"
+
+  /v1/edges/inferred/reject:
+    post:
+      operationId: rejectInferredEdge
+      x-openai-isConsequential: false
+      summary: "Persist a rejected inferred edge (idempotent upsert)"
+      description: "Rejections are durable: the edge-inference job never silently resurrects a rejected proposal."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_hub_id, target_hub_id, edge_type]
+              properties:
+                source_hub_id:
+                  type: string
+                  format: uuid
+                target_hub_id:
+                  type: string
+                  format: uuid
+                edge_type:
+                  type: string
+                reason:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "201":
+          description: "Rejection persisted"
+
+  /v1/graph/snapshot:
+    get:
+      operationId: listGraphSnapshot
+      x-openai-isConsequential: false
+      summary: "High-level graph view (hubs + edges)"
+      description: "Full graph snapshot: hub nodes + curated edges. For per-node inspection or reverse joins, use searchGraphPreview and loadGraphNodeFull from this same Action B."
+      responses:
+        "200":
+          description: "Graph snapshot"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                        type:
+                          type: string
+                        status:
+                          type: string
+                        aliases:
+                          type: array
+                          items:
+                            type: string
+                        related_terms:
+                          type: array
+                          items:
+                            type: string
+                  edges:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EdgeSummary"
+                  stats:
+                    type: object
+                  schema_version:
+                    type: string
+                  generated_at:
+                    type: string
+
+  /v1/graph/search-preview:
+    get:
+      operationId: searchGraphPreview
+      x-openai-isConsequential: false
+      summary: "Search graph nodes by free text (MCP-only)"
+      description: "Lightweight search — returns id, title, type, node_type only. Use loadGraphNodeFull to get the full payload of any result. Optionally filter by node_type or hub_id."
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: "Free-text search query against graph node titles and types."
+          schema:
+            type: string
+        - name: node_type
+          in: query
+          required: false
+          description: "Filter to a semantic node type (decision, fact, hypothesis, question, etc.)."
+          schema:
+            type: string
+        - name: hub_id
+          in: query
+          required: false
+          description: "Restrict search to nodes in this hub."
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          description: "Maximum number of preview results returned."
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: "Preview list"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GraphPreviewItem"
+                  count:
+                    type: integer
+
+  /v1/graph/nodes/{content_id}/full:
+    get:
+      operationId: loadGraphNodeFull
+      x-openai-isConsequential: false
+      summary: "Load one content node in full graph context (MCP-only)"
+      description: "Heavier than memory_lab_content_get — returns the content fields PLUS its hub memberships and graph neighborhood. Use searchGraphPreview to find a node id first, then this to expand it. Combines what would otherwise be two REST calls."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content node UUID."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Full graph-context node"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphNodeFull"
+
+  /v1/content/{content_id}/metadata:
+    get:
+      operationId: updateNodeMetadata
+      x-openai-isConsequential: false
+      summary: "Read a content item's metadata (read-only despite the 'update' name)"
+      description: "Despite the 'update' name, this is READ-ONLY in production — the MCP tool shares the legacy name, but the operation is a metadata fetch, not a mutation. Use it to inspect node_type, tier, and currency fields without re-fetching the full content record."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content item UUID."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Content metadata"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content_id:
+                    type: string
+                    format: uuid
+                  node_type:
+                    type: string
+                    nullable: true
+                  tier:
+                    type: string
+                    nullable: true
+                  is_current:
+                    type: boolean
+                    nullable: true
+                  current_state_scope:
+                    type: string
+                    nullable: true
+                  cs_supersedes_content_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+
+  /decisions/by-content/{content_id}:
+    get:
+      operationId: listDecisionsForContent
+      x-openai-isConsequential: false
+      summary: "Which decisions reference this content item? (MCP-only)"
+      description: "The content→decision join: given a content_id from retrieval or ask evidence, returns the decision nodes behind it. count=0 means an unlinked item, not an error. Follow with explainDecision / getDecisionLineage. Not for: a held decision_id (explainDecision) or browsing by topic (listDecisions)."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content item UUID whose linked decisions to return — typically a retrieveMemoryEvidence result or answerFromMemory evidence hit."
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          description: "Maximum number of linked decisions returned (newest first)."
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: "Decisions linking the content, newest first"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/DecisionSummary"
+                        - type: object
+                          properties:
+                            link_role:
+                              type: string
+                              enum: [canonical, source]
+                              description: "canonical = the decision's own narrative representation; source = declared supporting evidence."
+                            also_source:
+                              type: boolean
+                  count:
+                    type: integer
+                  content_id:
+                    type: string
+                    format: uuid
+
+  /decisions/{decision_id}/lineage:
+    get:
+      operationId: getDecisionLineage
+      x-openai-isConsequential: false
+      summary: "A decision's supersession chain"
+      description: "Ancestors (what this decision replaced) and descendants (what replaced it). Always consult before presenting a decision as final — lineage prevents overreach."
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          description: "Decision node UUID whose supersession chain to read."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Lineage tree"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision_id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  ancestors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LineageNode"
+                  descendants:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LineageNode"
+                  depth:
+                    type: integer
+                  depth_limit_reached:
+                    type: boolean
+
+  /decisions/conflicts:
+    get:
+      operationId: listDecisionConflicts
+      x-openai-isConsequential: false
+      summary: "Computed contradiction candidates between decisions"
+      description: "Read-only and non-arbitrating: it surfaces potential conflicts for a human to resolve, it never decides which side is true."
+      responses:
+        "200":
+          description: "Conflict candidates"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conflicts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        decision_a:
+                          $ref: "#/components/schemas/DecisionSummary"
+                        decision_b:
+                          $ref: "#/components/schemas/DecisionSummary"
+                        conflict_reason:
+                          type: string
+                  count:
+                    type: integer

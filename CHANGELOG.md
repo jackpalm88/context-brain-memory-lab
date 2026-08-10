@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Changed
+
+- **Public GPT Actions surface replaced: minimal schema removed, the real
+  production Action A + Action B pair published as canonical** (OpenCB
+  decision `df97aa73-0730-4e04-bd16-b86845ccb160`). The 10-operation
+  read-only minimal schema was a different, lesser integration than what is
+  actually connected in production — publishing it created a choice that
+  wasn't real and risked confusing new users about what OpenCB's GPT
+  integration actually does. Removed `openapi/gpt-actions.minimal.openapi.yaml`
+  and its dedicated smoke test; `openapi/customgpt-action-A-crud-decisions.openapi.yaml`
+  (16 ops) and `openapi/customgpt-action-B-discovery-curation.openapi.yaml`
+  (19 ops) are now tracked and documented as the canonical CustomGPT
+  integration, with a new `tests/smoke/test_oas2_ab_schema_smoke.py` pin.
+  `docs/GPT_ACTIONS.md` rewritten around the pair: the split is stated
+  plainly as a ChatGPT Actions platform limit (<30 tools/schema; OpenCB's
+  surface is 35 operations) and NOT a conceptual separation — together A+B
+  are the full integration, always installed together. Exclusion table
+  recomputed against verified route coverage (A∪B covers 32 of 51 non-meta
+  API routes; three routes — `GET /v1/hubs`, `GET /v1/hubs/{hub_id}`,
+  `GET /v1/graph/snapshot` — are intentionally reachable from both actions).
+  `docs/GPT_SYSTEM_PROMPT.md` fully replaced with the prompt actually used
+  in production: proactive "treat memory as your own" behavior (not the
+  prior read-only Q&A framing), de-personalized for public release.
+  Three real, previously-undocumented gaps in the production schema were
+  fixed while writing the new smoke test: two missing parameter
+  descriptions (`include_rejected`, `include_archived` on `listHubEdges`)
+  and one (`limit` on `searchGraphPreview`). The schema's own
+  decision-lineage claim was also stale — it named `63b32b15` as "active"
+  when that decision is actually superseded by the real active decision
+  `7c422dc5` (which approved the `listHubs`/`getHub` duplication across both
+  actions); corrected in both files' description and pinned by smoke AB-11
+  so this exact staleness can't silently recur. Same auth-wording and
+  server-placeholder fixes applied as elsewhere in this release (no
+  server-side `MEMORY_LAB_API_TOKEN`; generic `https://your-opencb-host`).
+  `scripts/deploy_openapi_dev.sh` updated to publish the A/B pair instead of
+  the removed minimal schema.
+
 ### Fixed
 
 - **Release-truth audit 2026-08-10 — the public onboarding path now matches

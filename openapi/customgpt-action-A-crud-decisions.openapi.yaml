@@ -1,0 +1,728 @@
+openapi: "3.1.0"
+info:
+  title: "OpenCB Memory — CustomGPT Action A (CRUD + Decisions)"
+  description: |
+    CustomGPT Action A — the WRITE-PRIMARY half of a two-part action split
+    (16 operations here, 19 in Action B). The split exists ONLY because
+    ChatGPT Actions enforces a maximum of 30 tools per OpenAPI schema — 35
+    operations across the two parts cannot fit in one schema. It is not a
+    conceptual separation: together, A and B are the full public OpenCB
+    surface for CustomGPT. Origin split approved by OpenCB decision
+    `63b32b15-8d72-476d-81c4-987f19157206` (superseded); the shape shipped
+    here — including `listHubs`/`getHub` present in both actions so GPT can
+    look up a hub from either action without switching — reflects the
+    active decision `7c422dc5-87f2-4fb5-8ce8-72c07f064d96`.
+
+    Companion file: `customgpt-action-B-discovery-curation.openapi.yaml`.
+    Both must be installed in the same CustomGPT configuration so GPT can
+    chain cross-action (e.g. Action A creates a content_id; Action B reads
+    its lineage / decisions / edges). Action A alone is enough for workflows
+    A (save a memory) and D (decision management). Pair with Action B for
+    workflows B (explore memory), C (manage hubs/edges), and E (deep graph
+    inspection — note that the 5 MCP-only deep-inspection tools live in B).
+
+    **Auth:** API Key → Bearer. Header `Authorization: Bearer <token>` — an
+    API key minted on the server (scripts/create_api_key.sh; see
+    docs/GPT_ACTIONS.md §2). `checkMemoryHealth` needs no auth.
+  version: "1.0.0"
+  contact:
+    name: "OpenCB project"
+
+servers:
+  - url: "https://your-opencb-host"
+    description: "Replace with your deployment's HTTPS URL (set in the GPT Action builder)"
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+
+    CurrencyFields:
+      type: object
+      description: "Resolver-owned currency: is_current true=current, false=superseded, null=unscoped."
+      properties:
+        is_current:
+          type: boolean
+          nullable: true
+        current_state_scope:
+          type: string
+          nullable: true
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    DecisionSummary:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        decision_status:
+          type: string
+          enum: [active, superseded, reversed, draft]
+        confidence_level:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    EvidenceItem:
+      type: object
+      description: >-
+        One normalized evidence hit. content_id identifies the stored item; it is
+        the identifier accepted by getContentById and listDecisionsForContent.
+        Additional provenance fields may be present.
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        rank:
+          type: integer
+        snippet:
+          type: string
+        title:
+          type: string
+          nullable: true
+        score:
+          type: number
+          nullable: true
+        is_current:
+          type: boolean
+          nullable: true
+          description: "false = this item was superseded; null = unscoped."
+        current_state_scope:
+          type: string
+          nullable: true
+          description: "The scope key accepted by listCurrentStateAnchors."
+        cs_supersedes_content_id:
+          type: string
+          format: uuid
+          nullable: true
+
+paths:
+  /health:
+    get:
+      operationId: checkMemoryHealth
+      x-openai-isConsequential: false
+      summary: "Is the memory backend reachable?"
+      description: "Call first when any action fails unexpectedly — distinguishes backend-down from request errors. Returns service status and version. Not for: routine calls between actions."
+      security: []
+      responses:
+        "200":
+          description: "Service status"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                  version:
+                    type: string
+
+  /v1/hubs:
+    get:
+      operationId: listHubs
+      x-openai-isConsequential: false
+      summary: "List the workspace's topic hubs"
+      description: "Entry point for orientation: what topics does this memory cover? Use this before createHub to pick an existing hub, or to discover which hubs already exist. Note: returns a bare JSON array (legacy shape), not an envelope."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "Hub lifecycle filter; default 'active'. Use 'archived' only when explicitly asked about retired topics."
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
+      responses:
+        "200":
+          description: "Bare array of hubs"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    hub_id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    hub_type:
+                      type: string
+                    description:
+                      type: string
+                      nullable: true
+
+  /v1/hubs/{hub_id}:
+    get:
+      operationId: getHub
+      x-openai-isConsequential: false
+      summary: "Fetch one hub by id"
+      description: "Hub details (title, type, description, aliases, related_terms, status). Use this to verify a hub exists before linking content to it via linkContentToHub."
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          description: "Hub UUID — e.g. from listHubs."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Hub record"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hub_id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  hub_type:
+                    type: string
+                  description:
+                    type: string
+                    nullable: true
+                  aliases:
+                    type: array
+                    items:
+                      type: string
+                  related_terms:
+                    type: array
+                    items:
+                      type: string
+
+  /v1/content/{content_id}:
+    get:
+      operationId: getContentById
+      x-openai-isConsequential: false
+      summary: "Fetch one stored content item by id"
+      description: "The stored record including currency fields — is_current=false means this item was superseded; follow up with listCurrentStateAnchors on its current_state_scope to find what replaced it. Not for: text-only lookups — use retrieveMemoryEvidence to obtain a content_id from free text."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content item UUID — e.g. from retrieveMemoryEvidence results, answerFromMemory evidence/citations, or an anchor's content_id."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Content record"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CurrencyFields"
+                  - type: object
+                    properties:
+                      content_id:
+                        type: string
+                        format: uuid
+                      quick_summary:
+                        type: string
+                        nullable: true
+                      tier:
+                        type: string
+                        nullable: true
+        "404":
+          description: "Unknown id (or foreign workspace — indistinguishable by design)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/retrieval/search:
+    post:
+      operationId: retrieveMemoryEvidence
+      x-openai-isConsequential: false
+      summary: "Retrieve raw ranked evidence for a query"
+      description: "Ranked evidence snippets with scores, provenance and currency fields. Each result carries a content_id accepted by getContentById and listDecisionsForContent. status='no_results' is an honest empty, not an error. Not for: synthesized answers — use answerFromMemory."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  description: "Free-text retrieval query."
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 10
+      responses:
+        "200":
+          description: "Ranked evidence envelope"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvidenceItem"
+                  count:
+                    type: integer
+                  status:
+                    type: string
+                    description: "'ok' when results exist, 'no_results' when the search found nothing — an honest empty, not an error."
+
+  /v1/ask:
+    post:
+      operationId: answerFromMemory
+      x-openai-isConsequential: false
+      summary: "Answer a question from workspace memory"
+      description: "Answers grounded ONLY in saved memory, with citations. status='no_context' is an honest empty, not an error. Superseded memories are demoted unless the question is historical. Evidence items carry content identifiers for follow-up reads. Not for: raw evidence lists — use retrieveMemoryEvidence."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  description: "The question to answer from memory."
+                top_k:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 5
+      responses:
+        "200":
+          description: "Answer envelope with citations and evidence"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+                  status:
+                    type: string
+                    enum: [ok, no_context, clarify, degraded, error]
+                    description: "'no_context' = the memory does not know (honest empty, not an error); 'clarify' = the question is ambiguous; 'degraded' = answered from partial evidence."
+                  insufficient_evidence:
+                    type: boolean
+                    description: "true when the retrieved evidence was too weak to support a grounded answer."
+                  confidence:
+                    type: number
+                  confidence_explanation:
+                    type: string
+                  citations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        evidence_id:
+                          type: string
+                        rank:
+                          type: integer
+                        content_id:
+                          type: string
+                          format: uuid
+                        chunk_id:
+                          type: string
+                          nullable: true
+                        score:
+                          type: number
+                          nullable: true
+                  evidence:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvidenceItem"
+
+  /decisions/:
+    get:
+      operationId: listDecisions
+      x-openai-isConsequential: false
+      summary: "List tracked decisions"
+      description: "Decision nodes with status and confidence, newest first. Filter by status or hub. Use explainDecision for full rationale."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "Filter to one decision lifecycle status; omit to list all."
+          schema:
+            type: string
+            enum: [active, superseded, reversed, draft]
+        - name: limit
+          in: query
+          required: false
+          description: "Maximum number of decisions returned (newest first)."
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: "Decisions envelope"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  count:
+                    type: integer
+    post:
+      operationId: createDecision
+      x-openai-isConsequential: false
+      summary: "Create a tracked decision (first-class node)"
+      description: "Decisions are a special content type with a supersession chain. Prefer createDecision over createContent when the memory is a durable 'we decided X' statement. Pass supersedes_decision_id when replacing a prior decision so the lineage graph stays correct."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, decision_reason]
+              properties:
+                title:
+                  type: string
+                decision_reason:
+                  type: string
+                decision_context:
+                  type: string
+                why_this_matters:
+                  type: string
+                decision_status:
+                  type: string
+                  enum: [active, superseded, reversed, draft]
+                  default: active
+                reversible:
+                  type: boolean
+                  default: true
+                source_content_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                supersedes_decision_id:
+                  type: string
+                  format: uuid
+                  description: "If this decision replaces a prior one, set this to the prior decision_id. The prior will be auto-marked superseded."
+      responses:
+        "200":
+          description: "Created decision"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision_id:
+                    type: string
+                    format: uuid
+
+  /decisions/{decision_id}:
+    get:
+      operationId: explainDecision
+      x-openai-isConsequential: false
+      summary: "Full decision record — what was decided and WHY"
+      description: "Rationale, context, why it matters, alternatives considered, contradicting evidence, and the source/canonical content links."
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          description: "Decision node UUID — e.g. from listDecisions, listDecisionsForContent, or a lineage node."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Full decision"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DecisionSummary"
+                  - type: object
+                    properties:
+                      decision_reason:
+                        type: string
+                      decision_context:
+                        type: string
+                        nullable: true
+                      why_this_matters:
+                        type: string
+                        nullable: true
+                      source_content_ids:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+        "404":
+          description: "Unknown decision id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /decisions/timeline:
+    get:
+      operationId: getDecisionTimeline
+      x-openai-isConsequential: false
+      summary: "Chronological list of decisions"
+      description: "Fastest way to answer 'what has been decided recently?'. Optionally filter by hub or comma-separated tags. Newest first."
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: "Maximum number of timeline entries returned (newest first)."
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: "Timeline envelope"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionSummary"
+                  count:
+                    type: integer
+
+  /v1/graph/snapshot:
+    get:
+      operationId: getGraphSnapshot
+      x-openai-isConsequential: false
+      summary: "High-level graph view (hubs + edges)"
+      description: "Useful for an overview before deeper inspection. For per-node inspection or reverse joins, install Action B (which has searchGraphPreview, loadGraphNodeFull, listCurrentStateAnchors, listDecisionsForContent, memoryLabEdgeGet)."
+      responses:
+        "200":
+          description: "Graph snapshot"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                        type:
+                          type: string
+                        status:
+                          type: string
+                        aliases:
+                          type: array
+                          items:
+                            type: string
+                        related_terms:
+                          type: array
+                          items:
+                            type: string
+                  edges:
+                    type: array
+                    items:
+                      type: object
+                  stats:
+                    type: object
+
+  /v1/content:
+    post:
+      operationId: createContent
+      x-openai-isConsequential: false
+      summary: "Save a new content item, then link it to a hub"
+      description: "The daily write-path: returns a content_id. Follow up with linkContentToHub to attach it to a hub (curation signal), and optionally setQuickSummary. The save is governed — low-signal text is rejected (mode=governed_discarded); write substantive prose."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                scope_hint:
+                  type: string
+                  description: "Optional. Pin the current-state scope for this item (recommended for decisions and findings)."
+      responses:
+        "200":
+          description: "Save result"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content_id:
+                    type: string
+                    format: uuid
+                  tier:
+                    type: string
+                  persisted:
+                    type: boolean
+
+  /v1/content/{content_id}/quick-summary:
+    patch:
+      operationId: setQuickSummary
+      x-openai-isConsequential: false
+      summary: "Set or replace the short human-readable summary of a content item"
+      description: "Good summaries make retrieval results scannable for agents. ~50 tokens is the recommended length."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content item UUID to update."
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quick_summary]
+              properties:
+                quick_summary:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          description: "Update acknowledged"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content_id:
+                    type: string
+                    format: uuid
+                  updated:
+                    type: boolean
+
+  /v1/hubs/{hub_id}/links:
+    post:
+      operationId: linkContentToHub
+      x-openai-isConsequential: false
+      summary: "Link an existing content item to a hub"
+      description: "Use after createContent when the content was not saved with a hub. Manual hub links are a curation signal — linked content earns a fixed recall boost in ranked retrieval."
+      parameters:
+        - name: hub_id
+          in: path
+          required: true
+          description: "Hub UUID."
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_id]
+              properties:
+                content_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: "Link acknowledged"
+
+  /decisions/{decision_id}/status:
+    patch:
+      operationId: updateDecisionStatus
+      x-openai-isConsequential: false
+      summary: "Transition a decision's lifecycle status"
+      description: "Valid statuses: active, superseded, reversed, draft. For REPLACING a decision, prefer createDecision with supersedes_decision_id so the lineage graph stays correct."
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          description: "Decision node UUID."
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision_status]
+              properties:
+                decision_status:
+                  type: string
+                  enum: [active, superseded, reversed, draft]
+      responses:
+        "200":
+          description: "Status updated"
+
+  /v1/content/{content_id}/node-type:
+    patch:
+      operationId: classifyContentNode
+      x-openai-isConsequential: false
+      summary: "Assign a semantic node_type to a content item"
+      description: "Caller-specified, deterministic assignment — NOT automatic / AI classification. Allowed node types: decision, fact, hypothesis, question, playbook, concept, source, task, event, raw_note."
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          description: "Content item UUID."
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [node_type]
+              properties:
+                node_type:
+                  type: string
+                  enum: [decision, fact, hypothesis, question, playbook, concept, source, task, event, raw_note]
+      responses:
+        "200":
+          description: "Node type set"
