@@ -21,3 +21,11 @@ engineering/repo-archaeology-human-voice-pass-2026-08-10.md
 # local compose overrides — server-side feature toggles, never committed
 docker-compose.override.yml
 dist/
+
+# internal kernel-validation reference implementation — undocumented, not
+# packaged (pyproject only ships memory_lab), dormant since 2026-07-08, and
+# its own docstring points to design docs that live outside the public repo.
+# Kept locally (real completed v0 work); not part of the public artifact.
+# 2026-08-10 archaeology pass.
+reference_framework/
+tests/unit/test_reference_framework.py

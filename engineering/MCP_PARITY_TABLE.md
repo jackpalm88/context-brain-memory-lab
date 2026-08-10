@@ -19,7 +19,7 @@ direction). Production remains at 32.
 
 | Surface | Count | Evidence |
 |---|---|---|
-| Production MCP (`/opt/contentingestor/mcp_server.py`) | **32** `@mcp.tool()` | grep == live client == 32 |
+| Production MCP (private hosted Context Brain `mcp_server.py`) | **32** `@mcp.tool()` | grep == live client == 32 |
 | Public MCP (`/opt/cbml/memory_lab/mcp/server.py`) | **18** registered (`APPROVED_TOOLS`) | server.py lines 13–30 |
 
 NOTE: prior docs/handoffs said production exposes "36" — that is stale. Verified count is **32**.
@@ -90,7 +90,7 @@ Tally: ~11 expose-only (incl. 4 thin-adapter), 3 implement (1 post-1.0), 2 drop.
 
 ## M8D2 update — graph snapshot filter parity (2026-06-28)
 
-Decision (Ritvars): real filters + keep alias. Implemented in commit (M8D2).
+Decision: real filters + keep alias. Implemented in commit (M8D2).
 
 - `get_graph_snapshot(include_inferred, include_curated)` — **now functional**, and an
   INTENTIONAL PUBLIC IMPROVEMENT over production. Production accepts `include_inferred`

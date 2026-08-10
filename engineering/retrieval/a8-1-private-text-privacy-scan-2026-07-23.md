@@ -4,6 +4,13 @@ Date: 2026-07-23
 Executor: Codex/server lane
 Repo HEAD before scan: 9c5e4d5
 
+> **Redacted 2026-08-10**: this report's own scanned-artifact table named the
+> real private filesystem paths and one personal name it was itself
+> evaluating for public-safety — an unredacted inventory of "what's not safe
+> to publish" is not safe to publish. Absolute paths replaced with neutral
+> placeholders (`<private-planning-dir>`, `<private-engineering-dir>`,
+> `<private-production-context-brain>`); findings and verdicts unchanged.
+
 ## Scope
 
 A8.1 asks for an inventory of cited-but-private texts and a privacy scan per text.
@@ -25,31 +32,31 @@ as a private canonical source behind the CF design-proposal citations.
 
 ## Scan Commands
 
-Commands were run from `/opt/cbml`.
+Commands were run from the public working tree.
 
 ```bash
-rg -n "AGENT_CONTRACT|MAS_Agent|MAS contract|MAS_Agent_CB_Write_Contract|CLAUDE\.md|CLAUDE|approved hash|approved_hash|§10|Section 10" -S /opt/cbml /opt/cbml.local /opt/cbml-plan
-rg -n "CF-002_DESIGN_PROPOSAL|CF-001-004_DESIGN_PROPOSAL|REFERENCE_FRAMEWORK_V0_FINDINGS|PHASE7_BRIEFING|CF design proposals|REFERENCE_FRAMEWORK" -S /opt/cbml /opt/cbml.local /opt/cbml-plan
-find /opt -maxdepth 6 -iname '*PHASE7*' -o -iname '*BRIEFING*'
+rg -n "AGENT_CONTRACT|MAS_Agent|MAS contract|MAS_Agent_CB_Write_Contract|CLAUDE\.md|CLAUDE|approved hash|approved_hash|§10|Section 10" -S <public-repo> <private-engineering-dir> <private-planning-dir>
+rg -n "CF-002_DESIGN_PROPOSAL|CF-001-004_DESIGN_PROPOSAL|REFERENCE_FRAMEWORK_V0_FINDINGS|PHASE7_BRIEFING|CF design proposals|REFERENCE_FRAMEWORK" -S <public-repo> <private-engineering-dir> <private-planning-dir>
+find <local-root> -maxdepth 6 -iname '*PHASE7*' -o -iname '*BRIEFING*'
 rg -n "(sk-[A-Za-z0-9]|api[_-]?key|token|secret|password|passwd|Bearer|DATABASE_URL|postgres(ql)?://|mysql://|redis://|OPENAI_API_KEY|ANTHROPIC_API_KEY|AWS_ACCESS_KEY|PRIVATE KEY|BEGIN [A-Z ]*PRIVATE KEY|ssh-rsa|ghp_[A-Za-z0-9]|github_pat_|xox[baprs]-)" <private-files>
 rg -n "(https?://|/opt/|/home/|/root/|/srv/|/var/|[0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|@[A-Za-z0-9_.-]+)" <private-files>
-rg -n "(Ricardo|Ritvars|Hermes|Fable|Claude|OpenAI|Anthropic|Contabo|contentingestor|superagents|cbml|OpenCB|private|public|publish|push|GO|gate)" <private-files>
+rg -n "(<names-and-aliases>|Claude|OpenAI|Anthropic|<private-production-context-brain>|<internal-codenames>|cbml|OpenCB|private|public|publish|push|GO|gate)" <private-files>
 ```
 
 ## Inventory And Privacy Results
 
 | Private text | Local artifact scanned | Public citation path | Secret scan | Privacy risk | Publishability verdict |
 | --- | --- | --- | --- | --- | --- |
-| `AGENT_CONTRACT.md` | `/opt/cbml-plan/AGENT_CONTRACT.md` | `scripts/safe_push.sh`, `tests/smoke/test_safe_push_guard.py` cite `AGENT_CONTRACT §10` | No credential/token/private-key values found. Mentions env/key concepts only as absence requirements. | Contains private local path `/opt/cbml`, human name/alias, agent-role process, GO/push doctrine, and historical process incident hashes. | Not safe for raw publication without redaction or public-contract rewrite. Safe extract candidate: §10 hash-bound push invariant, with personal names and private paths generalized. |
-| `MAS_Agent_CB_Write_Contract_v2.yaml` | `/opt/cbml-plan/MAS_Agent_CB_Write_Contract_v2.yaml` | Not directly cited by current public repo search, but private companion contract cited by local governance reconstruction. | No credential/token/private-key values found. | Contains private local path `/opt/cbml-plan/ROADMAP.md`, decision id, human name, internal memory-write policy, and query-memory operational status. | Not safe for raw publication. Could be rewritten as a public memory-write contract after removing private paths, human identifiers, and live-system status details. |
-| `CF-001-004_DESIGN_PROPOSAL.md` | `/opt/cbml.local/engineering/CF-001-004_DESIGN_PROPOSAL.md` | `CHANGELOG.md` cites `engineering CF-001-004_DESIGN_PROPOSAL` | No credential/token/private-key values found. | Contains private workflow/status notes, commit hashes, agent names, and public-surface design rationale. No IPs or URLs found by scan. | Mostly publishable after light redaction and status normalization. Should remove private lane references and clarify whether it is historical proposal or ratified design. |
-| `CF-002_DESIGN_PROPOSAL.md` | `/opt/cbml.local/engineering/CF-002_DESIGN_PROPOSAL.md` | `CHANGELOG.md` cites `engineering CF-002_DESIGN_PROPOSAL` | No credential/token/private-key values found. Regex hit on ordinary word "token" only; not a secret. | Contains private production source path `/opt/contentingestor/...`, commit hashes, agent/process notes, and detailed kernel relationship design. | Not safe for raw publication because of private production path. Public version is feasible after replacing private path with a neutral source reference and normalizing status/process notes. |
-| `REFERENCE_FRAMEWORK_V0_FINDINGS.md` | `/opt/cbml.local/engineering/REFERENCE_FRAMEWORK_V0_FINDINGS.md` | Named as private canonical source in local reconstruction behind CF citations; not directly cited by current public repo search. | No credential/token/private-key values found. | Contains decision id, commit hashes, GO/methodology notes, and CF register details. No private paths, IPs, URLs, or credentials found by scan. | Publishable with moderate cleanup if decision ids and private-process notes are acceptable; otherwise publish a summarized CF register instead. |
-| `PHASE7_BRIEFING.md` | `/opt/contentingestor/.planning/PHASE7_BRIEFING.md` | `memory_lab/governance/constitutionrules.yaml`, `memory_lab/governance/tier_router.py` cite it | No credential/token/private-key values found. No path/IP/URL hits found. | Contains author names/aliases, contributor instructions, and product governance doctrine. | Strong public-doc candidate after author/person-name redaction and a short note that it is historical doctrine. |
+| `AGENT_CONTRACT.md` | `<private-planning-dir>/AGENT_CONTRACT.md` | `scripts/safe_push.sh`, `tests/smoke/test_safe_push_guard.py` cite `AGENT_CONTRACT §10` | No credential/token/private-key values found. Mentions env/key concepts only as absence requirements. | Contains private local path, human name/alias, agent-role process, GO/push doctrine, and historical process incident hashes. | Not safe for raw publication without redaction or public-contract rewrite. Safe extract candidate: §10 hash-bound push invariant, with personal names and private paths generalized. |
+| `MAS_Agent_CB_Write_Contract_v2.yaml` | `<private-planning-dir>/MAS_Agent_CB_Write_Contract_v2.yaml` | Not directly cited by current public repo search, but private companion contract cited by local governance reconstruction. | No credential/token/private-key values found. | Contains private local path, decision id, human name, internal memory-write policy, and query-memory operational status. | Not safe for raw publication. Could be rewritten as a public memory-write contract after removing private paths, human identifiers, and live-system status details. |
+| `CF-001-004_DESIGN_PROPOSAL.md` | `<private-engineering-dir>/CF-001-004_DESIGN_PROPOSAL.md` | `CHANGELOG.md` cites `engineering CF-001-004_DESIGN_PROPOSAL` | No credential/token/private-key values found. | Contains private workflow/status notes, commit hashes, agent names, and public-surface design rationale. No IPs or URLs found by scan. | Mostly publishable after light redaction and status normalization. Should remove private lane references and clarify whether it is historical proposal or ratified design. |
+| `CF-002_DESIGN_PROPOSAL.md` | `<private-engineering-dir>/CF-002_DESIGN_PROPOSAL.md` | `CHANGELOG.md` cites `engineering CF-002_DESIGN_PROPOSAL` | No credential/token/private-key values found. Regex hit on ordinary word "token" only; not a secret. | Contains private production source path (the hosted Context Brain deployment), commit hashes, agent/process notes, and detailed kernel relationship design. | Not safe for raw publication because of private production path. Public version is feasible after replacing private path with a neutral source reference and normalizing status/process notes. |
+| `REFERENCE_FRAMEWORK_V0_FINDINGS.md` | `<private-engineering-dir>/REFERENCE_FRAMEWORK_V0_FINDINGS.md` | Named as private canonical source in local reconstruction behind CF citations; not directly cited by current public repo search. | No credential/token/private-key values found. | Contains decision id, commit hashes, GO/methodology notes, and CF register details. No private paths, IPs, URLs, or credentials found by scan. | Publishable with moderate cleanup if decision ids and private-process notes are acceptable; otherwise publish a summarized CF register instead. |
+| `PHASE7_BRIEFING.md` | `<private-production-context-brain>/.planning/PHASE7_BRIEFING.md` | `memory_lab/governance/constitutionrules.yaml`, `memory_lab/governance/tier_router.py` cite it | No credential/token/private-key values found. No path/IP/URL hits found. | Contains author names/aliases, contributor instructions, and product governance doctrine. | Strong public-doc candidate after author/person-name redaction and a short note that it is historical doctrine. |
 
 Adjacent artifact found but not counted as directly cited by current public repo:
 
-- `/opt/contentingestor/.planning/PHASE7_PLAN.md`: no credentials, private paths,
+- `<private-production-context-brain>/.planning/PHASE7_PLAN.md`: no credentials, private paths,
   IPs, or URLs found by scan. Contains Anthropic dependency/latency discussion,
   SQL/schema snippets, implementation sequence, and contributor/process notes.
   Treat as not in A8.1 core inventory unless a later card expands the scope from

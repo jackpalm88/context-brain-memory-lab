@@ -6,12 +6,9 @@ rationale; any other client — a custom GPT, Claude over MCP, a script over
 REST — can later ask *what was decided and why* and get a grounded, cited
 answer from the same memory.
 
-Ordinary chat memory lives and dies inside one conversation with one vendor.
-OpenCB is the shared spine underneath: workspace-scoped storage with quality
-governance (low-value saves are scored and rejected, not hoarded),
-decision lineage (what superseded what), current-state tracking, a curated
-hub/topic graph, and evidence-grounded answering that says
-"the memory has nothing on X" instead of inventing an answer.
+OpenCB gives AI clients a shared memory for decisions, context and evidence —
+with history, workspace isolation, and honest retrieval when the answer
+isn't there. Full capability list: [docs/CAPABILITIES.md](docs/CAPABILITIES.md).
 
 **Version** `1.0.0` · Python ≥ 3.12 · Apache-2.0 · self-hosted (Docker or pip)
 
@@ -39,6 +36,8 @@ curl -s -X POST http://127.0.0.1:8088/v1/ask -H 'Content-Type: application/json'
 #   "insufficient_evidence" when the memory does not know.
 ```
 
+Same flow as a script: `python examples/decision_recall_demo.py`.
+
 Full walkthrough (demo corpus, decision records, teardown):
 **[docs/INSTALL.md](docs/INSTALL.md)**.
 
@@ -55,36 +54,12 @@ Full walkthrough (demo corpus, decision records, teardown):
   instance; API keys for network-exposed deployments via
   `scripts/create_api_key.sh`
 
-## What's inside
-
-- **Governed save** — scoring, tiering, dedup, deterministic classification,
-  current-state resolution; an empty or low-quality save fails loudly, never
-  silently.
-- **Decision memory** — decisions with rationale, alternatives, supersession
-  lineage, and links to the content they rest on (both directions readable).
-- **Evidence-grounded ask** — answers bounded to retrieved workspace evidence
-  with citations; superseded items are demoted; honest empties are explicit.
-- **Hub graph** — curated topic hubs, deterministic edge inference with a
-  human approve/reject gate; contradictions are surfaced, never auto-resolved.
-- **Retrieval with provenance** — composite-ranked search where every result
-  carries trust/ranking diagnostics; 34 described MCP tools mirror the REST
-  surface.
-- **Workspaces + auth** — workspace-scoped data, role-based permissions, and
-  hashed API-key auth for network deployments (see
-  [SECURITY.md](SECURITY.md)); every response names the workspace it touched.
-- **Provider-neutral core** — everything above runs deterministically with no
-  LLM or embedding keys. Postgres/pgvector persistence and OpenAI/Anthropic
-  adapters are explicit opt-ins with degraded fallbacks.
-
-For the compact capability/non-claim map see
-[docs/CAPABILITIES.md](docs/CAPABILITIES.md); ratified architecture
-boundaries live in
-[docs/ARCHITECTURE_BOUNDARIES.md](docs/ARCHITECTURE_BOUNDARIES.md).
+Architecture boundaries: [docs/ARCHITECTURE_BOUNDARIES.md](docs/ARCHITECTURE_BOUNDARIES.md).
 
 ## Project status
 
-Public beta / release candidate `1.0.0`, feature-complete and closed against a
-nine-scenario full-provider field-validation cycle. This is a self-hosted
+Public beta / release candidate `1.0.0`, feature-complete and tested
+end-to-end including real provider and vector paths. This is a self-hosted
 package and architecture reference — it is **not** a hosted service, not
 production tenancy/billing, and not yet published to PyPI (install from
 source). Known limitations and vNext items are tracked in

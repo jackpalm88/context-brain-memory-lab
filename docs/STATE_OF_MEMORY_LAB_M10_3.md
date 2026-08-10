@@ -1,7 +1,7 @@
 # State of Memory Lab after M10.3 — Remaining Functionality Inventory
 
 Date: 2026-06-29
-Scope: read-only architecture inventory comparing public `context-brain-memory-lab` (`/opt/cbml`) with hosted/private Context Brain (`/opt/contentingestor`) after M10.3 optional semantic enrichment.
+Scope: read-only architecture inventory comparing public `context-brain-memory-lab` with the hosted/private Context Brain deployment after M10.3 optional semantic enrichment.
 Baseline inspected: `/opt/cbml` HEAD `0ad1eafd5de8b4e0e5480cb0a8e6b605b5a8a73e`; approved/pushed milestone commit was `aefcd90acaf68bd82efc940541d6438782ada66b`.
 
 ## 1. Current public Memory Lab core

@@ -2,7 +2,64 @@
 
 ## Unreleased
 
+### Security
+
+- **Redacted private infrastructure paths and a personal name from three
+  tracked docs** (`engineering/retrieval/a8-1-private-text-privacy-scan-2026-07-23.md`,
+  `engineering/MCP_PARITY_TABLE.md`, `docs/STATE_OF_MEMORY_LAB_M10_3.md`):
+  found by a repo-archaeology pass, these named the private planning/
+  engineering directories and the private production Context Brain
+  deployment by absolute filesystem path, plus one contributor's name in a
+  decision note. Replaced with neutral placeholders; findings/verdicts
+  otherwise unchanged. Git history was deliberately NOT rewritten (these
+  path strings are not credentials; a force-push carries more disruption
+  risk than benefit) — a separate full-history secret/PII scan was run
+  instead (no API keys, tokens, private keys, or embedded DB credentials
+  found anywhere in history; commit-author-identity PII found and reported
+  separately for a deliberate decision, not fixed here).
+
+### Removed
+
+- **Repo archaeology pass — dead/orphaned artifacts removed from the public
+  tree.** Second pass after the release-truth audit, this time asking "does
+  every file still earn its place" rather than "does the public path work":
+  - `requirements-pr1b-mcp.txt`, `requirements-pr1b-runtime.txt` — orphaned
+    milestone artifacts (internal "PR1B" codename), fully superseded by
+    `pyproject.toml` (the Dockerfile's own comment already named it the
+    dependency source of truth), referenced nowhere.
+  - `examples/b31_supplied_text_prompt_flow_smoke.py` — the only file in
+    `examples/` was an internal QA fixture named after an internal
+    milestone number, exercising an undocumented module. Replaced with
+    `examples/decision_recall_demo.py` — a real, runnable "client A saves a
+    decision, client B recalls it" demo matching the README's own opening
+    story, using the actual REST API. `tests/unit/test_b34_public_example_usability_smoke.py`
+    (specific to the old fixture's offline, zero-dependency contract)
+    removed; `tests/smoke/test_examples_decision_recall_demo_smoke.py`
+    added (validates the new example fails gracefully without a live API,
+    since the hermetic gate has no compose stack to demo against for real).
+  - `reference_framework/` (8 files) + its `tests/unit/test_reference_framework.py`
+    — untracked from the public repo (kept locally, `.gitignore`d): real,
+    complete v0 work (5 commits, dormant since 2026-07-08), but not shipped
+    in the installable package (`pyproject.toml` only packages `memory_lab`),
+    not documented anywhere public-facing, and its own docstring pointed to
+    design docs that don't exist in this repo. Making it a real documented
+    public capability was out of scope for a surgical cleanup pass.
+
 ### Changed
+
+- **README shortened — human-voice pass.** Cut passages that read as
+  generated architecture prose rather than something a maintainer would
+  write: a six-noun-phrase value-prop sentence (workspace-scoped storage,
+  quality governance, decision lineage, current-state tracking, hub graph,
+  evidence-grounded answering, all in one sentence) replaced with one plain
+  sentence pointing to `docs/CAPABILITIES.md` for the full list; the
+  "What's inside" section (7 bullets nearly duplicating CAPABILITIES.md,
+  which the README links to immediately after) removed entirely rather than
+  rewritten; "closed against a nine-scenario full-provider field-validation
+  cycle" (internal process metric) and "ratified architecture boundaries"
+  (internal governance vocabulary) shortened to plain language. Net: fewer
+  words, not different-sounding words — nothing was rewritten to sound more
+  "human," passages were deleted or shortened per direction.
 
 - **Public GPT Actions surface replaced: minimal schema removed, the real
   production Action A + Action B pair published as canonical** (OpenCB
@@ -90,8 +147,8 @@
     rerun): `pyproject` allowed `mcp>=1.27` unbounded; the 2026-08 upstream
     2.0.0 release removed `mcp.server.fastmcp`, so any fresh
     `pip install -e .` (including the hermetic gate's venv) could no longer
-    import the MCP servers. Now pinned `mcp>=1.27,<2` — matching the tested
-    1.27.x line and the existing `requirements-pr1b-mcp.txt` pin.
+    import the MCP servers. Now pinned `mcp>=1.27,<2` — matching the
+    already-tested 1.27.x line.
 
 - **Minimal GPT Actions schema told GPT to expect a field REST never sends.**
   *(2026-07-10; the status value it introduced was itself wrong — corrected by

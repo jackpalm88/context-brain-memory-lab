@@ -28,7 +28,7 @@ CLAIMS = [
     ("docs/CAPABILITIES.md", r"— (\d+) MCP tools are registered", "MCP surface bullet"),
     ("docs/CAPABILITIES.md", r"all (\d+) MCP tools ship useful descriptions", "MCP ergonomics bullet"),
     (".claude/skills/opencb-memory/SKILL.md", r"memory_lab\.mcp\.server` — (\d+) tools", "skill connection line"),
-    ("README.md", r"(\d+) described MCP tools", "README feature line"),
+    ("README.md", r"(\d+) tools over stdio or", "README feature line"),
     ("memory_lab/mcp/http_server.py", r"the same (\d+) tools \(APPROVED_TOOLS\)", "http_server docstring"),
     ("memory_lab/mcp/http_server.py", r"(\d+) tool registrations are identical", "http_server design note"),
     ("scripts/install_smoke_app.py", r"^EXPECTED_TOOL_COUNT = (\d+)$", "SM-8 expected count"),
