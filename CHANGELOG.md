@@ -39,6 +39,15 @@
   `scripts/deploy_openapi_dev.sh` updated to publish the A/B pair instead of
   the removed minimal schema.
 
+- **`docs/GPT_SYSTEM_PROMPT.md`: epistemic discipline restored alongside
+  proactive saving.** The A/B prompt above dropped three rules the prior
+  read-only prompt had (grounded/cited answers, lineage/current-state check
+  before treating anything as final, explicit ambiguity handling) without
+  restating them for the new write-capable behavior. Product review: the
+  two are not in tension — added back as two prose paragraphs using the
+  real Action A/B operationIds (`getDecisionLineage`, `listCurrentStateAnchors`,
+  `is_current`), not the old file's rule-list formatting.
+
 ### Fixed
 
 - **Release-truth audit 2026-08-10 — the public onboarding path now matches
