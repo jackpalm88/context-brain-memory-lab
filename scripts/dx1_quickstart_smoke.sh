@@ -49,7 +49,7 @@ echo ""
 echo "Step 2: POST /v1/content (save probe)"
 SAVE_RESP=$(curl -sf --max-time 15 -X POST "$API_URL/v1/content" \
   -H 'Content-Type: application/json' \
-  -d "{\"content\": \"DX-1 quickstart smoke probe. Token: ${PROBE_TOKEN}. This is a deterministic save to verify the onboarding stack end-to-end. Decision: compose stack is operational.\"}" \
+  -d "{\"content\": \"DX-1 quickstart smoke probe (token ${PROBE_TOKEN}). Operational decision: the compose onboarding stack is treated as verified once this governed save persists and is retrievable through workspace search. Rationale: the save path exercises scoring, tiering, classification, and body persistence in one call, so a persisted probe proves the API, database, and migrations are wired correctly end-to-end. Alternatives considered: a bare health check was rejected because it does not touch the persistence path.\"}" \
   2>&1) || {
   step_fail "save — curl failed"
   SAVE_RESP=""
@@ -97,6 +97,28 @@ else
         step_fail "search — 0 results for probe token (response: $SEARCH_RESP)"
       fi
     fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 4: hubs listing
+# ---------------------------------------------------------------------------
+echo ""
+echo "Step 4: GET /v1/hubs (hub listing)"
+HUBS_RESP=$(curl -sf --max-time 10 "$API_URL/v1/hubs" 2>&1) || {
+  step_fail "hubs — curl failed"
+  HUBS_RESP=""
+}
+if [ -n "$HUBS_RESP" ]; then
+  NHUBS=$(echo "$HUBS_RESP" | jq -r 'length' 2>/dev/null)
+  if [ -z "$NHUBS" ] || [ "$NHUBS" = "null" ]; then
+    step_fail "hubs — response is not a JSON array: $HUBS_RESP"
+  elif [ -n "${EXPECT_DEMO_SEED:-}" ] && [ "$NHUBS" -eq 0 ]; then
+    # After scripts/seed_demo.sh, an empty listing means the seeded hubs are
+    # invisible to list_hubs (e.g. NULL workspace_uuid) — a real defect.
+    step_fail "hubs — 0 hubs listed although EXPECT_DEMO_SEED is set"
+  else
+    step_pass "hubs — ${NHUBS} hub(s) listed"
   fi
 fi
 

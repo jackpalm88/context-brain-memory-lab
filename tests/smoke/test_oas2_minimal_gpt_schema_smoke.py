@@ -135,8 +135,12 @@ def test_m9_answer_envelope_matches_rest_truth(doc):
     assert "no_context" not in props, (
         "no_context is an MCP-layer enrichment; the REST /v1/ask response never carries it"
     )
-    assert "status" in props and "no_context" in props["status"].get("enum", []), (
-        "the honest-empty signal on REST is status='no_context'"
+    # ask_projection.py emits exactly ok | insufficient_evidence | unsupported_intent.
+    # The 2026-07-10 fix pinned a fictional 'no_context' status here; the
+    # 2026-08-10 release-truth audit (P0-4) corrected schema AND pin together.
+    enum = set(props["status"].get("enum", []))
+    assert enum == {"ok", "insufficient_evidence", "unsupported_intent"}, (
+        f"status enum must match ask_projection.py statuses, got: {sorted(enum)}"
     )
     assert "insufficient_evidence" in props
 

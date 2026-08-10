@@ -12,7 +12,7 @@ self-hosted OpenCB instance.
 | OpenCB installed + migrated | See `docs/INSTALL.md` |
 | Demo data seeded (optional) | `bash scripts/seed_demo.sh` |
 | API service running | `uvicorn memory_lab.api.main:app --host 0.0.0.0 --port 8000` |
-| Bearer token | Set `MEMORY_LAB_API_TOKEN` on the server; copy it for GPT Actions |
+| Bearer token | Mint an API key on the server: `bash scripts/create_api_key.sh` (see §2) |
 | Public HTTPS URL | GPT Actions require HTTPS. Use a reverse proxy (nginx/caddy) or ngrok for dev. |
 
 ---
@@ -53,15 +53,36 @@ empties) and the action-selection playbook for the 10 minimal operations.
 
 ## 2. Authentication
 
-In the GPT Action builder:
+OpenCB authenticates Bearer tokens against the `api_keys` table (SHA-256
+hash match, plus subject and workspace-membership checks). There is no static
+token env var on the server — a key must exist in the database.
+
+**Server side** — enable API-key auth and mint a key:
+
+```bash
+# .env (or environment): switch off the local-dev bypass
+MEMORY_LAB_AUTH_MODE=api_key
+
+# Mint a key (prints the token ONCE — store it in a secrets manager):
+bash scripts/create_api_key.sh --name "gpt-actions" --role reader
+```
+
+Use `--role writer` for a knowledge-writing GPT. The script creates an auth
+subject, stores only the key's hash, and grants membership in the default
+workspace (override with `--workspace <uuid>`).
+
+**GPT Action builder side:**
 
 - **Auth type:** `API Key`
 - **Header name:** `Authorization`
 - **Header value format:** `Bearer <your-token>`
 
-The token is the same `MEMORY_LAB_API_TOKEN` configured on the server.
 Never use a database password or internal secret here — the Bearer token
 is the only credential exposed to the action.
+
+The Docker quickstart (`docker compose up`) runs in `local_dev_bypass` mode
+and needs no token for local calls — but anything network-exposed (including
+an ngrok tunnel for GPT Actions) should switch to `api_key` mode first.
 
 ---
 
@@ -93,6 +114,15 @@ enable:
 | `create_hub` | Create a new topic cluster |
 | `link_content_to_hub` | Attach content to a hub |
 | `create_decision_memory` | Record a decision with rationale |
+
+Recording a decision (the "client A writes, client B recalls" demo) takes two
+calls: `create_content` with the full context (saves are governed — substantive
+content passes the quality floor, throwaway one-liners are discarded with
+`persisted: false`), then `create_decision_memory` with `title`,
+`decision_reason` (required), and the returned content id in
+`source_content_ids`. Any other client — another GPT, an MCP agent, curl —
+can then answer "what was decided and why" via `query_memory`/`answerFromMemory`
+and `explain_decision`.
 
 ---
 
@@ -132,7 +162,7 @@ We used to have [superseded item from demo seed] — what do we use now?
   FAIL: the superseded item presented as the answer.
 
 What do we know about [topic that is NOT in the knowledge base]?
-→ answerFromMemory (status "no_context") → retrieveMemoryEvidence with
+→ answerFromMemory (status "insufficient_evidence") → retrieveMemoryEvidence with
   reworded query (no relevant results)
   PASS: "the memory has nothing on X" only after BOTH checks, with both
   named. FAIL: a fabricated answer, or "nothing" after a single call.
@@ -150,30 +180,31 @@ contains content about:
 
 ## 5. MCP alternative
 
-If your client supports the MCP streamable-http transport (Claude, Hermes Agent, etc.),
-connect directly to the MCP endpoint instead of this REST API:
+If your client supports MCP (Claude Code, Claude Desktop, Hermes Agent, etc.),
+connect to the MCP server instead of this REST API. All 34 MCP tools are
+available with identical semantics to the REST surface.
 
-```
-POST https://your-opencb-host/mcp
-Authorization: Bearer <your-token>
-```
+The MCP server is a **separate process** (`python -m memory_lab.mcp.http_server`,
+default `127.0.0.1:8765`) — it is not part of the docker-compose stack and not
+mounted on the REST API port. A same-origin `https://your-opencb-host/mcp` URL
+only exists if your reverse proxy routes it there.
 
-All 34 MCP tools are available with identical semantics to the REST surface.
-See `docs/INSTALL.md` → *MCP HTTP Transport* section.
+Setup, env vars, auth modes, and client configuration: see
+[docs/MCP.md](MCP.md).
 
 ---
 
 ## 6. Base URL
 
-The `servers` block in the schema uses a placeholder:
+The `servers` block in both schemas uses a placeholder:
 
 ```yaml
 servers:
-  - url: "https://your-opencb-host/api"
+  - url: "https://your-opencb-host"
 ```
 
 Override this in the GPT Action builder with your actual deployment URL.
-The API prefix (`/api`) depends on your reverse proxy configuration — adjust as needed.
+If your reverse proxy serves the API under a prefix (e.g. `/api`), include it.
 
 ---
 
@@ -187,9 +218,15 @@ The following endpoint categories are intentionally excluded from the public sch
 | `/v1/reasoning/*` | Experimental internal traversal |
 | `/v1/conflicts/*` | Internal dedup tooling |
 | `/v1/context-packs/*` | Internal batch packing |
+| `/v1/content/batch` | Bulk ingestion — scripted use, not agent-facing |
+| `/v1/retrieval/similar`, `/v1/retrieval/feedback` | DX/experimental retrieval routes |
+| `/v1/escalations*` | Conflict-escalation review — human governance gate |
+| `/v1/edges/inferred/approve`, `/v1/edges/inferred/reject` | Edge-inference review — human governance gate |
+| `PATCH /v1/edges/{id}` | Graph curation — operator use |
 | `/v1/graph/health` | Operator observability, not agent-facing |
 | `/v1/graph/alias-candidates` | Internal graph curation |
 | `/v1/hubs/{id}/recall-health` | Operator observability |
+| `/v1/audit/keywords` | Operator observability |
 
 If you need any of these for an internal agent, add them separately from the public schema.
 
@@ -199,7 +236,8 @@ If you need any of these for an internal agent, add them separately from the pub
 
 | Symptom | Fix |
 |---|---|
-| `401 Unauthorized` | Check Bearer token matches `MEMORY_LAB_API_TOKEN` |
+| `401 invalid_api_key` / `unauthenticated` | The Bearer token does not match any active key in `api_keys` — mint one with `scripts/create_api_key.sh` and check `MEMORY_LAB_AUTH_MODE=api_key` |
+| `403 workspace_membership_required` | The key's subject has no membership in the target workspace — re-run `create_api_key.sh` with `--workspace <uuid>` or add a membership row |
 | `{"status":"unavailable","reason":"database_url_not_configured"}` | `DATABASE_URL` not set on server |
 | Empty results from `query_memory` | Seed demo data: `bash scripts/seed_demo.sh` |
 | `422` on `create_content` | Ensure request body is valid JSON with `content` field |

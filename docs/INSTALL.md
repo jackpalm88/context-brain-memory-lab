@@ -35,7 +35,7 @@ Subsequent runs use the cached image.
 
 ```bash
 curl http://127.0.0.1:8088/health
-# Expected: {"status":"ok"}
+# Expected: {"status":"ok","service":"memory-lab-api","version":"1.0.0"}
 ```
 
 Or run the quickstart smoke script (requires curl + jq):
@@ -46,17 +46,60 @@ bash scripts/dx1_quickstart_smoke.sh
 
 ## 5. Save and query
 
+OpenCB is a **governed** memory: every save is scored (quality, relevance,
+novelty) and routed to a tier. Content below the quality floor is **discarded,
+not stored** — the response says so explicitly (`"persisted": false,
+"discarded": true, "tier": "discard"`). A one-line throwaway note will be
+rejected; a substantive memory (a decision with its rationale, a fact with
+context) passes. That is by design: the memory only keeps what is worth
+retrieving later.
+
+Save a realistic first memory:
+
 ```bash
-# Save
 curl -s -X POST http://127.0.0.1:8088/v1/content \
   -H 'Content-Type: application/json' \
-  -d '{"content": "My first memory. Decision: use OpenCB for workspace recall."}' | jq .
+  -d '{"content": "Architecture decision: we chose PostgreSQL with pgvector for OpenCB persistence because it keeps deterministic fallback retrieval and vector KNN in one operational store. Rationale: single backup path, mature tooling, and the deterministic core must work without embeddings. Alternatives considered: a dedicated vector DB was rejected for operational overhead in self-hosted setups."}' | jq .
+```
 
-# Query
+Expected response (abridged) — check for `"created": true` and
+`"persisted": true`:
+
+```json
+{
+  "created": true,
+  "persisted": true,
+  "discarded": false,
+  "scores": {"quality": 0.72, "relevance": 0.5, "novelty": 0.65, "composite": 0.622},
+  "tier": "probationary",
+  "content_id": "…",
+  "memory_type": "decision",
+  "workspace_id": "…"
+}
+```
+
+Note that OpenCB classified the save as a `decision` on its own, and every
+response names the workspace it wrote to.
+
+Query it back:
+
+```bash
 curl -s -X POST http://127.0.0.1:8088/v1/retrieval/search \
   -H 'Content-Type: application/json' \
-  -d '{"query": "first memory"}' | jq .
+  -d '{"query": "which database did we choose and why"}' | jq '.results[0].snippet, .count'
 ```
+
+Or ask a question and get a grounded, cited answer (no provider keys needed —
+this is the deterministic path):
+
+```bash
+curl -s -X POST http://127.0.0.1:8088/v1/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "What database did we choose for persistence and why?"}' | jq '{answer, citations, status}'
+```
+
+Asking about something the memory does not contain returns an honest empty
+(`"status": "insufficient_evidence"`), never an invented answer.
 
 ## 6. (Optional) seed demo corpus
 
@@ -66,6 +109,15 @@ docker compose --profile demo up seed
 
 Loads the DEMO-1 synthetic corpus (~10 documents) so `/v1/retrieval/search` has
 something to retrieve out of the box.
+
+## 6b. Connect an AI client
+
+- **MCP** (Claude Code, Claude Desktop, any MCP-capable agent): see
+  [docs/MCP.md](MCP.md) — all 34 tools over stdio or streamable-http.
+- **GPT Actions / OpenAPI clients**: see [docs/GPT_ACTIONS.md](GPT_ACTIONS.md)
+  — curated read/answer schema plus the full REST schema.
+- **API keys** for network-exposed deployments: `bash scripts/create_api_key.sh`
+  (the compose quickstart needs no key — it runs in local-dev bypass mode).
 
 ## 7. Tear down
 
@@ -161,7 +213,7 @@ Health check:
 
 ```bash
 curl http://127.0.0.1:8000/health
-# Expected: {"status":"ok"}
+# Expected: {"status":"ok","service":"memory-lab-api","version":"1.0.0"}
 ```
 
 ## 6. Run tests

@@ -4,13 +4,85 @@
 
 ### Fixed
 
+- **Release-truth audit 2026-08-10 — the public onboarding path now matches
+  live behavior.** A full fresh-clone audit (README → docker quickstart →
+  first save → GPT Actions → MCP) found and fixed:
+  - *Demo seed hubs invisible to the API* (P0): `scripts/seed_demo.sh` left
+    `cb_hubs.workspace_uuid` NULL while `list_hubs` filters on it, so
+    `GET /v1/hubs` returned `[]` after the documented seed. The seed now sets
+    `workspace_uuid` (and heals pre-fix rows on re-run), verifies it in
+    Stage 7, and the quickstart smoke gained a hubs step
+    (`EXPECT_DEMO_SEED=1` makes an empty listing a failure).
+  - *Quickstart's first save was silently discarded* (P0): the INSTALL.md
+    step-5 example scored below the quality floor
+    (`quality 0.2 < 0.4` → `persisted: false`), so the documented follow-up
+    search found nothing. INSTALL.md now uses a realistic decision-style save,
+    shows the expected governed response, and explains scoring/tiers/discard.
+    The quickstart smoke's own probe had the same defect (`quality 0.3` →
+    discarded → steps 2–3 failed on a pristine stack); its probe content is
+    now substantive enough to pass the governed floor it is testing.
+  - *Honest-empty status corrected — again, this time against the
+    implementation* (P0): the entry below (2026-07-10) replaced the fictional
+    `no_context` **boolean** with an equally fictional `status: "no_context"`;
+    REST `/v1/ask` actually emits `ok | insufficient_evidence |
+    unsupported_intent` (`ask_projection.py`). Schema enum, system prompt,
+    GPT_ACTIONS chain test, and the M-9 smoke pin now all state
+    `status: "insufficient_evidence"`.
+  - *Server-side `MEMORY_LAB_API_TOKEN` documented but nonexistent* (P0):
+    the REST server validates hashed keys from the `api_keys` table; the env
+    var is only the MCP client's outbound token. Docs rewritten; key minting
+    now exists (see Added).
+  - *Stale under-claims removed from SECURITY.md* (P1): it said admin
+    endpoints are unauthenticated and that no credentials, RBAC, or audit
+    trail exist — all three ship since the auth milestones (role-gated admin
+    routes, hashed API keys, `cb_audit_events`). Rewritten to current truth.
+  - *Public REST schema workspace description* (P1): workspace is selected by
+    `X-Workspace-ID` / server default on REST (membership always enforced),
+    and resolved from the token only on the MCP HTTP transport — the schema
+    said the token resolves it everywhere.
+  - *Fresh installs broken by `mcp` 2.0.0* (P0, found by the audit's gate
+    rerun): `pyproject` allowed `mcp>=1.27` unbounded; the 2026-08 upstream
+    2.0.0 release removed `mcp.server.fastmcp`, so any fresh
+    `pip install -e .` (including the hermetic gate's venv) could no longer
+    import the MCP servers. Now pinned `mcp>=1.27,<2` — matching the tested
+    1.27.x line and the existing `requirements-pr1b-mcp.txt` pin.
+
 - **Minimal GPT Actions schema told GPT to expect a field REST never sends.**
-  The `answerFromMemory` response schema and `docs/GPT_SYSTEM_PROMPT.md` keyed
-  the honest-empty behavior on a `no_context: true` boolean that exists only in
-  the MCP enrichment layer — the REST `/v1/ask` envelope signals it as
-  `status: "no_context"` + `insufficient_evidence: true`. Schema and prompt now
-  declare the REST truth (pinned by smoke M-9). Consumer-surface fix from the
-  2026-07-10 GPT Actions consumer UX review; no kernel change.
+  *(2026-07-10; the status value it introduced was itself wrong — corrected by
+  the audit entry above.)* The `answerFromMemory` response schema and
+  `docs/GPT_SYSTEM_PROMPT.md` keyed the honest-empty behavior on a
+  `no_context: true` boolean that exists only in the MCP enrichment layer —
+  the REST `/v1/ask` envelope signals it via `insufficient_evidence: true`.
+  Schema and prompt were moved off the boolean (pinned by smoke M-9).
+  Consumer-surface fix from the 2026-07-10 GPT Actions consumer UX review; no
+  kernel change.
+
+### Added
+
+- **`scripts/create_api_key.sh`** — mints an auth subject + SHA-256-hashed API
+  key + workspace membership and prints the token once; closes the gap where
+  `api_key` mode had no documented provisioning path.
+- **`docs/MCP.md`** — first public MCP setup guide: both transports, env-var
+  table (including the `MEMORY_LAB_API_PORT` wiring the tools need to reach a
+  quickstart API on `:8088`), auth modes, client configuration, first calls.
+
+### Changed
+
+- **README rewritten for first-time visitors**: leads with what OpenCB does
+  and a 5-minute no-keys demo, links the Docker quickstart and client-setup
+  docs; engineering/release detail moved below the fold; internal release-gate
+  language ("push/tag/announce require approval") removed from README and
+  CAPABILITIES.md — install-from-source status stated plainly instead.
+- **Internal audit/parity documents moved off the repo root** to
+  `engineering/` (`MCP_PARITY_TABLE.md`, `PARITY_AUDIT.md`,
+  `M11B4_CONTEXT_PACK_AUDIT.md`, `OPENCB-M11C-2-4_REVIEW.md`); historical
+  CHANGELOG references keep their original wording.
+- **GPT_ACTIONS.md**: §5 MCP section now states the MCP server is a separate
+  process and points to `docs/MCP.md` (the previously referenced INSTALL.md
+  "MCP HTTP Transport" section never existed); §7 exclusion table completed;
+  minimal schema `servers` is now genuinely a placeholder
+  (`https://your-opencb-host`) instead of the dev host; added the two-call
+  "record a decision" write recipe.
 
 ### Changed
 

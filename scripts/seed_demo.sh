@@ -91,27 +91,27 @@ echo ""
 echo "Stage 2 — Seed hubs"
 
 "${PSQL_CMD[@]}" <<HUBSQL
-INSERT INTO cb_hubs (hub_id, workspace_id, title, type, description, aliases, related_terms, status, owner_defined)
+INSERT INTO cb_hubs (hub_id, workspace_id, workspace_uuid, title, type, description, aliases, related_terms, status, owner_defined)
 VALUES
-    ('a1a1a1a1-de00-0001-0000-000000000001', '$SEED_WS_ID',
+    ('a1a1a1a1-de00-0001-0000-000000000001', '$SEED_WS_ID', '$SEED_WS_ID',
      'Architecture & Decisions', 'concept_cluster',
      'Core architectural decisions and design rationale for OpenCB.',
      ARRAY['arch','decisions','design'],
      ARRAY['architecture','decision','rationale','ADR','design choice'],
      'active', TRUE),
-    ('a1a1a1a1-de00-0002-0000-000000000002', '$SEED_WS_ID',
+    ('a1a1a1a1-de00-0002-0000-000000000002', '$SEED_WS_ID', '$SEED_WS_ID',
      'Retrieval & Embeddings', 'concept_cluster',
      'Semantic search, embedding pipelines, and KNN retrieval in OpenCB.',
      ARRAY['retrieval','embeddings','search','RAG'],
      ARRAY['semantic search','KNN','vector','pgvector','embedding','cosine similarity'],
      'active', TRUE),
-    ('a1a1a1a1-de00-0003-0000-000000000003', '$SEED_WS_ID',
+    ('a1a1a1a1-de00-0003-0000-000000000003', '$SEED_WS_ID', '$SEED_WS_ID',
      'Agent Integration', 'topic',
      'How AI agents connect to and use OpenCB via MCP tools and HTTP transport.',
      ARRAY['agents','MCP','integration'],
      ARRAY['MCP tool','streamable-http','Claude','Codex','agentic workflow','tool call'],
      'active', TRUE),
-    ('a1a1a1a1-de00-0004-0000-000000000004', '$SEED_WS_ID',
+    ('a1a1a1a1-de00-0004-0000-000000000004', '$SEED_WS_ID', '$SEED_WS_ID',
      'Getting Started', 'topic',
      'Quickstart guide: installation, first save, first query, first hub.',
      ARRAY['quickstart','onboarding','first steps'],
@@ -122,6 +122,7 @@ ON CONFLICT (hub_id) DO UPDATE
         description  = EXCLUDED.description,
         aliases      = EXCLUDED.aliases,
         related_terms = EXCLUDED.related_terms,
+        workspace_uuid = EXCLUDED.workspace_uuid,
         updated_at   = NOW();
 HUBSQL
 ok "4 demo hubs seeded"
@@ -280,6 +281,14 @@ VERIFYSQL
 )
 
 [[ "${HUBS}"    == "4" ]] && ok "Hubs: 4/4"    || fail "Hubs: expected 4, got '${HUBS}'"
+
+# list_hubs filters on workspace_uuid — a NULL there makes seeded hubs invisible
+# to GET /v1/hubs even though the rows exist (release-truth audit 2026-08-10, P0-3).
+HUBS_NO_WS="$("${PSQL_CMD[@]}" -tA -c \
+    "SELECT COUNT(*) FROM cb_hubs WHERE hub_id::text LIKE 'a1a1a1a1-de00-%' AND workspace_uuid IS NULL;")"
+[[ "${HUBS_NO_WS}" == "0" ]] \
+    && ok "Hubs visible to list_hubs (workspace_uuid set on all 4)" \
+    || fail "Hubs invisible to GET /v1/hubs: ${HUBS_NO_WS} seeded hub(s) have NULL workspace_uuid"
 [[ "${CONTENT}" == "8" ]] && ok "Content: 8/8" || fail "Content: expected 8, got '${CONTENT}'"
 [[ "${CHUNKS}"  == "8" ]] && ok "Chunks: 8/8"  || fail "Chunks: expected 8, got '${CHUNKS}'"
 [[ "${LINKS}"   == "8" ]] && ok "Links: 8/8"   || fail "Links: expected 8, got '${LINKS}'"

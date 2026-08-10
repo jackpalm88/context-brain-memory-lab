@@ -11,15 +11,16 @@ info:
     Read-only by design: no operation here writes memory. Every operation carries
     x-openai-isConsequential: false so GPT never interrupts for confirmation.
 
-    **Auth:** API Key → Bearer. Header `Authorization: Bearer <token>`
-    (the server's MEMORY_LAB_API_TOKEN). `checkMemoryHealth` needs no auth.
+    **Auth:** API Key → Bearer. Header `Authorization: Bearer <token>` — an
+    API key minted on the server (scripts/create_api_key.sh; see
+    docs/GPT_ACTIONS.md §2). `checkMemoryHealth` needs no auth.
   version: "1.0.0"
   contact:
     name: "OpenCB project"
 
 servers:
-  - url: "https://api-dev.opencb.xyz"
-    description: "OpenCB dev deployment (replace per deployment)"
+  - url: "https://your-opencb-host"
+    description: "Replace with your deployment's HTTPS URL (set in the GPT Action builder)"
 
 security:
   - BearerAuth: []
@@ -234,7 +235,7 @@ paths:
       operationId: answerFromMemory
       x-openai-isConsequential: false
       summary: "Answer a question from workspace memory"
-      description: "Answers grounded ONLY in saved memory, with citations. status='no_context' is an honest empty, not an error. Superseded memories are demoted unless the question is historical. Evidence items carry content identifiers for follow-up reads. Not for: raw evidence lists — use retrieveMemoryEvidence."
+      description: "Answers grounded ONLY in saved memory, with citations. status='insufficient_evidence' is an honest empty, not an error. Superseded items are demoted unless the question is historical. Evidence items carry content ids for follow-up reads. Not for: raw evidence lists — use retrieveMemoryEvidence."
       requestBody:
         required: true
         content:
@@ -263,8 +264,8 @@ paths:
                     type: string
                   status:
                     type: string
-                    enum: [ok, no_context, clarify, degraded, error]
-                    description: "'no_context' = the memory does not know (honest empty, not an error); 'clarify' = the question is ambiguous; 'degraded' = answered from partial evidence."
+                    enum: [ok, insufficient_evidence, unsupported_intent]
+                    description: "'insufficient_evidence' = the memory does not know (honest empty, not an error — pairs with insufficient_evidence: true); 'unsupported_intent' = the question type is not answerable from this endpoint."
                   insufficient_evidence:
                     type: boolean
                     description: "true when the retrieved evidence was too weak to support a grounded answer."

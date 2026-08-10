@@ -1,34 +1,94 @@
-# Context Brain Memory Lab
+# Context Brain Memory Lab (OpenCB)
 
-**context-brain-memory-lab** is a provider-neutral, installable Python runtime for governed agent memory. It packages the public Memory Lab spine for hub-linked knowledge, decision lineage, workspace-aware retrieval, evidence-grounded asking, optional persistence, optional vector retrieval, and optional provider-backed reasoning.
+**Different AI. Same brain.** OpenCB is a self-hosted, governed memory server
+for AI agents: one client saves knowledge and records decisions with their
+rationale; any other client — a custom GPT, Claude over MCP, a script over
+REST — can later ask *what was decided and why* and get a grounded, cited
+answer from the same memory.
 
-**Version**: `1.0.0` · Python ≥ 3.12
+Ordinary chat memory lives and dies inside one conversation with one vendor.
+OpenCB is the shared spine underneath: workspace-scoped storage with quality
+governance (low-value saves are scored and rejected, not hoarded),
+decision lineage (what superseded what), current-state tracking, a curated
+hub/topic graph, and evidence-grounded answering that says
+"the memory has nothing on X" instead of inventing an answer.
 
-## Current release truth
+**Version** `1.0.0` · Python ≥ 3.12 · Apache-2.0 · self-hosted (Docker or pip)
 
-v1.0.0 is feature-complete and field-validated:
+## See it work (5 minutes, no API keys)
 
-- **Deterministic empty-env core**: the baseline runtime imports and deterministic tests run without provider keys, without a configured database, and without private Context Brain access.
-- **Feature-complete developer surface**: governed save (scoring, tiering, dedup, classification, current-state resolution with explicit `scope_hint`), hub graph with deterministic edge inference and a human approve/reject gate, conflict escalations, decision memory with lineage, composite-ranked retrieval with per-result trust/provenance, evidence-grounded ask with current-state awareness, context packs, reasoning traverse/explain honoring `max_hops` with hub-term graph adjacency, 34 described MCP tools, batch/similar/feedback/metrics DX routes, docker-compose onboarding.
-- **Full-provider field validation done**: the FV-1..FV-9 validation cycle (grounded answering, memory loop, retrieval precision, MCP ergonomics, cross-session coherence, traverse depth, graceful failure, parity, explainability) is closed with live evidence; the three epistemic blockers it surfaced are fixed.
-- **Opt-in Postgres/pgvector/providers**: persistence, vector retrieval, and provider-backed synthesis remain explicit opt-ins with deterministic fallbacks.
-- **Architecture boundaries ratified**: see [docs/ARCHITECTURE_BOUNDARIES.md](docs/ARCHITECTURE_BOUNDARIES.md) for the standing doctrines, the graph authority model, the Graph Navigation scope freeze, and the v1.0 exception policy. Accepted limitations and vNext items are documented there and in the CHANGELOG — they are separated from blockers by design.
+```bash
+git clone https://github.com/jackpalm88/context-brain-memory-lab.git
+cd context-brain-memory-lab
+docker compose up --build
+```
 
-This package is **not** Full/private Context Brain parity, not private `ask_v2` parity, not a hosted service, not production tenancy/billing, and not a public release announcement. Push, tag, PyPI publish, and public announcement require separate human approval.
+Save a decision from one "client":
 
-## Capability summary
+```bash
+curl -s -X POST http://127.0.0.1:8088/v1/content -H 'Content-Type: application/json' \
+  -d '{"content": "Architecture decision: we chose PostgreSQL with pgvector for persistence because it keeps deterministic retrieval and vector KNN in one operational store. Alternatives considered: a dedicated vector DB was rejected for operational overhead."}'
+```
 
-- FastAPI API surface in `memory_lab.api`
-- MCP server/library surface in `memory_lab.mcp`
-- hub graph and graph-health helpers in `memory_lab.graph`
-- decision memory and lineage in `memory_lab.decisions`
-- governance state, tier routing, and ingestion scoring helpers
-- retrieval evidence contract across retrieval/ask paths
-- context-pack and reasoning answer-candidate endpoints
-- optional OpenAI embedding adapter and optional Anthropic LLM adapter with deferred imports and no-key degraded behavior
-- optional Postgres/pgvector persistence and retrieval seams
+Ask from any other client — a different terminal, a GPT Action, an MCP agent:
 
-For a compact capability/non-claim map, see [docs/CAPABILITIES.md](docs/CAPABILITIES.md).
+```bash
+curl -s -X POST http://127.0.0.1:8088/v1/ask -H 'Content-Type: application/json' \
+  -d '{"question": "What database did we choose and why?"}'
+# → a grounded answer with citation ids, confidence, and honest
+#   "insufficient_evidence" when the memory does not know.
+```
+
+Full walkthrough (demo corpus, decision records, teardown):
+**[docs/INSTALL.md](docs/INSTALL.md)**.
+
+## Connect your AI clients
+
+- **MCP** (Claude Code, Claude Desktop, any MCP agent): 34 tools over stdio or
+  streamable-http — **[docs/MCP.md](docs/MCP.md)**
+- **Custom GPTs / GPT Actions**: curated 10-operation read/answer schema plus a
+  full REST schema, with a ready-made system prompt —
+  **[docs/GPT_ACTIONS.md](docs/GPT_ACTIONS.md)**,
+  **[docs/GPT_SYSTEM_PROMPT.md](docs/GPT_SYSTEM_PROMPT.md)**
+- **REST**: the full FastAPI surface, self-documented at `/docs` on a running
+  instance; API keys for network-exposed deployments via
+  `scripts/create_api_key.sh`
+
+## What's inside
+
+- **Governed save** — scoring, tiering, dedup, deterministic classification,
+  current-state resolution; an empty or low-quality save fails loudly, never
+  silently.
+- **Decision memory** — decisions with rationale, alternatives, supersession
+  lineage, and links to the content they rest on (both directions readable).
+- **Evidence-grounded ask** — answers bounded to retrieved workspace evidence
+  with citations; superseded items are demoted; honest empties are explicit.
+- **Hub graph** — curated topic hubs, deterministic edge inference with a
+  human approve/reject gate; contradictions are surfaced, never auto-resolved.
+- **Retrieval with provenance** — composite-ranked search where every result
+  carries trust/ranking diagnostics; 34 described MCP tools mirror the REST
+  surface.
+- **Workspaces + auth** — workspace-scoped data, role-based permissions, and
+  hashed API-key auth for network deployments (see
+  [SECURITY.md](SECURITY.md)); every response names the workspace it touched.
+- **Provider-neutral core** — everything above runs deterministically with no
+  LLM or embedding keys. Postgres/pgvector persistence and OpenAI/Anthropic
+  adapters are explicit opt-ins with degraded fallbacks.
+
+For the compact capability/non-claim map see
+[docs/CAPABILITIES.md](docs/CAPABILITIES.md); ratified architecture
+boundaries live in
+[docs/ARCHITECTURE_BOUNDARIES.md](docs/ARCHITECTURE_BOUNDARIES.md).
+
+## Project status
+
+Public beta / release candidate `1.0.0`, feature-complete and closed against a
+nine-scenario full-provider field-validation cycle. This is a self-hosted
+package and architecture reference — it is **not** a hosted service, not
+production tenancy/billing, and not yet published to PyPI (install from
+source). Known limitations and vNext items are tracked in
+[docs/CAPABILITIES.md](docs/CAPABILITIES.md) and the
+[CHANGELOG](CHANGELOG.md).
 
 ## Install for local development
 
@@ -54,7 +114,9 @@ export DATABASE_URL="postgresql://<user>:<password>@<host>:5432/<database>"
 for f in $(ls migrations/*.sql | sort); do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-Optional provider/vector runtime requires explicit configuration, runtime secrets, and the relevant extras/dependencies. Do not commit provider keys or DSNs.
+Optional provider/vector runtime requires explicit configuration, runtime
+secrets, and the relevant extras/dependencies. Do not commit provider keys or
+DSNs.
 
 ```bash
 export MEMORY_LAB_VECTOR_EMBEDDINGS_ENABLED=true
@@ -66,44 +128,33 @@ export OPENAI_API_KEY="...runtime only..."
 export ANTHROPIC_API_KEY="...runtime only..."
 ```
 
-## Build artifacts
+## Tests and build
 
-Release-readiness builds use the package metadata in `pyproject.toml`:
-
-```bash
-python -m build
-```
-
-Built artifacts land in `dist/` (not tracked in git) as
-`context_brain_memory_lab-<version>-py3-none-any.whl` and the matching sdist.
-
-## Deterministic gates
-
-Source hermetic gate:
+Deterministic source gate (fresh isolated venv, no keys, no DB):
 
 ```bash
 bash scripts/hermetic_test.sh
 ```
 
-Artifact proof should use a fresh venv outside the repo, install from the built wheel or sdist, import `memory_lab`, verify the installed metadata version matches `pyproject.toml`, and run deterministic smoke without relying on editable install.
-
-## M5 live smoke
-
-The committed live smoke is opt-in and requires Docker, live provider keys, and runtime-only secrets:
+Release artifacts (`dist/`, not tracked):
 
 ```bash
-python scripts/m5_live_smoke.py
+python -m build
 ```
 
-It uses a throwaway pgvector database and masks evidence. It is not part of the default hermetic gate.
+The opt-in live smoke (`python scripts/m5_live_smoke.py`) proves the real
+provider/vector path with runtime-only secrets and a throwaway pgvector DB; it
+is not part of the default gate.
 
 ## Safety boundaries
 
-- Provider-neutral by default: no OpenAI, Anthropic, or LLM key required for baseline use.
-- Database-neutral by default: deterministic core can run without Postgres; Postgres/pgvector are opt-in runtime paths.
-- Evidence-grounded outputs: reasoning endpoints return answer candidates and citations/evidence refs, not truth/verdict/resolution semantics.
-- Private source material is not shipped as private operational memory; public behavior must be proven through committed code/tests/smokes.
-- Release actions (`push`, `tag`, PyPI publish, public announcement) require separate human GO.
+- Provider-neutral by default: no OpenAI/Anthropic key required for baseline use.
+- Database-neutral by default: the deterministic core runs without Postgres;
+  Postgres/pgvector are opt-in runtime paths.
+- Evidence-grounded outputs: reasoning endpoints return answer candidates and
+  citations/evidence refs, not truth/verdict/resolution semantics.
+- Private source material is not shipped as operational memory; public
+  behavior is proven through committed code/tests/smokes.
 
 ## License
 

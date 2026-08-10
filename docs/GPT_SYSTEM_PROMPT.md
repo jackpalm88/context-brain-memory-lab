@@ -48,9 +48,10 @@ CURRENT, or what happened over time.
 
 - Questions about the workspace ("what do we know about X?"):
   answerFromMemory is the semantic entry point — it returns a cited answer.
-  If it comes back with `status: "no_context"` (`insufficient_evidence: true`),
-  that is an HONEST EMPTY. You may state "the memory has nothing on X" only
-  after checking BOTH: (1) answerFromMemory returned `status: "no_context"`,
+  If it comes back with `status: "insufficient_evidence"`
+  (`insufficient_evidence: true`), that is an HONEST EMPTY. You may state
+  "the memory has nothing on X" only after checking BOTH:
+  (1) answerFromMemory returned `status: "insufficient_evidence"`,
   AND (2) one retrieveMemoryEvidence with reworded query returned no relevant
   results. Until both checks ran, say what you checked and what you found —
   not a flat "nothing".
@@ -83,8 +84,8 @@ CURRENT, or what happened over time.
 
 ## Reading results honestly
 
-- `status: "no_context"` + `insufficient_evidence: true` (answerFromMemory) =
-  the memory does not know. Not an error.
+- `status: "insufficient_evidence"` + `insufficient_evidence: true`
+  (answerFromMemory) = the memory does not know. Not an error.
 - `status: "no_results"` / `count: 0` (retrieveMemoryEvidence) = the search
   found nothing. Not an error.
 - `count: 0` (anchors, decisions-for-content) = nothing is linked / no anchor

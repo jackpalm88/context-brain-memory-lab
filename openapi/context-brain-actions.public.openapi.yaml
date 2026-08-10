@@ -13,15 +13,20 @@ info:
     feedback, ask metrics, and keyword-audit routes. Exclusion here is a
     curation decision, not absence of the capability.
 
-    **Auth:** Bearer token via `Authorization: Bearer <token>` header.
-    Workspace scope is resolved server-side from the token; callers never
-    inject raw workspace UUIDs unless the deployment grants explicit override.
+    **Auth:** Bearer token via `Authorization: Bearer <token>` header — an API
+    key minted on the server (scripts/create_api_key.sh). Every request is
+    workspace-scoped: with no workspace header the server uses its configured
+    default workspace, and an optional `X-Workspace-ID` header selects another
+    workspace the key's subject is a member of (a selector, not
+    authentication — membership is always enforced). GPT Actions cannot send
+    custom headers, so Actions consumers always operate in the server's
+    default workspace; every response echoes the workspace it touched.
 
     **Base URL:** configure per deployment (see `docs/GPT_ACTIONS.md`).
 
-    **MCP alternative:** if your client supports MCP streamable-http transport,
-    connect to `POST /mcp` with the same Bearer token — all 34 tools are
-    available with identical semantics to this REST surface.
+    **MCP alternative:** all 34 tools are available with identical semantics
+    over MCP streamable-http — a separate server process, where workspace IS
+    resolved from the token (see `docs/MCP.md`).
   version: "1.0.0"
   contact:
     name: "OpenCB project"

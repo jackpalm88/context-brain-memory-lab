@@ -23,10 +23,33 @@ response. The system does not fail silently -- it always returns a governed scor
 
 ---
 
-## Admin Endpoints
+## Authentication and Authorization
 
-The following endpoints are **unauthenticated** in this release.
-They are intended for **localhost and trusted internal network use only.**
+The API has two auth modes, selected by `MEMORY_LAB_AUTH_MODE`:
+
+- **`local_dev_bypass`** -- the Docker quickstart default. Requests run as a
+  fixed bootstrap subject; requires
+  `MEMORY_LAB_AUTH_ALLOW_LOCAL_DEV_BYPASS=true`. Local development only --
+  never expose a bypass-mode instance to a network.
+- **`api_key`** -- for anything network-exposed. Bearer tokens are validated
+  against the `api_keys` table by SHA-256 hash (constant-time compare, plus
+  revocation, expiry, and subject-status checks). Only the hash is stored;
+  mint keys with `bash scripts/create_api_key.sh`.
+
+Authorization is role-based per workspace: every protected route requires a
+permission (e.g. `content.create`, `escalations.resolve`) that is checked
+against the caller's `workspace_memberships` role (`owner`, `admin`, `writer`,
+`reader`, `service_agent`, `auditor`). All data access is workspace-scoped;
+workspace selection via `X-Workspace-ID` is a selector, not authentication --
+membership is still enforced. On the MCP HTTP transport in `api_key` mode the
+workspace is resolved from the key and any client-supplied workspace header is
+stripped.
+
+Auth denials and admin actions are audited to the `cb_audit_events` table
+(no token material is ever written; disable with
+`MEMORY_LAB_AUTH_AUDIT_ENABLED=false`).
+
+### Admin Endpoints
 
 ```
 POST /admin/cleanup/ttl
@@ -34,14 +57,17 @@ POST /admin/content/{id}/tier/override
 POST /admin/content/{id}/tier/rollback
 ```
 
-**Do not expose the API port (8000 for local uvicorn, 8088 for the Docker quickstart) to a public network without an auth layer.**
+These require an `owner` or `admin` workspace role and are audited. They are
+destructive; even authenticated, they are intended for operator use, not for
+agent-facing schemas.
 
-Recommended mitigations:
-- Bind to 127.0.0.1 only in production
-- Place behind a reverse proxy with auth (nginx auth_basic, OAuth2 proxy)
-- Restrict access via network firewall
+**Do not expose the API port (8000 for local uvicorn, 8088 for the Docker
+quickstart) to a public network while in `local_dev_bypass` mode.** For
+network exposure:
 
-There is no built-in credential or token -- auth must be added externally.
+- Switch to `MEMORY_LAB_AUTH_MODE=api_key` and provision real subjects/keys
+- Terminate TLS at a reverse proxy (nginx, caddy) -- the app itself does not do TLS
+- Restrict access via network firewall where possible
 
 ---
 
@@ -49,16 +75,22 @@ There is no built-in credential or token -- auth must be added externally.
 
 - Never commit .env files to version control
 - DATABASE_URL contains credentials -- use environment variables or a secrets manager
+- API-key tokens are printed once at creation and stored only as hashes;
+  treat the printed token like any other secret
 - ANTHROPIC_API_KEY and OPENAI_API_KEY are optional; deterministic fallback paths operate without them
-- No hardcoded secrets or default credentials exist in this package
+- No hardcoded secrets or default API credentials exist in this package
+  (the compose stack's Postgres password is a documented local-dev default --
+  change it for any network-exposed stack)
 
 ---
 
 ## Excluded Private Modules
 
-The following modules are intentionally **not included** in this public package:
+The following upstream-private modules are intentionally **not included** in
+this public package:
 
-- audit.py -- internal write audit log
+- audit.py -- the private write-audit module (the public package has its own
+  auth/admin audit trail in `cb_audit_events`, described above)
 - conflict_detector.py -- internal semantic conflict detection
 - ask_v2.py -- internal LLM query interface
 
@@ -68,11 +100,13 @@ Their absence is intentional and is not a security gap.
 
 ## What This Package Does NOT Provide
 
-- No multi-user access control or role-based permissions
-- No row-level security
-- No built-in audit trail (audit.py excluded)
+- No production multi-tenancy, billing, or quota enforcement -- workspaces
+  isolate data and roles, but this is a single-operator deployment model
+- No Postgres row-level security -- workspace scoping is enforced in the
+  application layer
+- No rate limiting or abuse protection -- add at the reverse proxy if exposed
 - No TLS termination -- handle at the reverse proxy / infrastructure layer
-- No production-grade auth -- single-tenant local/dev baseline only
+- No key-management UI -- keys are minted/revoked via script and SQL
 
 ---
 

@@ -41,7 +41,7 @@ separated from blockers.
 - A public Memory Lab beta / release candidate for governed agent-memory experiments.
 - A provider-neutral default runtime and helper library.
 - A self-hosted package with optional DB/vector/provider paths.
-- A public beta package and architecture reference for governed agent-memory experiments; PyPI publication and public announcement remain separate approvals.
+- A public beta package and architecture reference for governed agent-memory experiments (not yet published to PyPI — install from source).
 
 ## What this is not
 
@@ -54,7 +54,7 @@ separated from blockers.
 - Not production MCP/GPT Actions deployment readiness.
 - Not provider-backed semantic search or LLM reasoning by default.
 - Not automatic truth arbitration, contradiction resolution, canonical-truth selection, or graph repair.
-- Not permission to push, tag, publish to PyPI, or announce publicly.
+- Not yet on PyPI — install from source (see README / docs/INSTALL.md).
 
 ## Runtime boundaries
 
