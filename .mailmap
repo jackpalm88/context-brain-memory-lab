@@ -1,0 +1,11 @@
+# Canonicalizes commit author/committer identity for display (git log,
+# git shortlog, git blame, GitHub's contributors view). Does NOT rewrite
+# history — the underlying commit objects and hashes are unchanged; this
+# only remaps how existing identities are shown.
+#
+# Early commits used a personal name + personal email, and a batch of
+# early commits used the bare `root` account on the deploy host (exposing
+# the server's hostname). Both are remapped here to the same canonical,
+# non-identifying project identity already used for later commits.
+Ricardo JKL <jackpalm88@users.noreply.github.com> <jackpalm51@googlemail.com>
+Ricardo JKL <jackpalm88@users.noreply.github.com> <root@vmi2728022.contaboserver.net>
