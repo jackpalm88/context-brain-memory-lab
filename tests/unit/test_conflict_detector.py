@@ -82,6 +82,21 @@ def test_same_scope_opposing_claim_fixture_rules():
     assert "exact_normalized_object_match" in c.reason_codes
 
 
+def test_duplicate_rows_for_same_current_content_do_not_count_as_multiple_anchors():
+    rows = [
+        ConflictSourceRow(
+            content_id="fresh", workspace_id=WS1, text="scope: fresh\nchunk one", chunk_id="chunk-1",
+            memory_type="decision", classify_confidence=0.9, current_state_scope="fresh", is_current=True,
+        ),
+        ConflictSourceRow(
+            content_id="fresh", workspace_id=WS1, text="scope: fresh\nchunk two", chunk_id="chunk-2",
+            memory_type="decision", classify_confidence=0.9, current_state_scope="fresh", is_current=True,
+        ),
+    ]
+    candidates = detect_conflict_candidates(rows, workspace_id=WS1, include_resolved=False)
+    assert [c.detection_rule for c in candidates] == []
+
+
 def test_api_result_shape_model_flags_false():
     c = detect_conflict_candidates([row("a", "scope: b11\nfinding"), row("b", "scope: b11\ncontradicts: b11")], workspace_id=WS1)[0]
     dumped = c.model_dump()

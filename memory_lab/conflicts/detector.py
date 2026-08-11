@@ -158,7 +158,11 @@ def detect_conflict_candidates(rows: List[Any], *, workspace_id: str, scope: Opt
                     detection_rule="current_state_supersession_v1", metadata={"memory_type": current.memory_type, "current_state_scope": row_scope},
                 ))
 
-        active_rows = [r for r, _ in items if r.is_current is True]
+        active_by_content_id: Dict[str, ConflictSourceRow] = {}
+        for r, _ in items:
+            if r.is_current is True and r.content_id:
+                active_by_content_id.setdefault(str(r.content_id), r)
+        active_rows = list(active_by_content_id.values())
         if len(active_rows) > 1:
             candidates.append(_candidate(
                 workspace_id=workspace_id, conflict_type="stale_current_tension", scope=row_scope, status="unresolved", severity="high", confidence=0.80,
