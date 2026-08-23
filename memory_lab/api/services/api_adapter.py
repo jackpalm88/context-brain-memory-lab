@@ -22,6 +22,7 @@ from memory_lab.current_state.projection import (
 )
 from memory_lab.current_state.resolver import resolve_current_state_after_ingest
 from memory_lab.conflicts.escalation import evaluate_and_escalate_on_ingest
+from memory_lab.decisions.store import DecisionStore
 
 logger = logging.getLogger(__name__)
 
@@ -894,6 +895,16 @@ class ApiAdapter:
         }
 
     def search_graph_preview(self, query: str, node_type: Optional[str] = None, hub_id: Optional[str] = None, limit: int = 10, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        """Preview search over content_items, plus — when node_type == "decision" —
+        a UNION over cb_decision_nodes via DecisionStore.
+
+        cb_decision_nodes is a separate table from content_items/content_chunks
+        (decisions created through create_decision_memory never write back to
+        content_items.node_type), so without this union node_type="decision" would
+        only ever see content manually classified via classify_content_node, which
+        is a different, largely-unused concept — a structural false negative on the
+        real decision corpus regardless of query text.
+        """
         q = f"%{(query or '').lower()}%"
         conditions = ["(LOWER(COALESCE(ci.quick_summary, '')) LIKE %s OR LOWER(COALESCE(ch.chunk_text, '')) LIKE %s)"]
         params: List[Any] = [q, q]
@@ -932,4 +943,24 @@ class ApiAdapter:
                     tuple(lead_params + params),
                 )
                 rows = cur.fetchall()
-        return {"results": [dict(r) for r in rows], "count": len(rows), "workspace_id": workspace_id}
+        results: List[Dict[str, Any]] = [{**dict(r), "source": "content_item"} for r in rows]
+        if node_type == "decision":
+            decision_rows = DecisionStore(self.database_url).search_preview(
+                query=query, limit=limit, hub_id=hub_id, workspace_id=workspace_id
+            )
+            results.extend(
+                {
+                    "content_id": None,
+                    "decision_id": d["decision_id"],
+                    "node_type": "decision",
+                    "quick_summary": d["title"],
+                    "hub_match": d["hub_match"],
+                    "load_full_content_recommended": True,
+                    "score": d["score"],
+                    "source": "decision_node",
+                }
+                for d in decision_rows
+            )
+            results.sort(key=lambda r: r["score"], reverse=True)
+            results = results[:limit]
+        return {"results": results, "count": len(results), "workspace_id": workspace_id}

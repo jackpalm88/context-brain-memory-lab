@@ -479,8 +479,11 @@ def search_graph_preview(
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Search graph nodes by free text with optional node_type / hub_id filters.
-    Returns a lightweight preview list for navigation; follow up with
-    load_graph_node_full for the complete node."""
+    Returns a lightweight preview list for navigation. When node_type="decision",
+    results include both content items manually classified as decisions and the
+    real decision corpus in cb_decision_nodes (source: "content_item" vs
+    "decision_node" per result) — follow up "content_item" rows with
+    load_graph_node_full, and "decision_node" rows with explain_decision."""
     return _call_api(
         _client().graph_search_preview,
         query=query,

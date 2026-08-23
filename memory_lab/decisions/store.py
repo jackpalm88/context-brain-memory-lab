@@ -236,6 +236,50 @@ class DecisionStore:
             content_id=str(content_id), workspace_id=workspace_id,
         )
 
+    def search_preview(
+        self, query: str, limit: int, hub_id: Optional[str] = None, workspace_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Free-text preview search over cb_decision_nodes for search_graph_preview's
+        node_type="decision" branch. cb_decision_nodes is a separate table from
+        content_items/content_chunks — this exists so that branch can see the real
+        decision corpus instead of only the content_items.node_type='decision'
+        classification flag, which is a different, largely-unused concept.
+        """
+        q = f"%{(query or '').lower()}%"
+        params: List[Any] = []
+        hub_match_expr = "FALSE AS hub_match"
+        if hub_id:
+            hub_match_expr = "(%s::uuid = ANY(linked_hub_ids)) AS hub_match"
+            params.append(hub_id)
+        params.append(q)
+        conditions = [
+            "(LOWER(title) LIKE %s OR LOWER(decision_reason) LIKE %s "
+            "OR LOWER(COALESCE(decision_context, '')) LIKE %s OR LOWER(COALESCE(why_this_matters, '')) LIKE %s)"
+        ]
+        params.extend([q, q, q, q])
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            params.append(workspace_id)
+        params.append(limit)
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT decision_id::text AS decision_id,
+                           title,
+                           decision_reason,
+                           {hub_match_expr},
+                           CASE WHEN LOWER(title) LIKE %s THEN 2 ELSE 1 END AS score
+                      FROM cb_decision_nodes
+                     WHERE {' AND '.join(conditions)}
+                     ORDER BY score DESC, decision_id
+                     LIMIT %s
+                    """,
+                    tuple(params),
+                )
+                rows = cur.fetchall()
+        return [dict(r) for r in rows]
+
     def create_decision(self, payload: DecisionCreate, workspace_id: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
