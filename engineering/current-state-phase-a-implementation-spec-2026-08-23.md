@@ -59,10 +59,14 @@ heavier migration than the smallest-reversible-increment framing this spec is bu
 research note). If Phase B's typed relationships need a dedicated table, that's Phase B's migration
 to scope, not Phase A's.
 
-**Forward-compat note (not implemented now):** add a nullable `relationship_type` column alongside
-`state_identity` on the same two tables, defaulted to a single implicit value (e.g. `'replaces'`),
-so Phase B can later introduce `corrects`/`refines`/etc. without a breaking schema change. This is
-schema design discipline, not Phase B functionality — nothing branches on `relationship_type` yet.
+**Revised per review `de24fac8-a7c5-435f-883a-b0350230a1f1`: no `relationship_type` column in Phase
+A, not even nullable.** The v0 readiness-pass draft proposed adding it now as a forward-compat
+placeholder. Reconsidered: Phase B hasn't ratified *where* typed relationships should live — same
+two tables, a dedicated edge table, or a different assertion model entirely — so adding the column
+now would freeze part of that undecided data model prematurely. "Leave room for typed relationships"
+stays a spec/invariant note (§1, §6), not a physical column. A single nullable column is a cheap
+migration to add later, once Phase B actually decides where it belongs — cheap enough that
+pre-committing to it now buys nothing.
 
 ## 3. Write path
 
@@ -157,9 +161,9 @@ as a Phase B shortcut.
 
 - No implementation — `resolver.py`/`scope_pipeline.py` are unchanged by this document.
 - No Phase B: no typed relationships (`corrects`/`refines`/`extends`/`clarifies`/`decomposes`/
-  `constrains`), no confidence-scored candidates, no escalation-queue wiring. The schema leaves room
-  (`relationship_type` column, §2) but nothing beyond Phase A's single implicit `replaces` semantics
-  is built.
+  `constrains`), no confidence-scored candidates, no escalation-queue wiring, and (per `de24fac8-...`)
+  no `relationship_type` column of any kind yet — nothing beyond Phase A's single implicit `replaces`
+  semantics is built or pre-allocated in schema.
 - No automatic backfill of `state_identity` for existing data (§4) — explicit rule, not a deferred
   detail.
 
@@ -232,10 +236,34 @@ the ambiguous "existing marker vs. new marker" question is moot because there is
 A at all; (b) schema form is decided as columns on `cb_current_state_anchors` + `content_items`, no
 new table, smallest-reversible-increment rationale stated explicitly.
 
-## 9. Status
+## 9. Acceptance matrix (ratified `de24fac8-a7c5-435f-883a-b0350230a1f1` — binding for implementation)
 
-Spec complete through the implementation-readiness pass (§8). All three gaps from review
-`40961bea-...` are closed: read-model/cardinality contract change specified (§8.1), authority
-boundary defined (§8.2), marker/schema ambiguity resolved (§8.3, §2). Architecture itself
-(`4a11008b-...`, candidate #3 as Phase A) was not reopened. Implementation still has not begun and
-needs its own explicit go-ahead — this document remains the handoff artifact, not the step.
+Every item below must hold for Phase A to be considered done. This is the test list, not aspiration:
+
+1. No `state_identity` supplied → `current_state_scope` grouping still works, supersession **never**
+   fires (`cb_current_state_anchors` untouched).
+2. Trusted caller + `state_identity` → supersedes only an existing active anchor with an **identical**
+   `(workspace_id, memory_type, state_identity)`.
+3. Same `current_state_scope`, different `state_identity` values → both stay `active`, no false
+   conflict raised (§8.1's `multiple_current_anchors_v1` re-grouping).
+4. Untrusted / general-purpose caller attempts to supply `state_identity` → fails/rejects explicitly,
+   never silently accepted or silently dropped (§8.2).
+5. `multiple_current_anchors_v1` does not flag legitimate multi-identity coexistence under one scope.
+6. Legacy `state_identity IS NULL` rows keep today's (stricter, `by_scope`) conflict-detection
+   semantics — isolated from the new identity-based path, not silently upgraded or downgraded.
+7. Re-ingesting the same `content_id` is idempotent — no duplicate anchors, no duplicate escalations.
+8. Zero automatic backfill of `state_identity` from `current_state_scope`, anywhere in the write path.
+9. The four false-supersession fixtures from this investigation
+   (`914a75c9`/`10825d3a`, `bd3cd7e4`/`47f0499b`, `cdb6284a`/`4cb27e68`, `f2937127`/`69383060`) are no
+   longer reproducible under the same conditions, **and** the known true-supersession fixture (F1,
+   `62798537`→`1512cba4`, or an equivalent explicit-identity case) still resolves correctly through
+   the new `state_identity` path.
+
+## 10. Status
+
+Spec complete through the implementation-readiness pass (§8) and the pre-implementation review
+(`de24fac8-...`, §9's acceptance matrix, `relationship_type` column removed from Phase A). All gaps
+closed: read-model/cardinality contract change specified (§8.1), authority boundary defined (§8.2),
+marker/schema ambiguity resolved (§8.3, §2), schema minimized to `state_identity` only (§2).
+Architecture itself (`4a11008b-...`, candidate #3 as Phase A) was not reopened at any point.
+Implementation is authorized to begin against this spec and acceptance matrix.
