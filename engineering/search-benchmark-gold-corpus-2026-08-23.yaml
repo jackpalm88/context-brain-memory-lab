@@ -1,0 +1,388 @@
+# OpenCB search benchmark — gold query corpus (v0.1, post-review hygiene pass)
+#
+# Governs: decision 5b019127-6b33-4bcd-9b62-ac87fb6dd3fa ("Do not implement
+# tokenized-AND search as a quick fix; run a formal OpenCB search architecture
+# evaluation first" — canonical workspace 69984891-9fd4-4a39-b3e8-c1f0459c9087).
+# Companion doc: engineering/search-benchmark-rfc-2026-08-23.md
+# v0 -> v0.1 changes (review finding e7f9b6a6-b001-4677-9766-9fac4e630782):
+#   Q26 recategorized exact_title -> boundary (was inconsistent with the
+#   exact_title Hit@1=100% hard gate); added Q27/Q28 (isolation category:
+#   cross-workspace leakage + hub-filter regression); added corpus snapshot
+#   pin below (freeze-benchmark-state finding).
+#
+# Grounded entirely in real records from the canonical workspace as of
+# 2026-08-23 -- no synthetic titles. `expected_top` / `acceptable_alternates`
+# reference real decision_id / content_id values. NEGATIVE-category queries
+# are the only intentionally invented text (must match nothing, by design).
+#
+# CORPUS SNAPSHOT PIN (freeze-benchmark-state, e7f9b6a6):
+#   snapshot_at: 2026-08-23T13:00:00Z
+#   workspace_id: 69984891-9fd4-4a39-b3e8-c1f0459c9087
+#   All expected_top/acceptable_alternates below are correct AS OF this
+#   snapshot. OpenCB keeps growing; a scoring run must use a frozen read-only
+#   copy/export of at least the referenced ids (title/reason/context/tags/
+#   status/supersession columns) taken at or after this timestamp, NOT a live
+#   query against a database that may have since grown new, better-matching
+#   records for the same query text. If the live DB has diverged from this
+#   pin when a scoring run happens, re-validate expected_top against the pin
+#   snapshot, not current live state, or the "correct top-5" will silently
+#   drift as unrelated content accumulates.
+#
+# category values:
+#   exact_id, exact_title, boundary, reordered_terms, lv_morphology,
+#   diacritics_unaccent, punctuation_hyphen, typo, mixed_language, paraphrase,
+#   current_state_supersession, negative, precision_stress, cross_type,
+#   multi_match, ranking_precision, isolation
+#
+# current_state_expectation values:
+#   n/a                 -- query has no supersession angle
+#   undefined_by_design -- deliberately unresolved; candidate systems must
+#                          state their policy explicitly, not silently pick one
+#   must_prefer_active   -- if a superseded and its successor are both
+#                          plausible hits, the active one must outrank it
+#
+# false_positives: ids or descriptions of results that would be WRONG to
+# surface as a top hit for this query, even if lexically tempting.
+
+version: "0.1"
+source_workspace_id: "69984891-9fd4-4a39-b3e8-c1f0459c9087"
+snapshot_at: "2026-08-23T13:00:00Z"
+queries:
+
+  # --- A. exact_id (1) ---------------------------------------------------
+  - id: Q01
+    category: exact_id
+    query: "3efededb-c0e9-4eff-b4aa-f7e16d3906e0"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: "any content whose text happens to substring-match the raw UUID"
+    current_state_expectation: n/a
+    notes: >
+      Raw ID as query text. Baseline is EXPECTED to return 0 -- ID lookup is
+      out of scope for text search (use explain_decision / get_content_by_id
+      instead). This case exists to document that boundary, not to demand a
+      fix. A candidate that starts literal-matching UUIDs inside free text is
+      solving the wrong problem.
+
+  # --- B. exact_title (2) -------------------------------------------------
+  - id: Q02
+    category: exact_title
+    query: "Implement the bounded graph-preview decision search fix against the canonical OpenCB workspace"
+    expected_top: ["3efededb-c0e9-4eff-b4aa-f7e16d3906e0"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Sanity control -- exact title must always rank #1 under every candidate."
+
+  - id: Q03
+    category: exact_title
+    query: "All Hermes/Claude/OpenCB connectors and agents must use one canonical workspace"
+    expected_top: ["4d1ad271-138e-40b7-8296-1266b07673ab"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Sanity control, includes an internal slash (Hermes/Claude/OpenCB) inside the exact phrase."
+
+  # --- C. reordered_terms (2) ---------------------------------------------
+  - id: Q04
+    category: reordered_terms
+    query: "identity foundation specialist routing"
+    expected_top: ["d9c65281-73ca-463e-86f9-30b300dd3b4b"]
+    acceptable_alternates: ["300b72c9-4fe7-49d2-9f8d-8dd9ea1b9437", "fbecc028-c412-4746-829d-dfb8ab616e0b", "57b54601-bae3-4078-98ae-2838fc826d82"]
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Word-reordered vs real title "Specialist routing/identity foundation
+      promoted to live PASS after gateway restart matrix". KNOWN BASELINE
+      FAILURE (already logged as content 7c7454c0-f746-4d2c-8243-c2d4a6262c94
+      / 268a11da-f45b-48cc-bbfe-46de73e168f1) -- this is the regression anchor
+      for that finding, not a new discovery.
+
+  - id: Q05
+    category: reordered_terms
+    query: "canonical workspace bounded fix graph-preview decision search"
+    expected_top: ["3efededb-c0e9-4eff-b4aa-f7e16d3906e0"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Reordered vs Q02's exact title."
+
+  # --- D. lv_morphology (2) ------------------------------------------------
+  - id: Q06
+    category: lv_morphology
+    query: "Ricardo veselības dati"
+    expected_top: ["364964ef-daed-459b-af96-d03041bd9b92"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Nominative case ("dati") vs real title's dative "...Ricardo veselības
+      datiem". Tests whether matching survives Latvian noun declension.
+
+  - id: Q07
+    category: lv_morphology
+    query: "Veselības aģents Hermesam realizācija"
+    expected_top: ["8b772be0-45fe-4bdf-82bc-bece2b1867ec"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Nominative "aģents"/"realizācija" vs title's genitive/accusative
+      "aģenta ... realizāciju". Do not assume any stemmer handles this --
+      this case exists to be MEASURED, per the "testējam, ne pieņemam" scope
+      note (LV morphology support is not assumed to work).
+
+  # --- E. diacritics_unaccent (2) ------------------------------------------
+  - id: Q08
+    category: diacritics_unaccent
+    query: "Veselibas agenta tehnisko realizaciju dot Hermesam"
+    expected_top: ["8b772be0-45fe-4bdf-82bc-bece2b1867ec"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "ASCII-folded (no diacritics) vs the real Latvian title. unaccent() candidate territory."
+
+  - id: Q09
+    category: diacritics_unaccent
+    query: "Marketing Agent outcome orientets sistemas konductors nevis content factory"
+    expected_top: ["7cc2e58d-23d6-4fe1-a0ac-b4a075d537e0"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Folds 'orientēts sistēmas' -> 'orientets sistemas'; mixed LV/EN title, diacritics stripped only on the LV half."
+
+  # --- F. punctuation_hyphen (2) -------------------------------------------
+  - id: Q10
+    category: punctuation_hyphen
+    query: "fresh session specialist routing must fail closed"
+    expected_top: ["300b72c9-4fe7-49d2-9f8d-8dd9ea1b9437"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Space instead of hyphen vs real title "Fresh-session specialist
+      routing must fail closed...". KNOWN BASELINE FAILURE (same class of
+      defect as Q04, punctuation this time instead of word order).
+
+  - id: Q11
+    category: punctuation_hyphen
+    query: "AGENTS.md thin navigation orientation contract"
+    expected_top: ["fff99064-f634-4836-8a5b-cde74dbadb50"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Space instead of slash vs real text 'navigation/orientation contract'."
+
+  # --- G. typo (2) ----------------------------------------------------------
+  - id: Q12
+    category: typo
+    query: "Specilaist rotuing identiy fundation"
+    expected_top: ["d9c65281-73ca-463e-86f9-30b300dd3b4b"]
+    acceptable_alternates: ["300b72c9-4fe7-49d2-9f8d-8dd9ea1b9437", "fbecc028-c412-4746-829d-dfb8ab616e0b"]
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      4 transposition/omission typos on Q04's already-hard query. Expected to
+      fail under everything except trigram similarity. This is the primary
+      pg_trgm justification case.
+
+  - id: Q13
+    category: typo
+    query: "canoncial OpenCB workspac"
+    expected_top: ["3efededb-c0e9-4eff-b4aa-f7e16d3906e0", "4d1ad271-138e-40b7-8296-1266b07673ab"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Both real decisions literally contain the phrase 'canonical OpenCB workspace' -- multi-hit typo case."
+
+  # --- H. mixed_language (2) -------------------------------------------------
+  - id: Q14
+    category: mixed_language
+    query: "Marketing Agent outcome-oriented conductor nevis content factory KPI biznesa outcome"
+    expected_top: ["7cc2e58d-23d6-4fe1-a0ac-b4a075d537e0"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Query itself mixes EN/LV, matching the real record's own EN/LV mixing style."
+
+  - id: Q15
+    category: mixed_language
+    query: "AGENTS.md nevis pilna projekta knowledge dump"
+    expected_top: ["fff99064-f634-4836-8a5b-cde74dbadb50"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "'knowledge dump' (EN) substituted for real text's 'zināšanu izgāztuve' (LV) -- tests cross-language paraphrase, not just script-mixing."
+
+  # --- I. paraphrase (2) -------------------------------------------------
+  - id: Q16
+    category: paraphrase
+    query: "Don't rush into a tokenized fix, first do a proper search evaluation"
+    expected_top: ["5b019127-6b33-4bcd-9b62-ac87fb6dd3fa"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Semantically identical to the real title, lexically almost disjoint.
+      Expected to fail under baseline, FTS(simple), AND trgm alike -- this is
+      the key case that justifies the pgvector semantic layer's existence in
+      the candidate set. If lexical-only approaches somehow pass this by
+      accident, that's worth flagging as a false-positive risk, not a win.
+
+  - id: Q17
+    category: paraphrase
+    query: "workspace confusion across different OpenCB integrations caused lost records"
+    expected_top: ["4d1ad271-138e-40b7-8296-1266b07673ab"]
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Paraphrases the decision_reason text, not the title, on purpose -- reason/context fields must be searchable too, not just title."
+
+  # --- J. current_state_supersession (2) ------------------------------------
+  - id: Q18
+    category: current_state_supersession
+    query: "Finance Agent build priority before Research Agent"
+    expected_top: ["62798537-8f6f-4ae5-bd68-05d6d3ec08a4"]
+    acceptable_alternates: ["1512cba4-92d4-4557-850e-60dffc3c9f00"]
+    false_positives: []
+    current_state_expectation: undefined_by_design
+    notes: >
+      62798537 (superseded, superseded_by 1512cba4) is the exact lexical
+      match; 1512cba4 (active) is topically successor but NOT a lexical match
+      for this phrase. DELIBERATELY not resolved here -- any candidate system
+      must state its policy (surface superseded with a status flag? suppress
+      and redirect to successor? show both?) as an explicit design decision,
+      not an accident of ranking. See RFC.
+
+  - id: Q19
+    category: current_state_supersession
+    query: "Finance Agent migration provisional until clean acceptance rerun"
+    expected_top: ["16b75585-2c3b-4aa1-8bd1-7d4875b3eec1"]
+    acceptable_alternates: ["8e8512a2-0eb5-4772-ae20-71b28c3adffd"]
+    false_positives: []
+    current_state_expectation: undefined_by_design
+    notes: "Second supersession pair, same open policy question as Q18."
+
+  # --- K. negative (2) --------------------------------------------------
+  - id: Q20
+    category: negative
+    query: "quantum teleportation protocol for interstellar communication"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: "ANY result at all -- this is the only invented, deliberately unrelated query text in the corpus"
+    current_state_expectation: n/a
+    notes: "Must stay empty across every candidate. A false positive here is a hard failure regardless of other metrics."
+
+  - id: Q21
+    category: negative
+    query: "recipe for sourdough bread baking temperature"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: "ANY result at all"
+    current_state_expectation: n/a
+    notes: "Second negative control, different topic/vocabulary shape than Q20 (food vs sci-fi) to reduce single-topic luck."
+
+  # --- L. precision_stress (1) -----------------------------------------
+  - id: Q22
+    category: precision_stress
+    query: "Agent"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Deliberately over-broad single common word -- dozens of decisions
+      contain it. Not scored on recall/precision-at-1; scored on result-set
+      size and top-K ranking quality/diversity across candidates. Exists to
+      show how baseline's arbitrary tie-break vs RRF fusion behaves when
+      almost everything matches lexically.
+
+  # --- M. cross_type (1) --------------------------------------------------
+  - id: Q23
+    category: cross_type
+    query: "search_graph_preview whole-phrase LIKE not tokenized"
+    expected_top: ["7c7454c0-f746-4d2c-8243-c2d4a6262c94", "268a11da-f45b-48cc-bbfe-46de73e168f1"]
+    acceptable_alternates: []
+    false_positives: "under node_type=decision filter: either of the above two content_item ids -- they are content_items (findings), not cb_decision_nodes rows, and must NOT appear when the decision filter is applied"
+    current_state_expectation: n/a
+    notes: >
+      Two variants: (a) unfiltered / node_type unset -> both content_item ids
+      expected; (b) node_type="decision" -> expected_top must be empty, since
+      neither of these is a decision node. Tests that node_type scoping is
+      respected correctly across candidates, not just that matching improves.
+
+  # --- N. multi_match (1) --------------------------------------------------
+  - id: Q24
+    category: multi_match
+    query: "Agent-Builder version pin"
+    expected_top: []
+    acceptable_alternates: ["380f216f-6780-4b73-b83c-09773461c6be", "f896c58e-c2f2-4ce1-9a5d-feee4578f60c", "6f693f27-c07b-43c1-a506-4e99ed300d52", "482bee4c-24ef-453c-bc6a-c4bf63ca6306"]
+    false_positives: []
+    current_state_expectation: n/a
+    notes: "Several genuinely relevant decisions exist; scored on relevant-set precision/recall@5, not single top-1 correctness."
+
+  # --- O. ranking_precision (1) --------------------------------------------
+  - id: Q25
+    category: ranking_precision
+    query: "Health Agent context snapshot"
+    expected_top: ["865b6700-5708-4b59-a77c-e3e40761b866"]
+    acceptable_alternates: ["208e59c2-2c35-4d39-af32-a393d3b4e539"]
+    false_positives: "208e59c2 ranked ABOVE 865b6700 -- 865b6700 is the precise 'Personal Health Context Snapshot' match; 208e59c2 is a related-but-broader future-pattern decision and should rank lower, not higher"
+    current_state_expectation: n/a
+    notes: "Both are legitimate hits; this case is about ranking ORDER, not just membership in the result set."
+
+  # --- P. boundary (1) -- reclassified from exact_title in v0.1, see
+  #        review finding e7f9b6a6: expected_top=[] is incompatible with the
+  #        exact_title Hit@1=100% hard gate, this is a scope-boundary test,
+  #        not a title-retrieval test.
+  - id: Q26
+    category: boundary
+    query: "OpenCB Bugs Reliability"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: []
+    current_state_expectation: n/a
+    notes: >
+      Hub title as query text against content/decision search (not hub
+      search) -- expected to return whatever the hub_id join surfaces via
+      hub_match, not a title-text hit. Included to make sure hub-name queries
+      aren't silently assumed equivalent to content queries. NOT part of the
+      exact_title hard gate (Q02/Q03 only) -- scored/reported separately as
+      its own boundary check.
+
+  # --- Q. isolation (2) -- added in v0.1 per review finding e7f9b6a6:
+  #        Q23 covers node_type scoping; these cover workspace + hub scoping,
+  #        the two other axes a search-quality change could accidentally
+  #        break, especially given the recent workspace-identity incident
+  #        this whole investigation started from.
+  - id: Q27
+    category: isolation
+    query: "WebSockets notification transport concurrent listeners budget"
+    expected_top: []
+    acceptable_alternates: []
+    false_positives: "e9e00002-0000-0000-0000-00000000000a or e9e00001-0000-0000-0000-00000000000b -- real content, but it lives in workspace e9e00000-0000-0000-0000-0000000000f1 (opencb-epistemics-validation), NOT the canonical workspace 69984891-..."
+    current_state_expectation: n/a
+    notes: >
+      Cross-workspace leakage hard gate. Positive control: the identical
+      query scoped to workspace_id=e9e00000-0000-0000-0000-0000000000f1
+      SHOULD find e9e00002-0000-0000-0000-00000000000a as top-1 (a real
+      "decision: switch the notification transport to WebSockets..." record)
+      -- proving the corpus is real and the miss under the canonical
+      workspace scope is isolation working correctly, not the fixture being
+      unreachable. Any candidate that leaks this across workspace_id fails
+      hard, same severity as the negative-category false-positive gate.
+
+  - id: Q28
+    category: isolation
+    query: "vector embeddings KNN cosine similarity ranking"
+    expected_top: ["c0de0002-0000-0000-0000-000000000002"]
+    acceptable_alternates: []
+    false_positives: "c0de0002-0000-0000-0000-000000000002 appearing when hub_id=a7fb3e05-6c70-4340-a527-cbd188c67bca (OpenCB Bugs & Reliability) is passed -- that content is linked to hub a1a1a1a1-de00-0002-0000-000000000002 (Retrieval & Embeddings), not this one"
+    current_state_expectation: n/a
+    notes: >
+      Hub-filter regression. Run twice: (a) hub_id=a1a1a1a1-de00-0002-...
+      (Retrieval & Embeddings, the real linked hub) -> expected_top as above;
+      (b) hub_id=a7fb3e05-... (an unrelated real hub) -> expected_top must be
+      empty. Both workspace_id=69984891-... (same workspace in both cases) --
+      isolates hub_id filtering specifically from workspace_id filtering
+      (Q27 tests the latter).
