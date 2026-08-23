@@ -152,7 +152,7 @@ lietotāja/konta administrēšanas jautājums.
 
 ## Status
 
-Diagnoze pabeigta. Bounded fix IMPLEMENTĒTS un pārbaudīts (sk. "Implementācija" sadaļu) — kods,
-regresijas testi, pierādījums caur git stash, un pilns zaļš gate. Commit VĒL NAV veikts, gaida
-lietotāja GO. Workspace identitātes jautājums ("Visiem Aģentiem jālieto vienu!") paliek atklāts un
-nebloķē šo fix — tas jārisina atsevišķi, konta/konektoru līmenī.
+Diagnoze pabeigta. Bounded fix IMPLEMENTĒTS, pārbaudīts un **commitots** — `a0a83b6`
+`fix(graph): union cb_decision_nodes into search_graph_preview for node_type=decision`
+(2026-08-23, lokāli uz `main`, vēl NAV pušots). Workspace identitātes jautājums ("Visiem Aģentiem
+jālieto vienu!") paliek atklāts un nebloķē šo fix — tas jārisina atsevišķi, konta/konektoru līmenī.
