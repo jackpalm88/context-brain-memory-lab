@@ -24,12 +24,19 @@ Exactly candidate #3, nothing from #4:
 
 **Who generates it: caller-explicit only, never inferred.** Same rule `cb_decision_nodes` already
 follows for `supersedes_decision_id` — the thing that makes that mechanism trustworthy is that
-nothing about it is guessed. Concretely: `state_identity` is only ever set when the caller (API
-request, MCP tool argument, or an explicit in-text marker analogous to today's `current_state_scope:`
-marker syntax) supplies it directly. No tier of `scope_pipeline.py` (marker, lineage, hub_alias,
+nothing about it is guessed. No tier of `scope_pipeline.py` (marker, lineage, hub_alias,
 classify_metadata, keyword_heuristic, global_fallback) may *derive* a `state_identity` — that would
 just recreate today's bug in a new column with a different name, which is exactly the migration
 mistake to avoid (§4).
+
+**Revised per §9 (implementation-readiness pass, review `40961bea-...`): Phase A supports exactly
+one input surface for `state_identity` — a dedicated, typed API/MCP request parameter supplied by
+the calling application layer.** The v0 draft of this spec also allowed "an explicit in-text marker
+analogous to `current_state_scope:`" — dropped. An in-text marker is text an LLM can emit inside
+generated content on its own initiative; syntactically explicit, but not necessarily backed by any
+real application-level authority, which reopens exactly the "inference in a trenchcoat" risk this
+spec exists to close (§9.2). If a marker-based surface is wanted later, it belongs to Phase B
+alongside the rest of the trust/authority model for inferred-but-declared input, not Phase A.
 
 **Can governance/classification propose a candidate without committing it?** Not in Phase A. That
 capability (a classifier suggesting "this might be the same identity as X, confirm?") is exactly the
@@ -42,10 +49,20 @@ the third column *only for the supersession lookup*. `memory_type` stays part of
 already a natural, working partition (a `decision` and an `evidence` row are never treated as
 candidates for the same identity today, and there's no reason to relax that in Phase A).
 
-**Forward-compat note (not implemented now):** add the identity/supersession table with an
-`relationship_type` column, nullable or defaulted to a single value (e.g. `'replaces'`), so Phase B
-can later introduce `corrects`/`refines`/etc. without a breaking schema change. This is schema
-design discipline, not Phase B functionality — nothing branches on `relationship_type` yet.
+**Schema form, decided (per §9 readiness pass — the v0 draft left this open, picking one now):
+`state_identity` is a nullable column added directly to both `cb_current_state_anchors` (the
+supersession-lookup key, alongside `scope`) and `content_items` (denormalized for cheap reads, the
+same pattern `cs_supersedes_content_id`/`is_current`/`current_state_scope` already use there today).
+No new table.** A separate identity/supersession table was considered — cleaner separation, easier
+to extend with `relationship_type` later — but rejected for Phase A specifically because it's a
+heavier migration than the smallest-reversible-increment framing this spec is built on (§8 of the
+research note). If Phase B's typed relationships need a dedicated table, that's Phase B's migration
+to scope, not Phase A's.
+
+**Forward-compat note (not implemented now):** add a nullable `relationship_type` column alongside
+`state_identity` on the same two tables, defaulted to a single implicit value (e.g. `'replaces'`),
+so Phase B can later introduce `corrects`/`refines`/etc. without a breaking schema change. This is
+schema design discipline, not Phase B functionality — nothing branches on `relationship_type` yet.
 
 ## 3. Write path
 
@@ -145,12 +162,80 @@ as a Phase B shortcut.
   is built.
 - No automatic backfill of `state_identity` for existing data (§4) — explicit rule, not a deferred
   detail.
-- No decision yet on the exact caller-facing surface for supplying `state_identity` (new API/MCP
-  parameter name, marker syntax, or both) — small enough to resolve during implementation, not
-  blocking this spec's ratification.
 
-## 8. Status
+## 8. Implementation-readiness pass (review `40961bea-8765-4259-a1bb-d9f1f7016786`, decision `982606cd-f487-4983-ad71-c18959e708c0`)
 
-Spec complete, answers the open questions the Phase A decision (`4a11008b-...`) needed closed before
-code could start. Implementation itself has not begun and needs its own explicit go-ahead — this
-document is the handoff artifact for that next step, not the step itself.
+The v0 spec (§1-§7 above, edited in place above where superseded) left three implementation-contract
+gaps. This section closes them without reopening the Phase A architecture choice itself.
+
+### 8.1 Read-model / cardinality contract — must change alongside the write path
+
+Phase A's whole point is that multiple `state_identity` chains can legitimately coexist under one
+`current_state_scope`. Three real, already-shipped surfaces currently assume the opposite —
+confirmed in code, not hypothetical:
+
+- `ApiAdapter.list_current_state_anchors` (`memory_lab/api/services/api_adapter.py:605`) docstring:
+  *"The resolver keeps at most one active anchor per (workspace, memory_type, scope)."*
+- `GET /v1/current-state/anchors` (`memory_lab/api/routers/current_state.py:1-9,25-40`) module
+  docstring: *"return its active anchor(s) — **at most one per memory_type** by resolver invariant"*;
+  the `memory_type` query param docstring repeats the same "one active anchor per memory type"
+  framing.
+- MCP `list_current_state_anchors` (`memory_lab/mcp/capability_manifest.yaml:152-158`): framed as
+  answering *"What is **the** current item of scope X?"* — singular by design.
+- `memory_lab/conflicts/detector.py:150-172` (`multiple_current_anchors_v1`): groups candidate rows
+  **`by_scope` alone** (line 110-113, `by_scope.setdefault(row_scope, []).append(...)`), and raises a
+  high-severity (`0.80` confidence) `stale_current_tension` conflict whenever more than one
+  `is_current=True` row shares a scope. Under Phase A this would fire on every scope with ≥2
+  legitimate, independent `state_identity` chains — a guaranteed flood of false conflict escalations
+  on correct behavior, the opposite of what that detector exists for.
+
+**Required contract change, part of Phase A, not deferred:**
+
+1. `list_current_state_anchors` (adapter + router + manifest text) must be re-documented and, where
+   it filters, re-scoped: querying by `scope` (± `memory_type`) is a **grouping** query and may
+   legitimately return multiple active anchors — one per distinct `state_identity` (plus at most one
+   legacy `state_identity IS NULL` row per §4's transition rules). Callers who want "the one current
+   item for a specific tracked fact" must supply `state_identity`, not `scope`, once it exists. This
+   is a real, documented API behavior change, not just an implementation detail — it needs to ship
+   with the same Phase A release, not follow it.
+2. `multiple_current_anchors_v1` must group by `(workspace_id, memory_type, state_identity)` where
+   `state_identity` is non-null, and keep today's `by_scope` grouping **only** for the
+   `state_identity IS NULL` (legacy) subset. Two active anchors sharing a scope but holding different
+   non-null `state_identity` values are not a conflict and must not generate one; two active anchors
+   sharing a scope with `state_identity IS NULL` on both stay exactly as risky as they are today
+   (correctly still flagged, since that's the untrusted-legacy case per §4).
+
+### 8.2 Caller-explicit ≠ authoritative — the authority boundary
+
+Valid distinction the v0 draft blurred: an LLM agent writing `state_identity="message-queue-choice"`
+into a structured tool call is syntactically explicit but not necessarily *epistemically* explicit —
+it can still be the model's own inference, just relocated from free text into a parameter, which
+would smuggle destructive supersession back in through a technically-compliant side door.
+
+**Phase A authority rule:** `state_identity` may only be supplied by a request whose caller
+identity/route is on an explicit, pre-declared allowlist of trusted writers (e.g. a specific
+application/workflow integration that has deliberately chosen to track a singleton fact this way —
+analogous to how `cb_decision_nodes.supersedes_decision_id` is trusted because it's a deliberate,
+reviewed API call from a workflow that decided to declare a replacement, not a model free-associating
+inside a text field). A general-purpose content-ingestion path (e.g. `create_content_minimal` today)
+must **not** accept a caller-supplied `state_identity` from arbitrary/untrusted callers by default —
+this is the enforcement mechanism for §6's "inference alone never triggers destructive supersession,"
+applied to the *provenance of the parameter itself*, not just to the classifier's confidence score.
+Dropping the in-text marker surface (§2) is one part of this; the allowlist/trust-boundary on the
+structured parameter path is the other, and both are required together.
+
+### 8.3 Marker precision and schema form — resolved (edits made directly in §2 above)
+
+Both folded into §2 in place rather than left as a separate note: (a) Phase A has exactly one
+`state_identity` input surface (a typed request parameter from a trusted caller, per §8.2) —
+the ambiguous "existing marker vs. new marker" question is moot because there is no marker in Phase
+A at all; (b) schema form is decided as columns on `cb_current_state_anchors` + `content_items`, no
+new table, smallest-reversible-increment rationale stated explicitly.
+
+## 9. Status
+
+Spec complete through the implementation-readiness pass (§8). All three gaps from review
+`40961bea-...` are closed: read-model/cardinality contract change specified (§8.1), authority
+boundary defined (§8.2), marker/schema ambiguity resolved (§8.3, §2). Architecture itself
+(`4a11008b-...`, candidate #3 as Phase A) was not reopened. Implementation still has not begun and
+needs its own explicit go-ahead — this document remains the handoff artifact, not the step.
