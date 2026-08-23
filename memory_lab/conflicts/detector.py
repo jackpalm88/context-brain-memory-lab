@@ -28,6 +28,7 @@ class ConflictSourceRow:
     classify_confidence: Optional[float] = None
     is_current: Optional[bool] = None
     current_state_scope: Optional[str] = None
+    state_identity: Optional[str] = None
     cs_supersedes_content_id: Optional[str] = None
     state_status: Optional[str] = None
     anchor_supersedes_content_id: Optional[str] = None
@@ -162,14 +163,27 @@ def detect_conflict_candidates(rows: List[Any], *, workspace_id: str, scope: Opt
         for r, _ in items:
             if r.is_current is True and r.content_id:
                 active_by_content_id.setdefault(str(r.content_id), r)
-        active_rows = list(active_by_content_id.values())
-        if len(active_rows) > 1:
-            candidates.append(_candidate(
-                workspace_id=workspace_id, conflict_type="stale_current_tension", scope=row_scope, status="unresolved", severity="high", confidence=0.80,
-                supporting=[active_rows[0]], contradicting=[active_rows[1]], evidence_roles=[(active_rows[0], "current"), (active_rows[1], "current")],
-                reason_codes=["multiple_current_anchors", "same_workspace", "same_scope"], detection_rule="multiple_current_anchors_v1",
-                metadata={"memory_type": active_rows[0].memory_type, "current_state_scope": row_scope},
-            ))
+
+        # Phase A (decision 4a11008b, spec §8.1): a shared scope with distinct,
+        # non-null state_identity values is legitimate coexistence, not a conflict —
+        # grouping purely by_scope (as this rule did pre-Phase-A) would false-positive
+        # on every scope with >=2 correct, independent identity chains. Group by
+        # (memory_type, state_identity) instead; state_identity=None groups legacy
+        # rows by memory_type alone, preserving today's stricter behavior for the
+        # unaudited legacy subset per the migration's read-path rule.
+        active_groups: Dict[Tuple[Optional[str], Optional[str]], List[ConflictSourceRow]] = {}
+        for r in active_by_content_id.values():
+            active_groups.setdefault((r.memory_type, r.state_identity), []).append(r)
+        for (group_memory_type, group_state_identity), group_rows in active_groups.items():
+            if len(group_rows) > 1:
+                reason_codes = ["multiple_current_anchors", "same_workspace", "same_scope"]
+                reason_codes.append("same_state_identity" if group_state_identity else "legacy_no_state_identity")
+                candidates.append(_candidate(
+                    workspace_id=workspace_id, conflict_type="stale_current_tension", scope=row_scope, status="unresolved", severity="high", confidence=0.80,
+                    supporting=[group_rows[0]], contradicting=[group_rows[1]], evidence_roles=[(group_rows[0], "current"), (group_rows[1], "current")],
+                    reason_codes=reason_codes, detection_rule="multiple_current_anchors_v1",
+                    metadata={"memory_type": group_memory_type, "current_state_scope": row_scope, "state_identity": group_state_identity},
+                ))
 
         claims: Dict[Tuple[str, str], Dict[str, ConflictSourceRow]] = {}
         for row, markers in items:

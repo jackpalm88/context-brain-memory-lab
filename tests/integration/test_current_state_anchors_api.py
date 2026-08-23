@@ -4,6 +4,13 @@ The endpoint is the forward pointer of the supersession chain: given a scope,
 return its ACTIVE anchor(s). Exercised end-to-end: real create_app(), real
 ingest writes (resolver populates cb_current_state_anchors), real read.
 
+Phase A (decision 4a11008b): writes that should create a queryable anchor now
+go through ApiAdapter directly with an explicit, trusted state_identity (see
+_save below) — the general /v1/content route deliberately never accepts
+state_identity from a caller (spec §8.2's authority boundary), so a plain
+scope_hint-only POST no longer creates an anchor at all. Reads still exercise
+the real REST client/app wiring unchanged.
+
 ENVIRONMENT: CB_TEST_ADMIN_DSN as in test_classify_ingest_wiring_integration.py;
 tests skip with SKIPPED_NO_PUBLIC_STYLE_TEST_DSN when unset.
 """
@@ -162,14 +169,26 @@ def _high_confidence_decision():
     )
 
 
-def _save(client, text, scope_hint):
+def _save(app_env, workspace_id, text, scope_hint, state_identity=None):
+    """Phase A (decision 4a11008b): state_identity is required to create a queryable
+    anchor at all, and the general /v1/content route deliberately never exposes it
+    (that's the authority boundary, spec §8.2) — so anchor-creating writes in these
+    tests go through ApiAdapter directly, as a trusted caller would, while every read
+    in this file still goes through the real REST client/app wiring. Defaults
+    state_identity to scope_hint: in every test below, scope_hint already names one
+    specific tracked fact (e.g. "message-queue"), so reusing it as the identity
+    preserves each test's original supersession intent without inventing new keys."""
+    from memory_lab.api.services.api_adapter import ApiAdapter
+
+    adapter = ApiAdapter(app_env)
     with patch(
         "memory_lab.api.services.api_adapter._classify",
         return_value=_high_confidence_decision(),
     ):
-        resp = client.post("/v1/content", json={"content": text, "scope_hint": scope_hint})
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
+        body = adapter.create_content_minimal(
+            content=text, workspace_id=workspace_id, scope_hint=scope_hint,
+            state_identity=state_identity or scope_hint, state_identity_trusted=True,
+        )
     assert body.get("persisted") is True, body
     return body
 
@@ -178,9 +197,9 @@ def test_anchor_read_returns_successor_of_superseded_item(app_env):
     ws_id = _insert_workspace(app_env)
     client = _client(ws_id)
 
-    first = _save(client, "decision: adopt Kafka as the message queue for all async flows.",
+    first = _save(app_env, ws_id, "decision: adopt Kafka as the message queue for all async flows.",
                   "message-queue")
-    second = _save(client, "decision: switch from Kafka to RabbitMQ as the message queue.",
+    second = _save(app_env, ws_id, "decision: switch from Kafka to RabbitMQ as the message queue.",
                    "message-queue")
 
     resp = client.get("/v1/current-state/anchors", params={"scope": "message-queue"})
@@ -207,7 +226,7 @@ def test_anchor_read_returns_successor_of_superseded_item(app_env):
 def test_scope_is_normalized_like_the_write_path(app_env):
     ws_id = _insert_workspace(app_env)
     client = _client(ws_id)
-    saved = _save(client, "decision: use Redis for the session cache layer.", "session cache")
+    saved = _save(app_env, ws_id, "decision: use Redis for the session cache layer.", "session cache")
 
     resp = client.get("/v1/current-state/anchors", params={"scope": "Session Cache!"})
     assert resp.status_code == 200
@@ -220,7 +239,7 @@ def test_scope_is_normalized_like_the_write_path(app_env):
 def test_memory_type_filter_and_vocabulary(app_env):
     ws_id = _insert_workspace(app_env)
     client = _client(ws_id)
-    _save(client, "decision: cap webhook retries at six attempts.", "webhook-retries")
+    _save(app_env, ws_id, "decision: cap webhook retries at six attempts.", "webhook-retries")
 
     hit = client.get("/v1/current-state/anchors",
                      params={"scope": "webhook-retries", "memory_type": "decision"}).json()
@@ -240,7 +259,7 @@ def test_workspace_isolation_and_unclaimed_scope(app_env):
     ws_b = _insert_workspace(app_env)
     client_a = _client(ws_a)
     client_b = _client(ws_b)
-    _save(client_a, "decision: isolate anchors per workspace boundary.", "isolation-check")
+    _save(app_env, ws_a, "decision: isolate anchors per workspace boundary.", "isolation-check")
 
     own = client_a.get("/v1/current-state/anchors", params={"scope": "isolation-check"}).json()
     assert own["count"] == 1

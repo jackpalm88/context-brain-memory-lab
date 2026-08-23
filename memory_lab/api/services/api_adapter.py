@@ -98,7 +98,23 @@ class ApiAdapter:
         workspace_source: Optional[str] = None,
         created_by_subject: Optional[str] = None,
         scope_hint: Optional[str] = None,
+        state_identity: Optional[str] = None,
+        state_identity_trusted: bool = False,
     ) -> Dict[str, Any]:
+        """state_identity is Phase A's explicit replacement-identity key (decision
+        4a11008b). It is authoritative — capable of marking a prior anchor superseded —
+        only when state_identity_trusted=True, which callers must set explicitly and
+        which the general-purpose /v1/content route never does. A caller passing
+        state_identity without asserting trust is rejected outright rather than
+        silently accepted or silently downgraded to grouping-only, per the Phase A
+        acceptance matrix (de24fac8): inference relocated into a parameter is still
+        inference, not authority."""
+        if state_identity and not state_identity_trusted:
+            raise ValueError(
+                "state_identity requires state_identity_trusted=True from an explicit, "
+                "pre-declared trusted caller — see engineering/current-state-phase-a-"
+                "implementation-spec-2026-08-23.md §8.2"
+            )
         content_hash = compute_content_hash(content)
         existing_id = self._find_duplicate_content_id(content_hash, workspace_id)
         if existing_id is not None:
@@ -245,6 +261,10 @@ class ApiAdapter:
                         project_topic=classify_meta.get("project_topic"),
                         domain_hint=classify_meta.get("domain_hint"),
                         content_text=content or "",
+                        # state_identity_trusted was already validated (raise on
+                        # mismatch) before this method reached T1 — by construction,
+                        # any state_identity present here is authorized.
+                        state_identity=state_identity,
                     )
                 current_state_meta = resolution.to_dict()
             else:
@@ -608,13 +628,20 @@ class ApiAdapter:
         scope: str,
         memory_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        state_identity: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """CF-003: read the ACTIVE current-state anchor(s) of a scope.
 
-        The resolver keeps at most one active anchor per (workspace, memory_type,
-        scope); without a memory_type filter a scope can return one row per
-        memory_type. Anchors are workspace-owned rows — no workspace means no
-        readable anchors (never an unscoped cross-workspace read).
+        Phase A (decision 4a11008b, spec §8.1): `scope` is a grouping query. It may
+        legitimately return MULTIPLE active anchors per memory_type — one per distinct
+        `state_identity` (plus at most one legacy `state_identity IS NULL` anchor,
+        still governed by the pre-Phase-A semantics until the migration audit clears
+        it). This is no longer "at most one active anchor per (workspace, memory_type,
+        scope)" — that assumption caused the false-supersession defect this Phase
+        fixes. A caller that wants the one current item for a *specific* tracked fact
+        should pass `state_identity` too, which narrows to at most one row. Anchors
+        are workspace-owned rows — no workspace means no readable anchors (never an
+        unscoped cross-workspace read).
         """
         if not workspace_id:
             return []
@@ -627,6 +654,9 @@ class ApiAdapter:
         if memory_type:
             conditions.append("a.memory_type = %s")
             params.append(memory_type)
+        if state_identity:
+            conditions.append("a.state_identity = %s")
+            params.append(state_identity)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
@@ -634,6 +664,7 @@ class ApiAdapter:
                     SELECT a.anchor_id::text AS anchor_id,
                            a.memory_type,
                            a.scope,
+                           a.state_identity,
                            a.content_id::text AS content_id,
                            a.supersedes_content_id::text AS supersedes_content_id,
                            a.state_status,
@@ -659,6 +690,7 @@ class ApiAdapter:
                 "anchor_id": row["anchor_id"],
                 "memory_type": row.get("memory_type"),
                 "scope": row.get("scope"),
+                "state_identity": row.get("state_identity"),
                 "content_id": row.get("content_id"),
                 "supersedes_content_id": row.get("supersedes_content_id"),
                 "state_status": row.get("state_status"),

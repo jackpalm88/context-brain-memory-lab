@@ -188,16 +188,38 @@ def test_no_conn_skips_db_tiers():
 # ---------------------------------------------------------------------------
 
 def test_resolver_accepts_scope_hint_and_reports_scope_source():
-    cur = FakeCursor(fetchone_queue=[None, None, ("anchor-1",)])
+    # Phase A (decision 4a11008b): without an explicit state_identity, the resolver
+    # only groups (current_state_scope) and never touches cb_current_state_anchors —
+    # scope_hint/scope_source reporting still works exactly as before, but status is
+    # "grouped", not "active", and no anchor row is inserted.
+    cur = FakeCursor(fetchone_queue=[])
     resolution = resolve_current_state_after_ingest(
         FakeConn(cur), workspace_id=WS, content_id=CONTENT, memory_type="decision",
         classify_confidence=0.9, scope_hint="Payment Provider",
         content_text="scope: should-lose\nDecision: switch provider.",
     )
-    assert resolution.status == "active"
+    assert resolution.status == "grouped"
+    assert resolution.reason == "scope_only_no_state_identity"
     assert resolution.current_state_scope == "payment-provider"
     assert resolution.scope_source == "scope_hint"
     assert resolution.to_dict()["scope_source"] == "scope_hint"
+    assert not any("INSERT INTO cb_current_state_anchors" in sql for sql, _ in cur.executed)
+
+
+def test_resolver_with_state_identity_still_writes_anchor():
+    # Same scope_hint as above, but with an explicit, trusted state_identity: the
+    # write path Phase A actually gates supersession on.
+    cur = FakeCursor(fetchone_queue=[None, None, ("anchor-1",)])
+    resolution = resolve_current_state_after_ingest(
+        FakeConn(cur), workspace_id=WS, content_id=CONTENT, memory_type="decision",
+        classify_confidence=0.9, scope_hint="Payment Provider",
+        content_text="scope: should-lose\nDecision: switch provider.",
+        state_identity="payment-provider-choice",
+    )
+    assert resolution.status == "active"
+    assert resolution.current_state_scope == "payment-provider"
+    assert resolution.scope_source == "scope_hint"
+    assert resolution.state_identity == "payment-provider-choice"
     insert_sql, insert_params = next(
         (sql, params) for sql, params in cur.executed
         if "INSERT INTO cb_current_state_anchors" in sql

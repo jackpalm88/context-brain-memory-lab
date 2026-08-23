@@ -558,10 +558,14 @@ def test_high_confidence_current_state_anchor_written(test_dsn, conn):
         signals=["current state", "canonical:"], project_topic="context_brain_memory_lab",
         domain_hint="governance",
     )
+    # Phase A (decision 4a11008b): current_state_scope alone no longer creates an
+    # anchor — an explicit, trusted state_identity is required (spec §8.2). This test
+    # asserts anchor-writing behavior, so it declares one directly as a trusted
+    # Python-level caller would.
     with patch("memory_lab.api.services.api_adapter._classify", return_value=high_conf):
         resp = adapter.create_content_minimal(
             content="current_state_scope: b10-candidate\nCurrent state active anchor. Canonical: source of truth.",
-            workspace_id=ws_id,
+            workspace_id=ws_id, state_identity="b10-candidate", state_identity_trusted=True,
         )
 
     assert resp["current_state_status"] == "active"
@@ -599,14 +603,16 @@ def test_second_current_state_supersedes_previous_anchor(test_dsn, conn):
         signals=["current state", "canonical:"], project_topic=None,
         domain_hint="governance",
     )
+    # Phase A (decision 4a11008b): supersession requires an explicit, trusted
+    # state_identity — declared directly here as a trusted Python-level caller would.
     with patch("memory_lab.api.services.api_adapter._classify", return_value=high_conf):
         first = adapter.create_content_minimal(
             content="current_state_scope: b10-candidate\nCurrent state active anchor v1. Canonical: source of truth.",
-            workspace_id=ws_id,
+            workspace_id=ws_id, state_identity="b10-candidate", state_identity_trusted=True,
         )
         second = adapter.create_content_minimal(
             content="current_state_scope: b10-candidate\nCurrent state active anchor v2. Canonical: source of truth.",
-            workspace_id=ws_id,
+            workspace_id=ws_id, state_identity="b10-candidate", state_identity_trusted=True,
         )
 
     first_id = first["content_id"]

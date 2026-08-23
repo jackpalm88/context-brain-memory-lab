@@ -42,7 +42,7 @@ def _fetch_rows(conn: Any, *, workspace_id: str, query: Optional[str], scope: Op
     sql = f"""
         SELECT ci.content_id::text AS content_id, ci.workspace_id::text AS workspace_id,
                ci.memory_type, ci.memory_sub_type, ci.classify_confidence,
-               ci.is_current, ci.current_state_scope,
+               ci.is_current, ci.current_state_scope, ci.state_identity,
                ci.cs_supersedes_content_id::text AS cs_supersedes_content_id,
                ch.chunk_id::text AS chunk_id, COALESCE(ch.chunk_text, '') AS text,
                a.state_status, a.supersedes_content_id::text AS anchor_supersedes_content_id

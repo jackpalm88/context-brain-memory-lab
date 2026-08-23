@@ -259,11 +259,48 @@ Every item below must hold for Phase A to be considered done. This is the test l
    `62798537`→`1512cba4`, or an equivalent explicit-identity case) still resolves correctly through
    the new `state_identity` path.
 
-## 10. Status
+## 11. Implementation complete (2026-08-23)
 
-Spec complete through the implementation-readiness pass (§8) and the pre-implementation review
-(`de24fac8-...`, §9's acceptance matrix, `relationship_type` column removed from Phase A). All gaps
-closed: read-model/cardinality contract change specified (§8.1), authority boundary defined (§8.2),
-marker/schema ambiguity resolved (§8.3, §2), schema minimized to `state_identity` only (§2).
-Architecture itself (`4a11008b-...`, candidate #3 as Phase A) was not reopened at any point.
-Implementation is authorized to begin against this spec and acceptance matrix.
+Built exactly to this spec, no scope drift:
+
+- `migrations/037_add_current_state_identity.sql` — nullable `state_identity` on
+  `content_items` + `cb_current_state_anchors`, partial index on the non-null subset,
+  no `relationship_type` column.
+- `memory_lab/current_state/resolver.py` — `resolve_current_state_after_ingest` gains
+  `state_identity`; no identity → group-only, `cb_current_state_anchors` untouched;
+  identity present → supersedes keyed on `(workspace_id, memory_type, state_identity)`,
+  same idempotency/lifecycle shape as before.
+- `memory_lab/api/services/api_adapter.py` — `create_content_minimal` gains
+  `state_identity`/`state_identity_trusted`; raises `ValueError` if identity supplied
+  without trust asserted (§8.2's enforcement, not just the REST schema's silent
+  omission). `list_current_state_anchors` gains an optional `state_identity` filter
+  and re-documents the grouping semantics (§8.1).
+- `memory_lab/api/routers/current_state.py` — `GET /v1/current-state/anchors` gains
+  the `state_identity` query param; `POST /v1/content` (`content.py`) was **not**
+  touched — it still has no `state_identity` field, which is the authority boundary
+  itself, not an oversight.
+- `memory_lab/conflicts/detector.py` + `conflicts/service.py` — `multiple_current_anchors_v1`
+  now groups by `(memory_type, state_identity)` for non-null identities; legacy
+  `state_identity IS NULL` rows keep the pre-Phase-A `by_scope` grouping, isolated per
+  §8.1's read-model fix.
+
+**Acceptance matrix (§9): all 9 items verified.** `tests/integration/test_current_state_phase_a.py`
+(8 tests, one per matrix item, #3+#5 combined into one test) — confirmed to fail against
+the pre-Phase-A code+schema via `git stash` (missing column, missing parameter, and the
+literal old false-supersession behavior reproduced), confirmed to pass with the
+implementation restored. Full regression sweep: unit suite 1628 passed (1 pre-existing
+test updated for the intentional `status` behavior change — see
+`tests/unit/test_fv_fix_2b_scope_pipeline.py`); integration suite 102 passed, 3
+pre-existing failures unrelated to this change (confirmed via the same stash technique:
+identical failures on unmodified `main` — an unrelated provider-opt-in test and two
+pre-existing `graph_layer` import errors). Two more pre-existing integration test files
+(`test_current_state_anchors_api.py`'s 4 tests, `test_classify_ingest_wiring_integration.py`'s
+2 tests) updated to declare `state_identity` explicitly where they test anchor-creation/
+supersession behavior, since that behavior is no longer the default — same intentional
+tradeoff the spec always stated (§3).
+
+## 12. Status
+
+Spec complete, implementation-readiness pass complete, pre-implementation review complete
+(`de24fac8-...`), **implementation complete and regression-tested** (§11). Architecture itself
+(`4a11008b-...`, candidate #3 as Phase A) was not reopened at any point in this process.
