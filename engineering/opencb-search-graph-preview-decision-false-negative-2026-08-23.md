@@ -147,8 +147,66 @@ kopu: apgalvotais "kanoniskais workspace_id" `69984891-9fd4-4a39-b3e8-c1f0459c90
 T.i. trīs secīgas ārējās atskaites, trīs dažādas ID kopas, NEVIENA neresolvējas šajā `claude.ai
 OpenCB` konektorā. Nav pieejama neviena MCP tool parametra, kas ļautu šo savienojumu pārvirzīt uz
 apgalvoto workspace_id — tas ir cloud-hostēts konektors bez `workspace_id` argumenta jebkurā no 34
-pieejamajiem rīkiem. Kanoniskā workspace apgalvojuma nevar apstiprināt no šīs puses; tas paliek
-lietotāja/konta administrēšanas jautājums.
+pieejamajiem rīkiem.
+
+## ✅ WORKSPACE JAUTĀJUMS ATRISINĀTS (2026-08-23, pēc restarta)
+
+Restartējot `cbml-api` (rebuild + recreate, lai fix stātos spēkā), atklājās lokālā dev steka
+default workspace_id: `69984891-9fd4-4a39-b3e8-c1f0459c9087` (`cb_workspaces WHERE is_default =
+TRUE`, iegūts caur `docker exec cbml-db psql`) — **precīzi tas pats ID**, ko trešā ārējā atskaite
+apgalvoja par kanonisku.
+
+Pierādījums, ka tas NAV sakritība: `migrations/017_create_workspaces_and_default_bootstrap.sql`
+šo ID ģenerē caur `gen_random_uuid()` bez cietkodēta literāļa — unikāls šīs mašīnas Postgres
+volume. Vienīgais veids, kā ārēja sesija varēja pareizi nosaukt šo precīzo UUID, ir tiešs vaicājums
+pret ŠO PAŠU lokālo datubāzi.
+
+Apstiprinājums caur tiešu psql vaicājumu pret `cbml-db`:
+
+- Hub `a7fb3e05-6c70-4340-a527-cbd188c67bca` "OpenCB Bugs & Reliability" — **EKSISTĒ** šeit.
+- Content `8fd5f91e-9df2-404d-9167-ad56b9e26069` un `b804653c-29d1-4d9e-a456-b5a582c90515` —
+  **EKSISTĒ** šeit.
+- Decision `99a841ec-104f-4e4c-adf4-2c2ed05be2e9` ("Investigate the OpenCB decision-discoverability
+  false-negative now...") un `3efededb-c0e9-4eff-b4aa-f7e16d3906e0` ("Implement the bounded
+  graph-preview decision search fix **against the canonical OpenCB workspace**") — **EKSISTĒ**,
+  statuss `active`, un pēdējā nosaukums pats par sevi apstiprina nodomu.
+
+**SECINĀJUMS:** šis lokālais steks (`cbml-api` / `cbml-db`, workspace_id
+`69984891-9fd4-4a39-b3e8-c1f0459c9087`, sasniedzams uz `127.0.0.1:8088` vai caur lokālu
+`memory_lab.mcp.server`) IR kanoniskais OpenCB workspace CBML repo inženierijas darbam.
+`claude.ai OpenCB` cloud konektors, ko šī sesija lietoja visu sarunu, **NAV kanonisks šim nolūkam**
+— tas ir atsevišķs, plašāks personiskais zināšanu krātuve (48+ hubi, dažādas nesaistītas tēmas:
+Figma workflows, mārketinga arhitektūra, YouTube research u.c.), kas nejauši satur arī dažus
+Context-Brain-projekta hubus, bet NAV sinhronizēts ar šo repo un nav uzskatāms par autoritatīvu šī
+repo atrastajiem/lēmumiem.
+
+**Veiktā korekcija:** Šī atskaite tagad saglabāta ARĪ kanoniskajā lokālajā workspace, sasaistīta ar
+reālo hub `a7fb3e05-...` — `content_id=7f12c699-0d51-442a-8671-8b552f9246e9` (izveidots tieši caur
+`ApiAdapter.create_content_minimal` + `HubStore.link_content`, jo lokālais REST API ir
+`api_key` auth režīmā bez pieejamas atslēgas šai sesijai). Dublikāts, kas iepriekš tika kļūdaini
+izveidots `claude.ai OpenCB` (nekanoniskajā) konektorā — hub `2ada1498-a9eb-4f8a-aecb-c95dc6e0cc63`,
+content `1535d862-e552-4a96-9fec-1056fbc0a216` — paliek tur kā orfāns; tas nav dzēsts (starp-sistēmu
+dzēšana nav veikta bez lietotāja apstiprinājuma), bet vairs nav uzskatāms par avotu patiesībai.
+
+## Papildu finding: multi-word query matching (loģēts, NAV labots)
+
+Pēc restarta veiktā live pārbaude kanoniskajā workspace apstiprināja fix strādā (`query="routing"`
+→ 20 `decision_node` rezultāti). Bet garāka frāze `"Specialist routing identity foundation"` deva
+`0`, kaut arī decision `d9c65281-73ca-463e-86f9-30b300dd3b4b` (title: "Specialist
+**routing/identity** foundation promoted to live PASS after gateway restart matrix") ir acīmredzami
+atbilstošs. Cēlonis: gan `content_items`, gan jaunais `cb_decision_nodes` zars izmanto
+whole-phrase `LIKE '%query%'` — pieprasa TIEŠI to pašu vārdu secību/atstarpes/pieturzīmes. Title
+lieto `/` starp "routing" un "identity"; query lietoja atstarpi — viena rakstzīme salauž visu
+sakritību. Tas NAV a0a83b6 regresija — `content_items` zaram šis whole-phrase LIKE bija jau pirms
+šī fix; jaunais `decision_node` zars apzināti pārmantoja to pašu pieeju (scope robeža: nevis search
+pārbūve). Attiecas uz ABIEM search_graph_preview avotiem vienlīdz.
+
+Lietotāja instrukcija 2026-08-23: **loģēt kā jaunu finding, NELABOT tagad.** Saglabāts kanoniskajā
+workspace (`69984891-...`), sasaistīts ar hub `a7fb3e05-...`: `content_id=7c7454c0-f746-4d2c-8243-c2d4a6262c94`.
+Kandidāts nākotnes virzienam (nav apstiprināts): tokenizēt query vārdos, pieprasīt katra vārda
+neatkarīgu ILIKE (AND) vai īstu full-text indeksu, nevis vienu whole-phrase LIKE — labotu abus
+zarus vienlaicīgi. Jebkuram reālam fix vajadzētu savu bounded scope lēmumu, tāpat kā oriģinālajam
+split-brain fix.
 
 ## Status
 
