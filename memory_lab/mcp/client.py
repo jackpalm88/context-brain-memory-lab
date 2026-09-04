@@ -251,6 +251,7 @@ class MemoryLabApiClient:
         limit: Optional[int] = None,
         debug: Optional[bool] = None,
         only_clean: Optional[bool] = None,
+        retrieval_scope: Optional[Dict[str, Any]] = None,
         workspace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"query": query}
@@ -260,6 +261,8 @@ class MemoryLabApiClient:
             payload["debug"] = debug
         if only_clean is not None:
             payload["only_clean"] = only_clean
+        if retrieval_scope is not None:
+            payload["retrieval_scope"] = retrieval_scope
         return self._request("POST", "/v1/retrieval/search", json_body=payload, workspace_id=workspace_id)
 
 
@@ -268,6 +271,7 @@ class MemoryLabApiClient:
         query: str,
         top_k: Optional[int] = None,
         enable_provider_synthesis: Optional[bool] = None,
+        retrieval_scope: Optional[Dict[str, Any]] = None,
         workspace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"query": query}
@@ -275,6 +279,8 @@ class MemoryLabApiClient:
             payload["top_k"] = top_k
         if enable_provider_synthesis:
             payload["enable_provider_synthesis"] = True
+        if retrieval_scope is not None:
+            payload["retrieval_scope"] = retrieval_scope
         return self._request("POST", "/v1/ask", json_body=payload, workspace_id=workspace_id)
 
     def hub_list(self, status: str = "active", workspace_id: Optional[str] = None) -> Dict[str, Any]:

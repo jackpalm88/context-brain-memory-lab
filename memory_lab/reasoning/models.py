@@ -4,6 +4,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from memory_lab.api.services.retrieval_scope import (
+    RetrievalScope,
+    resolve_content_types,
+    validate_scope_vs_legacy_content_types,
+)
+
 
 class AskRequest(BaseModel):
     """Public ask request. Workspace/auth come from AuthContext, not body fields."""
@@ -15,7 +21,32 @@ class AskRequest(BaseModel):
     degraded_ok: bool = True
     memory_type: Optional[str] = None
     memory_types: Optional[List[str]] = None
+    retrieval_scope: Optional[RetrievalScope] = Field(
+        default=None,
+        description=(
+            "Optional first-class scoped-retrieval envelope (docs/DESIGN_SCOPED_RETRIEVAL.md). "
+            "allowed_hubs restricts candidates to content linked to those hubs; content_types is "
+            "an alias for memory_type/memory_types expressed inside the scope. Absent by default; "
+            "omitting it is byte-identical to pre-scoped-retrieval behavior."
+        ),
+    )
     enable_provider_synthesis: bool = False
+
+    @model_validator(mode="after")
+    def _validate_scope_vs_legacy_content_types(self):
+        scoped = self.retrieval_scope.content_types if self.retrieval_scope else None
+        validate_scope_vs_legacy_content_types(self.resolved_memory_types(), scoped)
+        return self
+
+    def resolved_content_types(self) -> Optional[List[str]]:
+        """Effective content-type filter merging legacy memory_type(s) and
+        retrieval_scope.content_types (validated equivalent-or-conflicting above).
+        None means no filter."""
+        scoped = self.retrieval_scope.content_types if self.retrieval_scope else None
+        return resolve_content_types(self.resolved_memory_types(), scoped)
+
+    def resolved_allowed_hubs(self) -> Optional[List[str]]:
+        return self.retrieval_scope.allowed_hubs if self.retrieval_scope else None
 
     def normalized_query(self) -> str:
         query = (self.query or "").strip()

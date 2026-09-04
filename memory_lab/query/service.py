@@ -100,7 +100,8 @@ class QueryService:
             min_confidence=0.0,
             graph_boost=0.1,
             workspace_id=workspace_id,
-            memory_types=request.resolved_memory_types(),
+            memory_types=request.resolved_content_types(),
+            allowed_hubs=request.resolved_allowed_hubs(),
         )
         evidence = normalize_evidence(results[: policy.top_k], limit=policy.snippet_char_limit)
         # FV-FIX-3: surface resolver-owned current-state signals to the answer path.
@@ -159,6 +160,7 @@ class QueryService:
                 degraded=getattr(response, "degraded", False),
                 degraded_reason=degraded_reason,
                 provider_used=getattr(response, "mode", "") == "provider_backed",
+                requested_scope=request.retrieval_scope.model_dump() if request.retrieval_scope else None,
             )
 
         return response

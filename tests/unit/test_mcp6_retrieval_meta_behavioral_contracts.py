@@ -155,7 +155,8 @@ class FakeRetrievalAdapter:
     def search(self, query: str, workspace_id: Optional[str] = None,
                max_hops: int = 1, min_confidence: float = 0.7,
                graph_boost: float = 0.1,
-               memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+               memory_types: Optional[List[str]] = None,
+               allowed_hubs: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         if not query.strip():
             return []
         cid = str(uuid.uuid5(uuid.UUID("00000000-0000-0000-0000-000000000001"),

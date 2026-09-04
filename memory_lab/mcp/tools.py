@@ -205,6 +205,7 @@ def memory_lab_retrieval_search(
     limit: Optional[int] = None,
     debug: Optional[bool] = None,
     only_clean: Optional[bool] = None,
+    retrieval_scope: Optional[Dict[str, Any]] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Search raw Memory Lab retrieval evidence.
@@ -224,11 +225,18 @@ def memory_lab_retrieval_search(
     - only_clean: compatibility flag accepted by the public API; currently reported
       in debug `filters_applied` as an accepted no-op rather than a private clean/dirty
       filter.
+    - retrieval_scope: optional first-class scoped-retrieval envelope
+      (docs/DESIGN_SCOPED_RETRIEVAL.md), e.g. {"allowed_hubs": [...], "content_types": [...]}.
+      Restricts the candidate set BEFORE scoring/ranking, across all retrieval paths, and is
+      enforced fail-closed: an unresolvable hub (nonexistent, zero-content, or outside the
+      caller's workspace) yields zero candidates from that source rather than an unscoped
+      fallback. The response echoes what was actually enforced under `scope_applied`. Omitting
+      this parameter is byte-identical to pre-scoped-retrieval behavior.
     - workspace_id: optional workspace override for the API request context.
 
-    Note: API-level `memory_type`/`memory_types` filters exist on
-    `/v1/retrieval/search`, but this MCP wrapper does not forward them in M11C-2-4;
-    adding MCP filter parameters is a future behavior/shape change, not docs polish.
+    Note: top-level `memory_type`/`memory_types` filters exist on `/v1/retrieval/search`,
+    but this MCP wrapper does not forward them (M11C-2-4 limitation, unchanged); use
+    `retrieval_scope.content_types` instead, which this wrapper does forward.
     """
     return _call_api(
         _client().retrieval_search,
@@ -236,6 +244,7 @@ def memory_lab_retrieval_search(
         limit=limit,
         debug=debug,
         only_clean=only_clean,
+        retrieval_scope=retrieval_scope,
         workspace_id=workspace_id,
     )
 
@@ -281,6 +290,7 @@ def _enrich_query_memory_result(result: Any) -> Any:
 def query_memory(
     query: str,
     enable_provider_synthesis: bool = False,
+    retrieval_scope: Optional[Dict[str, Any]] = None,
     workspace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Ask a question answered strictly from workspace memory (evidence-grounded).
@@ -297,10 +307,18 @@ def query_memory(
     otherwise the response reports mode="degraded" with failure_reason
     "provider_disabled" and the deterministic answer is retained. The provider may
     only reword — citations stay bounded to retrieved workspace evidence.
+
+    retrieval_scope: optional first-class scoped-retrieval envelope
+    (docs/DESIGN_SCOPED_RETRIEVAL.md), e.g. {"allowed_hubs": [...], "content_types": [...]}.
+    Restricts the underlying retrieval candidate set before scoring, fail-closed on an
+    unresolvable scope (never a silent unscoped fallback). Omitting it is byte-identical
+    to pre-scoped-retrieval behavior.
     """
     kwargs: Dict[str, Any] = {"query": query, "workspace_id": workspace_id}
     if enable_provider_synthesis:
         kwargs["enable_provider_synthesis"] = True
+    if retrieval_scope is not None:
+        kwargs["retrieval_scope"] = retrieval_scope
     return _enrich_query_memory_result(_call_api(_client().ask, **kwargs))
 
 

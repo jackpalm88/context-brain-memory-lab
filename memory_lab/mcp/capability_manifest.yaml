@@ -415,21 +415,21 @@ tools:
     avoid_when: "You want a synthesized answer — use query_memory."
     determinism: deterministic
     required_inputs: [query]
-    optional_inputs: [limit, debug, only_clean]
+    optional_inputs: [limit, debug, only_clean, retrieval_scope]
     output_kind: ranked_evidence
     response_shape:
       kind: keyed_list
       rows_keys: [results]
       count_key: count
-      context_keys: [query, result_count, limit, debug]
-    key_signals: [result_trust, ranking_reason, source_path, confidence, score_components]
+      context_keys: [query, result_count, limit, debug, scope_applied]
+    key_signals: [result_trust, ranking_reason, source_path, confidence, score_components, scope_applied]
     suggested_followups:
       - tool: memory_lab_content_get
         when: "a result needs its full stored record or a currency check"
       - tool: load_graph_node_full
         when: "a result needs graph context"
-    failure: "An empty result list is a valid outcome, not an error. result_trust=low means weak evidence — corroborate before relying on it."
-    honest_contract: "memory_type filters exist on the API but are not forwarded by this MCP wrapper (stated limitation); only_clean is accepted as a compatibility no-op."
+    failure: "An empty result list is a valid outcome, not an error. result_trust=low means weak evidence — corroborate before relying on it. A supplied retrieval_scope that resolves to nothing (unknown hub, zero-content hub, workspace mismatch) yields zero results for that source — never a silent unscoped fallback."
+    honest_contract: "Top-level memory_type/memory_types filters exist on the API but are not forwarded by this MCP wrapper (stated limitation); use retrieval_scope.content_types instead, which IS forwarded. only_clean is accepted as a compatibility no-op."
 
   - name: query_memory
     role: answer
@@ -440,7 +440,7 @@ tools:
     avoid_when: "You need raw evidence lists or provenance detail — use memory_lab_retrieval_search."
     determinism: provider_opt_in
     required_inputs: [query]
-    optional_inputs: [enable_provider_synthesis]
+    optional_inputs: [enable_provider_synthesis, retrieval_scope]
     output_kind: answer_envelope
     response_shape:
       kind: answer_envelope

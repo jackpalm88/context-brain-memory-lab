@@ -47,7 +47,13 @@ class RetrievalAdapter:
     def _query_terms(query: str) -> List[str]:
         return [t.strip().lower() for t in query.split() if len(t.strip()) >= 3][:8]
 
-    def _deterministic_vector_search(self, query: str, workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def _deterministic_vector_search(
+        self,
+        query: str,
+        workspace_id: Optional[str] = None,
+        memory_types: Optional[List[str]] = None,
+        allowed_hubs: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         """Deterministic provider-free DB search used by the public baseline and smokes.
 
         Workspace isolation rule: when workspace_id is provided, every content/chunk
@@ -65,6 +71,11 @@ class RetrievalAdapter:
         if memory_types:
             where_parts.append("c.memory_type = ANY(%s::text[])")
             params.append(list(memory_types))
+        if allowed_hubs:
+            where_parts.append(
+                "c.content_id::text = ANY(SELECT content_id FROM cb_hub_content WHERE hub_id = ANY(%s::uuid[]))"
+            )
+            params.append(list(allowed_hubs))
         where = " AND ".join(where_parts)
         with self._conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -103,12 +114,26 @@ class RetrievalAdapter:
             )
         return results
 
-    def _hub_linked_results(self, query: str, workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def _hub_linked_results(
+        self,
+        query: str,
+        workspace_id: Optional[str] = None,
+        memory_types: Optional[List[str]] = None,
+        allowed_hubs: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         if not workspace_id:
             return []
         hub = self.hub_store.match_query(query, workspace_id=workspace_id)
         if not hub:
             return []
+        if allowed_hubs is not None:
+            # Fail-closed intersection: the hub-linked path's own query-text matching
+            # is independent of the caller's scope, so it must not silently ignore
+            # scope just because its matching mechanism differs from the other two
+            # candidate paths (design doc §6.1).
+            allowed_set = {str(h).lower() for h in allowed_hubs}
+            if str(hub["hub_id"]).lower() not in allowed_set:
+                return []
         content_ids = self.hub_store.get_hub_content_ids(hub["hub_id"], workspace_id=workspace_id)
         if not content_ids:
             return []
@@ -184,7 +209,14 @@ class RetrievalAdapter:
             return None, reason
         return response.vector, None
 
-    def _pgvector_knn_search(self, query: str, query_vector: List[float], workspace_id: Optional[str] = None, memory_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def _pgvector_knn_search(
+        self,
+        query: str,
+        query_vector: List[float],
+        workspace_id: Optional[str] = None,
+        memory_types: Optional[List[str]] = None,
+        allowed_hubs: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         where_parts = ["ch.embedding IS NOT NULL"]
         where_params: List[Any] = []
         if workspace_id:
@@ -193,6 +225,11 @@ class RetrievalAdapter:
         if memory_types:
             where_parts.append("c.memory_type = ANY(%s::text[])")
             where_params.append(list(memory_types))
+        if allowed_hubs:
+            where_parts.append(
+                "c.content_id::text = ANY(SELECT content_id FROM cb_hub_content WHERE hub_id = ANY(%s::uuid[]))"
+            )
+            where_params.append(list(allowed_hubs))
         query_vector_literal = _vector_literal(query_vector)
         params: List[Any] = [query_vector_literal, *where_params, query_vector_literal]
         where = " AND ".join(where_parts)
@@ -244,14 +281,15 @@ class RetrievalAdapter:
         workspace_id: Optional[str] = None,
         memory_types: Optional[List[str]] = None,
         consult_hub_graph: bool = False,
+        allowed_hubs: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         started = time.perf_counter()
         query_vector, embedding_degraded = self._query_embedding(query)
         pgvector_attempted = bool(self.pgvector_retrieval_enabled)
         if query_vector is not None:
-            vector_search = lambda q: self._pgvector_knn_search(q, query_vector, workspace_id=workspace_id, memory_types=memory_types)
+            vector_search = lambda q: self._pgvector_knn_search(q, query_vector, workspace_id=workspace_id, memory_types=memory_types, allowed_hubs=allowed_hubs)
         else:
-            vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types)
+            vector_search = lambda q: self._deterministic_vector_search(q, workspace_id=workspace_id, memory_types=memory_types, allowed_hubs=allowed_hubs)
         search_adapter = self.hub_term_adapter if consult_hub_graph else self.adapter
         results = search_adapter.search(
             query=query,
@@ -274,6 +312,7 @@ class RetrievalAdapter:
                 query,
                 workspace_id=workspace_id,
                 memory_types=memory_types,
+                allowed_hubs=allowed_hubs,
             ):
                 rid = str(row.get("content_id") or row.get("id"))
                 if rid in seen:
@@ -285,7 +324,7 @@ class RetrievalAdapter:
                 lexical_added += 1
         before_hub_count = len(results)
         seen = {str(r.get("content_id") or r.get("id")) for r in results}
-        hub_candidates = self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types)
+        hub_candidates = self._hub_linked_results(query, workspace_id=workspace_id, memory_types=memory_types, allowed_hubs=allowed_hubs)
         hub_added = 0
         for row in hub_candidates:
             rid = str(row.get("content_id") or row.get("id"))

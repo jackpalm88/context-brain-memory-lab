@@ -249,7 +249,7 @@ class TestBackwardsCompatibility:
         monkeypatch.setattr(
             adapter,
             "_deterministic_vector_search",
-            lambda query, workspace_id=None, memory_types=None: [
+            lambda query, workspace_id=None, memory_types=None, allowed_hubs=None: [
                 {
                     "id": "lexical-id",
                     "content_id": "lexical-id",

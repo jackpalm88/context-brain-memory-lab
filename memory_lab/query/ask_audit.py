@@ -13,6 +13,8 @@ Recorded fields (all stored in `metadata` JSONB):
     degraded            bool      AskResponse.degraded
     degraded_reason     str|None  AskResponse.degraded_reason if available
     provider_used       bool      mode == "provider_backed"
+    requested_scope     dict|None raw AskRequest.retrieval_scope, or null (docs/DESIGN_SCOPED_RETRIEVAL.md)
+    scope_enforcement   str       always "pre_filter" under this design
 
 retrieval_path categories (mirrors values already present in RetrievalAdapter rows):
     deterministic           — only deterministic BM25/keyword path used
@@ -94,6 +96,7 @@ def record_ask_event(
     degraded: bool,
     degraded_reason: Optional[str],
     provider_used: bool,
+    requested_scope: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Insert one row into cb_audit_events for an /v1/ask execution.
 
@@ -109,6 +112,14 @@ def record_ask_event(
             "degraded": degraded,
             "degraded_reason": degraded_reason,
             "provider_used": provider_used,
+            # docs/DESIGN_SCOPED_RETRIEVAL.md §6.6: requested_scope is the raw
+            # retrieval_scope the caller sent (or null). scope_enforcement is
+            # always "pre_filter" under this design (scope is never applied
+            # post-hoc) — recorded on every event so a future post-hoc code path
+            # cannot silently regress provenance truthfulness without the audit
+            # record admitting it.
+            "requested_scope": requested_scope,
+            "scope_enforcement": "pre_filter",
         }
 
         with psycopg2.connect(database_url) as conn:

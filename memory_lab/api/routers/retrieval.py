@@ -7,6 +7,11 @@ from memory_lab.api.auth_context import AuthContext
 from memory_lab.api.config import get_settings
 from memory_lab.api.dependencies.auth import require_permission
 from memory_lab.api.services.retrieval_adapter import RetrievalAdapter
+from memory_lab.api.services.retrieval_scope import (
+    RetrievalScope,
+    resolve_content_types,
+    validate_scope_vs_legacy_content_types,
+)
 from memory_lab.ingestion.classify_pipeline import MEMORY_TYPE_VALUES
 from memory_lab.query.evidence import normalize_evidence
 
@@ -36,6 +41,15 @@ class RetrievalRequest(BaseModel):
     graph_boost: float = Field(default=0.1, description="Legacy multi-query score multiplier hint forwarded to the retrieval adapter. M12 curation boosts (curated graph neighbor +0.04, manual hub link +0.15) are fixed constants in the composite ranker and are not caller-configurable.")
     memory_type: Optional[str] = Field(default=None, description="Optional single memory type filter. Mutually exclusive with memory_types.")
     memory_types: Optional[List[str]] = Field(default=None, description="Optional list of memory type filters. Mutually exclusive with memory_type.")
+    retrieval_scope: Optional[RetrievalScope] = Field(
+        default=None,
+        description=(
+            "Optional first-class scoped-retrieval envelope (docs/DESIGN_SCOPED_RETRIEVAL.md). "
+            "allowed_hubs restricts candidates to content linked to those hubs; content_types is "
+            "an alias for memory_type/memory_types expressed inside the scope. Absent by default; "
+            "omitting it is byte-identical to pre-scoped-retrieval behavior."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_memory_type_filter(self):
@@ -60,11 +74,27 @@ class RetrievalRequest(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _validate_scope_vs_legacy_content_types(self):
+        scoped = self.retrieval_scope.content_types if self.retrieval_scope else None
+        validate_scope_vs_legacy_content_types(self.resolved_memory_types(), scoped)
+        return self
+
     def resolved_memory_types(self) -> Optional[List[str]]:
         """Return effective memory_types list; None means no filter."""
         if self.memory_type is not None:
             return [self.memory_type]
         return self.memory_types
+
+    def resolved_content_types(self) -> Optional[List[str]]:
+        """Effective content-type filter merging legacy memory_type(s) and
+        retrieval_scope.content_types (validated equivalent-or-conflicting above).
+        None means no filter."""
+        scoped = self.retrieval_scope.content_types if self.retrieval_scope else None
+        return resolve_content_types(self.resolved_memory_types(), scoped)
+
+    def resolved_allowed_hubs(self) -> Optional[List[str]]:
+        return self.retrieval_scope.allowed_hubs if self.retrieval_scope else None
 
 
 def _clean_mapping(value: Any) -> dict:
@@ -246,7 +276,8 @@ def retrieval_search(req: RetrievalRequest, auth: AuthContext = Depends(require_
         min_confidence=req.min_confidence,
         graph_boost=req.graph_boost,
         workspace_id=auth.workspace_id,
-        memory_types=req.resolved_memory_types(),
+        memory_types=req.resolved_content_types(),
+        allowed_hubs=req.resolved_allowed_hubs(),
     )
     normalized_evidence = normalize_evidence(results)
     evidence = normalized_evidence[: req.limit]
@@ -268,6 +299,14 @@ def retrieval_search(req: RetrievalRequest, auth: AuthContext = Depends(require_
         # M12-4: RankingSignals envelope (production search_by_text_v2 parity).
         "ranking_signals": getattr(adapter, "last_ranking_signals", None) or None,
     }
+    if req.retrieval_scope is not None:
+        # Provenance, not debug-only metadata: always present when a scope was
+        # supplied, reflecting what was actually enforced (design doc §6.7).
+        response["scope_applied"] = {
+            "allowed_hubs": req.retrieval_scope.allowed_hubs,
+            "content_types": req.resolved_content_types(),
+            "enforcement": "pre_filter",
+        }
     if req.debug:
         response["debug_metadata"] = _debug_metadata(
             req,

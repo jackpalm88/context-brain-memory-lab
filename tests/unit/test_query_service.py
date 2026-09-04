@@ -83,6 +83,7 @@ def test_query_service_preserves_retrieval_kwargs():
             "graph_boost": 0.1,
             "workspace_id": WS,
             "memory_types": None,
+            "allowed_hubs": None,
         }
     ]
 
