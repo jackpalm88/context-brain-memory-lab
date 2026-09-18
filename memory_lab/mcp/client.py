@@ -179,11 +179,35 @@ class MemoryLabApiClient:
         scope: str,
         memory_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        state_identity: Optional[str] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {"scope": scope}
         if memory_type is not None:
             params["memory_type"] = memory_type
+        if state_identity is not None:
+            params["state_identity"] = state_identity
         return self._request("GET", "/v1/current-state/anchors", params=params, workspace_id=workspace_id)
+
+    def trusted_promote_current_state(
+        self,
+        *,
+        content: str,
+        memory_type: str,
+        state_identity: str,
+        scope_hint: Optional[str] = None,
+        quick_summary: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "content": content,
+            "memory_type": memory_type,
+            "state_identity": state_identity,
+        }
+        if scope_hint is not None:
+            payload["scope_hint"] = scope_hint
+        if quick_summary is not None:
+            payload["quick_summary"] = quick_summary
+        return self._request("POST", "/v1/current-state/promote", json_body=payload, workspace_id=workspace_id)
 
     def update_node_metadata(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self.get_content_metadata(content_id=content_id, workspace_id=workspace_id)

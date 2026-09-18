@@ -18,6 +18,7 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     "content.create": {"owner", "admin", "writer", "service_agent"},
     "content.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},
     "content.update": {"owner", "admin", "writer", "service_agent"},
+    "current_state.promote": {"owner", "admin", "service_agent"},
     "hubs.create": {"owner", "admin", "writer", "service_agent"},
     "hubs.read": {"owner", "admin", "writer", "reader", "service_agent", "auditor"},
     "hubs.link": {"owner", "admin", "writer", "service_agent"},
@@ -38,7 +39,7 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
 }
 
 # escalations.resolve is the Constitution P-V human gate — audited like admin actions.
-ADMIN_PERMISSIONS = {"admin.cleanup", "admin.tier_override", "admin.tier_rollback", "escalations.resolve"}
+ADMIN_PERMISSIONS = {"admin.cleanup", "admin.tier_override", "admin.tier_rollback", "escalations.resolve", "current_state.promote"}
 
 
 def _token_hash(token: str) -> str:

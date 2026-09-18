@@ -79,7 +79,7 @@ def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) 
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
-def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, workspace_id: Optional[str] = None, state_identity: Optional[str] = None) -> Dict[str, Any]:
     """Read the ACTIVE current-state anchor(s) of a scope — the forward pointer
     of the supersession chain (CF-003).
 
@@ -93,6 +93,33 @@ def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, wo
         _client().current_state_anchor_list,
         scope=scope,
         memory_type=memory_type,
+        workspace_id=workspace_id,
+        state_identity=state_identity,
+    )
+
+
+def trusted_promote_current_state(
+    content: str,
+    memory_type: str,
+    state_identity: str,
+    scope_hint: Optional[str] = None,
+    quick_summary: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Trusted current-state promotion seam for allowlisted callers.
+
+    Accepts an explicit state_identity; never infers identity from text, scope,
+    or classifier output. Supersession is keyed by
+    (workspace_id, memory_type, state_identity). General /v1/content remains
+    unchanged and cannot create canonical current-state anchors.
+    """
+    return _call_api(
+        _client().trusted_promote_current_state,
+        content=content,
+        memory_type=memory_type,
+        state_identity=state_identity,
+        scope_hint=scope_hint,
+        quick_summary=quick_summary,
         workspace_id=workspace_id,
     )
 
@@ -640,6 +667,7 @@ APPROVED_TOOLS = {
     "memory_lab_content_create_id": memory_lab_content_create_id,
     "memory_lab_content_get": memory_lab_content_get,
     "list_current_state_anchors": list_current_state_anchors,
+    "trusted_promote_current_state": trusted_promote_current_state,
     "set_quick_summary": set_quick_summary,
     "update_node_metadata": update_node_metadata,
     "memory_lab_hub_create": memory_lab_hub_create,

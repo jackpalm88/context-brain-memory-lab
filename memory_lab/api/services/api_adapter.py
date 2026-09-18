@@ -8,7 +8,7 @@ from psycopg2.extras import RealDictCursor
 from memory_lab.graph.hub_store import HubStore
 from memory_lab.graph.hub_edge_store import HubEdgeStore
 from memory_lab.ingestion.scorer import score_content
-from memory_lab.ingestion.classify_pipeline import classify as _classify
+from memory_lab.ingestion.classify_pipeline import ClassificationResult, classify as _classify
 from memory_lab.persistence.body_chunks import persist_body_chunks, persist_multi_chunks
 from memory_lab.ingestion.chunking import DeterministicContentChunker
 from memory_lab.api.utils.content_signatures import compute_content_hash
@@ -100,6 +100,10 @@ class ApiAdapter:
         scope_hint: Optional[str] = None,
         state_identity: Optional[str] = None,
         state_identity_trusted: bool = False,
+        trusted_memory_type: Optional[str] = None,
+        trusted_memory_sub_type: Optional[str] = None,
+        skip_dedup: bool = False,
+        force_persist: bool = False,
     ) -> Dict[str, Any]:
         """state_identity is Phase A's explicit replacement-identity key (decision
         4a11008b). It is authoritative — capable of marking a prior anchor superseded —
@@ -115,8 +119,12 @@ class ApiAdapter:
                 "pre-declared trusted caller — see engineering/current-state-phase-a-"
                 "implementation-spec-2026-08-23.md §8.2"
             )
+        if trusted_memory_type and not (state_identity and state_identity_trusted):
+            raise ValueError("trusted_memory_type requires an explicit trusted state_identity")
+        if force_persist and not (state_identity and state_identity_trusted):
+            raise ValueError("force_persist requires an explicit trusted state_identity")
         content_hash = compute_content_hash(content)
-        existing_id = self._find_duplicate_content_id(content_hash, workspace_id)
+        existing_id = None if skip_dedup else self._find_duplicate_content_id(content_hash, workspace_id)
         if existing_id is not None:
             duplicate_response: Dict[str, Any] = {
                 "content_id": existing_id,
@@ -137,6 +145,11 @@ class ApiAdapter:
         )
         tier = tier_decision.tier
         tier_reason = tier_decision.reason
+        should_persist = tier_decision.should_persist
+        if force_persist and not should_persist:
+            tier = "persistent"
+            tier_reason = f"trusted_current_state_promotion:force_persist_after_{tier_decision.reason}"
+            should_persist = True
 
         if event.fallback_reason:
             governance_lines = [
@@ -152,8 +165,8 @@ class ApiAdapter:
         base_response: Dict[str, Any] = {
             "created": False,
             "persisted": False,
-            "discarded": not tier_decision.should_persist,
-            "mode": "governed_discarded" if not tier_decision.should_persist else ("governed_fallback" if event.fallback_reason else "governed"),
+            "discarded": not should_persist,
+            "mode": "trusted_current_state_promotion" if force_persist else ("governed_discarded" if not should_persist else ("governed_fallback" if event.fallback_reason else "governed")),
             "scores": {
                 "quality": event.scores.quality,
                 "relevance": event.scores.relevance,
@@ -167,7 +180,7 @@ class ApiAdapter:
         }
         base_response.update(self._workspace_meta(workspace_id, workspace_source))
 
-        if not tier_decision.should_persist:
+        if not should_persist:
             return base_response
 
         with self._conn() as conn:
@@ -234,12 +247,23 @@ class ApiAdapter:
             logger.warning("[api_adapter] chunk embedding warnings for %s: %s", row["content_id"], chunk_result.warnings)
 
         # T3: classify write — best-effort, isolated; failure never rolls back T1/T2
+        forced_classification = None
+        if trusted_memory_type:
+            forced_classification = ClassificationResult(
+                memory_type=trusted_memory_type,
+                memory_sub_type=trusted_memory_sub_type or "trusted_current_state",
+                confidence=1.0,
+                signals=["trusted_current_state_promotion"],
+                project_topic=None,
+                domain_hint=None,
+            )
         classify_meta: Dict[str, Any] = self._run_classify_and_write(
             content=content or "",
             content_id=row["content_id"],
             workspace_id=workspace_id,
             tier=tier,
             composite_score=event.scores.composite,
+            forced_result=forced_classification,
         ) or {}
 
         # T4: current-state resolver — best-effort, after classify write, persisted rows only.
@@ -350,6 +374,7 @@ class ApiAdapter:
         workspace_id: Optional[str],
         tier: str,
         composite_score: float,
+        forced_result: Optional[ClassificationResult] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         T3: best-effort classify write.  Never raises.  Returns classify summary or None on failure.
@@ -361,11 +386,15 @@ class ApiAdapter:
 
         NEVER writes: is_current, current_state_scope, cs_supersedes_content_id.
         """
-        try:
-            result = _classify(content=content, tier=tier, composite_score=composite_score)
-        except Exception as exc:
-            logger.warning("[api_adapter] classify raised unexpectedly for %s: %s", content_id, exc)
-            result = None
+        classifier_version = "trusted_current_state_v1" if forced_result is not None else "heuristic_v1"
+        if forced_result is not None:
+            result = forced_result
+        else:
+            try:
+                result = _classify(content=content, tier=tier, composite_score=composite_score)
+            except Exception as exc:
+                logger.warning("[api_adapter] classify raised unexpectedly for %s: %s", content_id, exc)
+                result = None
 
         if result is None:
             return None
@@ -379,18 +408,18 @@ class ApiAdapter:
                         SELECT 1 FROM cb_classification_history
                          WHERE content_id = %s::uuid
                            AND memory_type = %s
-                           AND classifier_version = 'heuristic_v1'
+                           AND classifier_version = %s
                            AND is_active_classification = TRUE
                          LIMIT 1
                         """,
-                        (content_id, result.memory_type),
+                        (content_id, result.memory_type, classifier_version),
                     )
                     if cur.fetchone():
                         return {
                             "memory_type": result.memory_type,
                             "memory_sub_type": result.memory_sub_type,
                             "classify_confidence": result.confidence,
-                            "classify_mode": "heuristic_v1",
+                            "classify_mode": classifier_version,
                             "classify_status": "classified",
                             "signals": result.signals,
                             "project_topic": result.project_topic,
@@ -432,7 +461,7 @@ class ApiAdapter:
                                  classification_signals, is_active_classification)
                             VALUES
                                 (%s::uuid, %s::uuid, %s, %s, %s,
-                                 'heuristic_v1', %s, %s::jsonb, TRUE)
+                                 %s, %s, %s::jsonb, TRUE)
                             """,
                             (
                                 workspace_id,
@@ -440,6 +469,7 @@ class ApiAdapter:
                                 result.memory_type,
                                 result.memory_sub_type,
                                 result.confidence,
+                                classifier_version,
                                 result.project_topic,
                                 json.dumps(result.signals),
                             ),
@@ -475,7 +505,7 @@ class ApiAdapter:
                 "memory_type": result.memory_type,
                 "memory_sub_type": result.memory_sub_type,
                 "classify_confidence": result.confidence,
-                "classify_mode": "heuristic_v1",
+                "classify_mode": classifier_version,
                 "classify_status": "classified",
                 "signals": result.signals,
                 "project_topic": result.project_topic,
@@ -702,6 +732,124 @@ class ApiAdapter:
             }
             for row in rows
         ]
+
+    def current_state_supersession_chain(
+        self, *, workspace_id: str, memory_type: str, state_identity: str
+    ) -> List[Dict[str, Any]]:
+        """Return the audit chain for one explicit current-state identity."""
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT a.anchor_id::text AS anchor_id,
+                           a.memory_type,
+                           a.scope,
+                           a.state_identity,
+                           a.content_id::text AS content_id,
+                           a.supersedes_content_id::text AS supersedes_content_id,
+                           a.state_status,
+                           a.set_by,
+                           a.valid_from,
+                           a.valid_until,
+                           ci.quick_summary,
+                           {select_sql}
+                      FROM cb_current_state_anchors a
+                      LEFT JOIN content_items ci ON ci.content_id = a.content_id
+                     WHERE a.workspace_id = %s::uuid
+                       AND a.memory_type = %s
+                       AND a.state_identity = %s
+                     ORDER BY a.valid_from ASC, a.anchor_id ASC
+                    """.format(select_sql=current_state_select_sql("ci")),
+                    (workspace_id, memory_type, state_identity),
+                )
+                rows = cur.fetchall()
+
+        def _iso(v):
+            return v.isoformat() if v else None
+
+        return [
+            {
+                "anchor_id": row["anchor_id"],
+                "memory_type": row.get("memory_type"),
+                "scope": row.get("scope"),
+                "state_identity": row.get("state_identity"),
+                "content_id": row.get("content_id"),
+                "supersedes_content_id": row.get("supersedes_content_id"),
+                "state_status": row.get("state_status"),
+                "set_by": row.get("set_by"),
+                "valid_from": _iso(row.get("valid_from")),
+                "valid_until": _iso(row.get("valid_until")),
+                "quick_summary": row.get("quick_summary"),
+                **project_current_state(row),
+            }
+            for row in rows
+        ]
+
+    def trusted_promote_current_state(
+        self,
+        *,
+        content: str,
+        workspace_id: str,
+        workspace_source: Optional[str] = None,
+        created_by_subject: Optional[str] = None,
+        memory_type: str,
+        state_identity: str,
+        scope_hint: Optional[str] = None,
+        quick_summary: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Trusted current-state promotion seam.
+
+        This is intentionally separate from the general /v1/content write path.
+        The caller supplies the replacement identity explicitly; the adapter does
+        not infer it from scope, text, or classifier output. Supersession remains
+        keyed only by (workspace_id, memory_type, state_identity).
+        """
+        if not workspace_id:
+            raise ValueError("workspace_id is required for trusted current-state promotion")
+        active_before = self.list_current_state_anchors(
+            scope=scope_hint or state_identity,
+            memory_type=memory_type,
+            workspace_id=workspace_id,
+            state_identity=state_identity,
+        )
+        previous_anchor = active_before[0] if active_before else None
+        created = self.create_content_minimal(
+            content=content,
+            workspace_id=workspace_id,
+            workspace_source=workspace_source,
+            created_by_subject=created_by_subject,
+            scope_hint=scope_hint or state_identity,
+            state_identity=state_identity,
+            state_identity_trusted=True,
+            trusted_memory_type=memory_type,
+            skip_dedup=True,
+            force_persist=True,
+        )
+        if quick_summary and created.get("content_id"):
+            self.set_quick_summary(created["content_id"], quick_summary, workspace_id=workspace_id)
+
+        chain = self.current_state_supersession_chain(
+            workspace_id=workspace_id, memory_type=memory_type, state_identity=state_identity
+        )
+        current = next((row for row in reversed(chain) if row.get("state_status") == "active"), None)
+        return {
+            **created,
+            "trusted_current_state_promotion": True,
+            "memory_type": memory_type,
+            "state_identity": state_identity,
+            "previous_anchor_id": previous_anchor.get("anchor_id") if previous_anchor else None,
+            "previous_content_id": previous_anchor.get("content_id") if previous_anchor else None,
+            "current_anchor": current,
+            "supersession_chain": chain,
+            "readback": {
+                "anchors_query": {
+                    "scope": scope_hint or state_identity,
+                    "memory_type": memory_type,
+                    "state_identity": state_identity,
+                    "workspace_id": workspace_id,
+                }
+            },
+        }
 
     def create_hub(self, payload: Dict[str, Any], workspace_id: Optional[str] = None, workspace_source: Optional[str] = None, created_by_subject: Optional[str] = None) -> Dict[str, Any]:
         hub = self.hub_store.create_hub(

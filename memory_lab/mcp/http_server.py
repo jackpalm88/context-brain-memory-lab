@@ -1,11 +1,11 @@
 """MCP-HTTP-1 streamable-http MCP server entrypoint.
 
-Exposes the same 34 tools (APPROVED_TOOLS) as the stdio server (server.py) over
+Exposes the same approved tools (APPROVED_TOOLS) as the stdio server (server.py) over
 MCP streamable-http transport (MCP spec 2025-11-05).
 
 Key design decisions:
 - server.py (stdio) is NOT changed.
-- 34 tool registrations are identical to server.py.
+- Approved tool registrations are identical to server.py.
 - MCPBearerAuthMiddleware wraps the ASGI app for auth.
 - Auth mode + host/port resolved from env via http_config.
 - ASGI app is importable as `app` for uvicorn/gunicorn mount.
@@ -32,6 +32,7 @@ _server.tool()(APPROVED_TOOLS["memory_lab_health"])
 _server.tool()(APPROVED_TOOLS["memory_lab_content_create_id"])
 _server.tool()(APPROVED_TOOLS["memory_lab_content_get"])
 _server.tool()(APPROVED_TOOLS["list_current_state_anchors"])
+_server.tool()(APPROVED_TOOLS["trusted_promote_current_state"])
 _server.tool()(APPROVED_TOOLS["set_quick_summary"])
 _server.tool()(APPROVED_TOOLS["update_node_metadata"])
 _server.tool()(APPROVED_TOOLS["memory_lab_hub_create"])
