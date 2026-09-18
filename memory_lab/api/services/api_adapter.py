@@ -146,7 +146,7 @@ class ApiAdapter:
         tier = tier_decision.tier
         tier_reason = tier_decision.reason
         should_persist = tier_decision.should_persist
-        if force_persist and not should_persist:
+        if force_persist:
             tier = "persistent"
             tier_reason = f"trusted_current_state_promotion:force_persist_after_{tier_decision.reason}"
             should_persist = True

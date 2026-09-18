@@ -215,3 +215,61 @@ def test_general_content_route_still_rejects_state_identity(app_env):
     anchors = client.get("/v1/current-state/anchors", params={"scope": "general-content-no-state-identity"})
     assert anchors.status_code == 200
     assert anchors.json()["count"] == 0
+
+
+def _force_low_transient_score(monkeypatch):
+    """Force content scoring into the persisted-but-transient band."""
+    from types import SimpleNamespace
+    import memory_lab.api.services.api_adapter as api_adapter
+
+    event = SimpleNamespace(
+        scores=SimpleNamespace(quality=0.45, relevance=0.5, novelty=0.55, composite=0.4975),
+        circuit_open=False,
+        fallback_reason="",
+    )
+    monkeypatch.setattr(api_adapter, "score_content", lambda content: event)
+
+
+def test_trusted_promotion_forces_authoritative_tier_even_when_composite_is_transient(app_env, monkeypatch):
+    ws_id = _insert_workspace(app_env)
+    _force_low_transient_score(monkeypatch)
+    client = _client(ws_id, role="service_agent")
+    state_identity = f"trusted-tier-force-{uuid.uuid4()}"
+
+    promoted = _promote(
+        client,
+        content="low signal but explicitly trusted canonical promotion",
+        state_identity=state_identity,
+        quick_summary="trusted tier force proof",
+    )
+
+    assert promoted["mode"] == "trusted_current_state_promotion"
+    assert promoted["trusted_current_state_promotion"] is True
+    assert promoted["tier"] == "persistent"
+    assert promoted["tier_reason"].startswith("trusted_current_state_promotion:")
+    assert promoted["current_anchor"]["content_id"] == promoted["content_id"]
+
+    saved = client.get(f"/v1/content/{promoted['content_id']}").json()
+    assert saved["is_current"] is True
+    assert saved["tier"] == "persistent"
+
+
+def test_general_content_route_keeps_normal_transient_scoring(app_env, monkeypatch):
+    ws_id = _insert_workspace(app_env)
+    _force_low_transient_score(monkeypatch)
+    client = _client(ws_id, role="service_agent")
+
+    resp = client.post(
+        "/v1/content",
+        json={
+            "content": "low signal ordinary governed write should remain transient",
+            "scope_hint": "general-content-transient-scoring",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    saved = resp.json()
+    assert saved["persisted"] is True
+    assert saved["mode"] == "governed"
+    assert saved["tier"] == "transient"
+    assert saved["tier_reason"].startswith("composite_transient_range:")
+
