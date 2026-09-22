@@ -11,16 +11,88 @@ P3C workspace boundary:
 - Optional MEMORY_LAB_MCP_DEFAULT_WORKSPACE_ID is a client-side default.
 - If neither is set, no workspace header is sent and the API keeps its P3B
   MEMORY_LAB_DEFAULT_WORKSPACE_ID / DB default fallback behavior.
+
+Caller-identity propagation (fix for the confused-deputy workspace-scoping gap;
+see docs/MCP_WORKSPACE_SCOPING_FIX_PLAN.md, OpenCB decisions
+2b1c676b-4b2c-48ca-b253-d7b6428e1d75 / 4294c3da-1fb3-4816-b3f6-a31c53e78295 /
+0ac855b1-634e-49b8-bdcb-7c74f474179a):
+
+MCPBearerAuthMiddleware (memory_lab/mcp/http_auth.py) resolves each streamable-http
+caller's own Bearer token and real workspace membership, then populates
+`set_caller_auth_context(...)` for the duration of that request. from_env() prefers
+that request-scoped context over the static MEMORY_LAB_API_TOKEN service credential,
+so the outbound REST call authenticates as the ORIGINAL caller, not a shared
+deputy -- REST's own workspace_memberships check then does all the enforcement, for
+whichever workspace_id (explicit argument or the caller's own resolved default) the
+call ends up using.
+
+In api_key-mode streamable-http, a MISSING caller context is never silently treated
+as "no caller identity available, fall back to the shared static token" -- that would
+silently re-open the exact hole this closes if the contextvar somehow failed to
+propagate. It fails closed instead (see `fail_closed_reason` / `_request`). The
+static-token fallback remains available only when authenticated-http mode was never
+active at all: the stdio server, or MEMORY_LAB_HTTP_MCP_AUTH=none dev/loopback mode.
 """
 
 from __future__ import annotations
 
+import contextvars
 import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import requests
+
+
+@dataclass(frozen=True)
+class MCPCallerAuthContext:
+    """The authenticated MCP caller's own identity, for one streamable-http request.
+
+    bearer_token is the caller's own token (forwarded to REST verbatim so REST's
+    existing workspace_memberships check authorizes the real caller, not a deputy).
+    resolved_default_workspace_id is the same value MCPBearerAuthMiddleware already
+    computed for X-Workspace-ID -- the caller's own real default workspace, used only
+    when a tool call supplies no explicit workspace_id.
+    """
+
+    bearer_token: str
+    resolved_default_workspace_id: Optional[str]
+    authenticated_http: bool = True
+
+
+_caller_auth_context: "contextvars.ContextVar[Optional[MCPCallerAuthContext]]" = contextvars.ContextVar(
+    "mcp_caller_auth_context", default=None
+)
+
+# Process-lifetime flag: True only while a streamable-http MCPBearerAuthMiddleware is
+# configured for auth_mode="api_key". Never true for the stdio server (which never
+# constructs that middleware) or for auth_mode="none". Deliberately a plain settable
+# module value, not "once true stays true" -- so re-configuring the app (e.g. in
+# tests) with a different mode updates it, rather than leaking state across builds.
+_authenticated_http_mode_active: bool = False
+
+
+def set_caller_auth_context(ctx: Optional[MCPCallerAuthContext]) -> "contextvars.Token[Optional[MCPCallerAuthContext]]":
+    """Set the current request's caller context; returns a token for reset_caller_auth_context."""
+    return _caller_auth_context.set(ctx)
+
+
+def reset_caller_auth_context(token: "contextvars.Token[Optional[MCPCallerAuthContext]]") -> None:
+    _caller_auth_context.reset(token)
+
+
+def get_caller_auth_context() -> Optional[MCPCallerAuthContext]:
+    return _caller_auth_context.get()
+
+
+def set_authenticated_http_mode_active(value: bool) -> None:
+    global _authenticated_http_mode_active
+    _authenticated_http_mode_active = value
+
+
+def is_authenticated_http_mode_active() -> bool:
+    return _authenticated_http_mode_active
 
 
 class MemoryLabApiError(RuntimeError):
@@ -48,6 +120,9 @@ class MemoryLabApiClient:
     timeout_s: float = 15.0
     default_workspace_id: Optional[str] = None
     api_token: Optional[str] = None
+    # Set only for the authenticated-http-missing-caller-context fail-closed case
+    # (see module docstring). When set, _request() raises before any network call.
+    fail_closed_reason: Optional[str] = None
 
     @staticmethod
     def from_env() -> "MemoryLabApiClient":
@@ -57,6 +132,30 @@ class MemoryLabApiClient:
         if host not in {"127.0.0.1", "localhost"}:
             raise MemoryLabApiError(f"Unsafe host for local MCP plan: {host}")
         base_url = f"{scheme}://{host}:{port}".rstrip("/")
+
+        caller_ctx = get_caller_auth_context()
+        if caller_ctx is not None:
+            return MemoryLabApiClient(
+                base_url=base_url,
+                default_workspace_id=caller_ctx.resolved_default_workspace_id,
+                api_token=caller_ctx.bearer_token,
+            )
+
+        if is_authenticated_http_mode_active():
+            # A populated caller context should always exist here -- its absence
+            # means contextvar propagation failed or this path was reached in a way
+            # the design didn't anticipate. Never silently reuse the shared static
+            # service credential in that case; that is exactly the confused-deputy
+            # hole this mechanism exists to close.
+            return MemoryLabApiClient(
+                base_url=base_url,
+                fail_closed_reason=(
+                    "authenticated_http_missing_caller_context: refusing to fall back "
+                    "to the shared service credential in api_key-mode streamable-http"
+                ),
+            )
+
+        # stdio server, or auth_mode=none dev/loopback: unchanged static-token model.
         default_workspace_id = os.getenv("MEMORY_LAB_MCP_DEFAULT_WORKSPACE_ID") or None
         api_token = os.getenv("MEMORY_LAB_API_TOKEN") or os.getenv("MEMORY_LAB_MCP_API_TOKEN") or None
         return MemoryLabApiClient(base_url=base_url, default_workspace_id=default_workspace_id, api_token=api_token)
@@ -101,6 +200,12 @@ class MemoryLabApiClient:
         json_body: Optional[Dict[str, Any]] = None,
         workspace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if self.fail_closed_reason:
+            raise MemoryLabApiError(
+                self.fail_closed_reason,
+                method=method,
+                url=f"{self.base_url}{path}",
+            )
         url = f"{self.base_url}{path}"
         headers = self._headers(workspace_id)
         try:

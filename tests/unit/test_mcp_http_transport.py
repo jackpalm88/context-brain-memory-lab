@@ -306,3 +306,81 @@ def test_t10_parse_bearer_edge_cases():
     assert _parse_bearer("Token abc") is None
     assert _parse_bearer("Bearer abc123") == "abc123"
     assert _parse_bearer("BEARER MyToken") == "MyToken"
+
+
+# ─── T11: api_key mode populates MCPCallerAuthContext for the request, then resets it ──
+
+
+def test_t11_api_key_mode_populates_and_resets_caller_context():
+    from memory_lab.mcp.client import get_caller_auth_context, set_authenticated_http_mode_active
+    from memory_lab.mcp.http_auth import MCPBearerAuthMiddleware
+
+    set_authenticated_http_mode_active(False)  # isolate from other test files
+    expected_ws = "bbbbbbbb-0000-0000-0000-000000000002"
+    seen_inside: dict = {}
+
+    class _ContextCheckingApp:
+        called = False
+
+        async def __call__(self, scope, receive, send):
+            self.called = True
+            ctx = get_caller_auth_context()
+            seen_inside["bearer_token"] = ctx.bearer_token if ctx else None
+            seen_inside["resolved_default_workspace_id"] = ctx.resolved_default_workspace_id if ctx else None
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    async def _inner():
+        fake = _ContextCheckingApp()
+        mw = MCPBearerAuthMiddleware(
+            fake, auth_mode="api_key", default_workspace_id="00000000-0000-0000-0000-000000000000",
+        )
+        scope = _make_scope(auth="Bearer stub-valid-token-xyz")
+        sent: list = []
+
+        async def send(m):
+            sent.append(m)
+
+        with patch("memory_lab.mcp.http_auth._resolve_workspace_api_key", return_value=expected_ws):
+            await mw(scope, _noop_receive, send)
+
+        assert fake.called
+        assert seen_inside["bearer_token"] == "stub-valid-token-xyz"
+        assert seen_inside["resolved_default_workspace_id"] == expected_ws
+        # Context must not leak past the request.
+        assert get_caller_auth_context() is None
+
+    _run(_inner())
+    set_authenticated_http_mode_active(False)  # leave clean for other test files
+
+
+# ─── T12: 'none' mode never populates a caller context (no real caller identity) ──
+
+
+def test_t12_none_mode_never_populates_caller_context():
+    from memory_lab.mcp.client import get_caller_auth_context, is_authenticated_http_mode_active
+    from memory_lab.mcp.http_auth import MCPBearerAuthMiddleware
+
+    ws = "aaaaaaaa-0000-0000-0000-000000000001"
+    seen_inside: dict = {}
+
+    class _ContextCheckingApp:
+        async def __call__(self, scope, receive, send):
+            seen_inside["ctx"] = get_caller_auth_context()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    async def _inner():
+        fake = _ContextCheckingApp()
+        mw = MCPBearerAuthMiddleware(fake, auth_mode="none", default_workspace_id=ws)
+        assert is_authenticated_http_mode_active() is False
+        scope = _make_scope(auth=None)
+        sent: list = []
+
+        async def send(m):
+            sent.append(m)
+
+        await mw(scope, _noop_receive, send)
+        assert seen_inside["ctx"] is None
+
+    _run(_inner())

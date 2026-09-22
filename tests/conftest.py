@@ -5,6 +5,32 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _reset_mcp_caller_auth_state():
+    """memory_lab.mcp.client holds process-global state for the MCP
+    workspace-scoping fix (is_authenticated_http_mode_active(), the caller-context
+    contextvar) that MCPBearerAuthMiddleware and build_asgi_app() mutate as a side
+    effect of construction/import -- including transitively, e.g. any test that
+    imports or reloads memory_lab.mcp.http_server. Without a reset, one test's
+    side effect can make an unrelated test's from_env() call unexpectedly fail
+    closed (or vice versa). Reset before AND after every test, project-wide, so
+    no test's import/construction order can leak into another's."""
+    from memory_lab.mcp.client import (
+        reset_caller_auth_context,
+        set_authenticated_http_mode_active,
+        set_caller_auth_context,
+    )
+
+    def _reset():
+        set_authenticated_http_mode_active(False)
+        token = set_caller_auth_context(None)
+        reset_caller_auth_context(token)
+
+    _reset()
+    yield
+    _reset()
+
+
+@pytest.fixture(autouse=True)
 def _provider_optional_forces_fallback_path(request, monkeypatch):
     """provider_optional means "exercises the fallback path" — a real provider
     key ambient in the developer's shell would silently reroute these tests

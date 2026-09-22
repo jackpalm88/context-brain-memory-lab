@@ -20,6 +20,13 @@ from typing import Callable, Optional
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .client import (
+    MCPCallerAuthContext,
+    reset_caller_auth_context,
+    set_authenticated_http_mode_active,
+    set_caller_auth_context,
+)
+
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -157,6 +164,11 @@ class MCPBearerAuthMiddleware:
         self.app = app
         self.auth_mode = auth_mode
         self.default_workspace_id = default_workspace_id
+        # Drives client.py's fail-closed check: True only while THIS middleware is
+        # configured for api_key mode. "none" mode (dev/loopback, no real caller
+        # identity to propagate) must never trigger fail-closed -- it keeps the
+        # existing static-token model, same as the stdio server.
+        set_authenticated_http_mode_active(auth_mode == "api_key")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in {"http", "websocket"}:
@@ -189,4 +201,12 @@ class MCPBearerAuthMiddleware:
             return
 
         scope = _inject_workspace(scope, workspace_id)
-        await self.app(scope, receive, send)
+        caller_ctx = MCPCallerAuthContext(
+            bearer_token=token,
+            resolved_default_workspace_id=workspace_id,
+        )
+        reset_token = set_caller_auth_context(caller_ctx)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_caller_auth_context(reset_token)
