@@ -652,6 +652,79 @@ class ApiAdapter:
             **project_current_state(row),
         }
 
+    def get_canonical_body(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Read-only canonical-body reconstruction (Patch 1 / decision 5533831e).
+
+        Permission-safe lookup only -- same workspace-scoped WHERE-clause
+        pattern as get_content_minimal/get_content_metadata, no new access
+        path. Returns None for missing/unauthorized content_id so the caller
+        can map it to a 404, same as every other content read here.
+
+        The body itself is never a direct storage read: content_items carries
+        only content_hash, never a raw body column (confirmed by live
+        storage-reality check, docs/CANONICAL_BODY_STORAGE_REALITY_CHECK.md).
+        It is reconstructed from content_chunks and only ever returned when
+        memory_lab.content.canonical_body proves it with an exact SHA-256
+        match against the stored content_hash -- see that module for the
+        hash-verified / unverifiable / unavailable fidelity contract.
+        """
+        from memory_lab.content.canonical_body import (
+            HASH_SEMANTICS,
+            FIDELITY_HASH_VERIFIED,
+            PersistedChunk,
+            reconstruct_canonical_body,
+        )
+
+        conditions = ["content_id = %s::uuid"]
+        params: List[Any] = [content_id]
+        if workspace_id:
+            conditions.append("workspace_id = %s::uuid")
+            params.append(workspace_id)
+
+        with self._conn() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    SELECT content_id::text AS content_id,
+                           workspace_id::text AS workspace_id,
+                           content_hash,
+                           updated_at
+                      FROM content_items
+                     WHERE {' AND '.join(conditions)}
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+
+            if not row:
+                return None
+
+            with conn.cursor() as chunk_cur:
+                chunk_cur.execute(
+                    """
+                    SELECT chunk_index, chunk_text
+                      FROM content_chunks
+                     WHERE content_id = %s::uuid
+                     ORDER BY chunk_index
+                    """,
+                    (content_id,),
+                )
+                chunk_rows = chunk_cur.fetchall()
+
+        chunks = [PersistedChunk(idx, text) for idx, text in chunk_rows]
+        result = reconstruct_canonical_body(chunks, row.get("content_hash"))
+        verified = result.fidelity == FIDELITY_HASH_VERIFIED
+
+        return {
+            "content_id": row["content_id"],
+            "workspace_id": row.get("workspace_id"),
+            "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
+            "body": result.candidate if verified else None,
+            "body_sha256": result.computed_hash if verified else None,
+            "fidelity": result.fidelity,
+            "hash_semantics": HASH_SEMANTICS,
+        }
+
     def list_current_state_anchors(
         self,
         *,

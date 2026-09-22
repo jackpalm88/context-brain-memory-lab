@@ -91,6 +91,23 @@ def get_content_metadata(content_id: str, auth: AuthContext = Depends(require_pe
     return row
 
 
+@router.get("/{content_id}/canonical-body")
+def get_canonical_body(content_id: str, auth: AuthContext = Depends(require_permission("content.read"))) -> dict:
+    """Read-only, additive (Patch 1 / OpenCB decision 5533831e-c751-434a-8ae7-f8f40cdaf0f8).
+
+    `body` is populated only when `fidelity` is `hash-verified`; otherwise it
+    is null (`unverifiable` or `unavailable`) -- this endpoint never claims
+    exact body fidelity it has not proven with a SHA-256 match against the
+    stored content_hash.
+    """
+    settings = get_settings()
+    adapter = ApiAdapter(settings.database_url)
+    row = adapter.get_canonical_body(content_id, workspace_id=auth.workspace_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="content not found")
+    return row
+
+
 @router.patch("/{content_id}/quick-summary")
 def set_quick_summary(content_id: str, req: QuickSummaryRequest, auth: AuthContext = Depends(require_permission("content.update"))) -> dict:
     settings = get_settings()

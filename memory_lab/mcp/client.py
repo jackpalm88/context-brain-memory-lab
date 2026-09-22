@@ -155,6 +155,9 @@ class MemoryLabApiClient:
     def content_get(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request("GET", f"/v1/content/{content_id}", workspace_id=workspace_id)
 
+    def canonical_body_get(self, content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/content/{content_id}/canonical-body", workspace_id=workspace_id)
+
     def set_quick_summary(self, content_id: str, quick_summary: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         return self._request(
             "PATCH",

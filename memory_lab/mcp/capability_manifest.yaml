@@ -149,6 +149,25 @@ tools:
         when: "graph context (hubs, neighbors) is needed"
     failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design)."
 
+  - name: get_canonical_body_verified
+    role: read
+    answers:
+      - "Give me the exact stored body of item <id>, proven byte-for-byte."
+      - "Can I trust this reconstructed body as the original?"
+    use_when: "You need the exact original body and must know whether that exactness is actually proven, not assumed."
+    avoid_when: "You just need the stored record/metadata — use memory_lab_content_get; it does not attempt body reconstruction."
+    determinism: deterministic
+    required_inputs: [content_id]
+    output_kind: record
+    response_shape:
+      kind: record
+    key_signals: [fidelity, body_sha256, hash_semantics]
+    suggested_followups:
+      - tool: memory_lab_content_get
+        when: "fidelity is not hash-verified — the record/metadata are still available even when the exact body is not"
+    failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design). Never a 5xx merely because fidelity is unverifiable/unavailable — body is null instead."
+    honest_contract: "body is populated ONLY when fidelity=hash-verified; unverifiable/unavailable always return body=null, never a best-effort guess."
+
   - name: list_current_state_anchors
     role: read
     answers:

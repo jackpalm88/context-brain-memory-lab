@@ -79,6 +79,22 @@ def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) 
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
+def get_canonical_body_verified(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    """Read-only. Reconstructs the exact stored body for content_id, but only
+    returns it when fidelity is proven.
+
+    `fidelity` is one of: hash-verified (body is exact, proven by SHA-256
+    match against the stored content_hash), unverifiable (chunk evidence
+    exists but exact body could not be proven), or unavailable (no usable
+    body evidence at all). `body` is null unless fidelity is hash-verified —
+    only hash-verified proves exact raw body. Never guess a body from
+    `unverifiable`/`unavailable` results; treat them as "not recoverable",
+    not as a hint. See `hash_semantics` in the response for exactly what the
+    hash covers.
+    """
+    return _call_api(_client().canonical_body_get, content_id=content_id, workspace_id=workspace_id)
+
+
 def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, workspace_id: Optional[str] = None, state_identity: Optional[str] = None) -> Dict[str, Any]:
     """Read the ACTIVE current-state anchor(s) of a scope — the forward pointer
     of the supersession chain (CF-003).
@@ -666,6 +682,7 @@ APPROVED_TOOLS = {
     "memory_lab_health": memory_lab_health,
     "memory_lab_content_create_id": memory_lab_content_create_id,
     "memory_lab_content_get": memory_lab_content_get,
+    "get_canonical_body_verified": get_canonical_body_verified,
     "list_current_state_anchors": list_current_state_anchors,
     "trusted_promote_current_state": trusted_promote_current_state,
     "set_quick_summary": set_quick_summary,
