@@ -79,7 +79,9 @@ def memory_lab_content_get(content_id: str, workspace_id: Optional[str] = None) 
     return _call_api(_client().content_get, content_id=content_id, workspace_id=workspace_id)
 
 
-def get_canonical_body_verified(content_id: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+def get_canonical_body_verified(
+    content_id: str, workspace_id: Optional[str] = None, expected_version: Optional[str] = None
+) -> Dict[str, Any]:
     """Read-only. Reconstructs the exact stored body for content_id, but only
     returns it when fidelity is proven.
 
@@ -91,8 +93,19 @@ def get_canonical_body_verified(content_id: str, workspace_id: Optional[str] = N
     `unverifiable`/`unavailable` results; treat them as "not recoverable",
     not as a hint. See `hash_semantics` in the response for exactly what the
     hash covers.
+
+    expected_version is optional (pass the content_hash from a prior read to
+    assert the body hasn't changed underneath you). When it does not match
+    the current stored content_hash — or no content_hash is stored at all —
+    the call errors with status_code 409 instead of returning a body, before
+    any reconstruction is attempted.
     """
-    return _call_api(_client().canonical_body_get, content_id=content_id, workspace_id=workspace_id)
+    return _call_api(
+        _client().canonical_body_get,
+        content_id=content_id,
+        workspace_id=workspace_id,
+        expected_version=expected_version,
+    )
 
 
 def list_current_state_anchors(scope: str, memory_type: Optional[str] = None, workspace_id: Optional[str] = None, state_identity: Optional[str] = None) -> Dict[str, Any]:

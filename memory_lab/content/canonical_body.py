@@ -155,6 +155,56 @@ def reconstruct_canonical_body(
 
 
 # ---------------------------------------------------------------------------
+# expected_version (Patch 1.1, decision b97a9f74-2d8c-4427-af46-4780aa9ce986).
+#
+# There is no dedicated version column on content_items. content_hash IS the
+# body's version identity in this system: it is set once at write time
+# (M10.2) and the primary write path never updates it. A caller-supplied
+# expected_version is therefore checked directly against the stored
+# content_hash -- a body-level optimistic-concurrency check, deliberately
+# separate from fidelity (fidelity answers "can this body be proven exact";
+# this answers "is it still the version you last saw"). Checked BEFORE any
+# reconstruction is attempted, so a mismatch never pays for chunk work.
+# ---------------------------------------------------------------------------
+
+VERSION_NOT_CHECKED = "not_checked"
+VERSION_MATCH = "match"
+VERSION_MISMATCH = "mismatch"
+VERSION_UNKNOWN = "version_unknown"
+
+
+@dataclass(frozen=True)
+class VersionCheckResult:
+    status: str  # not_checked | match | mismatch | version_unknown
+    expected_version: Optional[str]
+    current_version: Optional[str]
+
+    @property
+    def blocks(self) -> bool:
+        """True when this result must short-circuit reconstruction (fail closed)."""
+        return self.status in (VERSION_MISMATCH, VERSION_UNKNOWN)
+
+
+def check_expected_version(
+    stored_content_hash: Optional[str], expected_version: Optional[str]
+) -> VersionCheckResult:
+    """expected_version absent -> not_checked (today's behavior, unchanged).
+
+    Present but stored_content_hash is None -> version_unknown (fail closed;
+    there is nothing to compare against). Present and equal -> match. Present
+    and different -> mismatch. Callers must not attempt reconstruction when
+    `.blocks` is True.
+    """
+    if expected_version is None:
+        return VersionCheckResult(VERSION_NOT_CHECKED, None, stored_content_hash)
+    if stored_content_hash is None:
+        return VersionCheckResult(VERSION_UNKNOWN, expected_version, None)
+    if expected_version == stored_content_hash:
+        return VersionCheckResult(VERSION_MATCH, expected_version, stored_content_hash)
+    return VersionCheckResult(VERSION_MISMATCH, expected_version, stored_content_hash)
+
+
+# ---------------------------------------------------------------------------
 # Probe-only diagnostics.
 #
 # The public ReconstructionResult intentionally hides the candidate body

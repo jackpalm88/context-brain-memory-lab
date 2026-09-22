@@ -245,3 +245,65 @@ def test_missing_chunk_fails_closed_not_500(app_env):
     assert body["fidelity"] == "unavailable"
     assert body["body"] is None
     assert body["body_sha256"] is None
+
+
+def test_expected_version_match_returns_body_normally(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    text = "decision: expected_version happy path proceeds exactly as without it."
+    cid = _save_content(client, text)
+    body_sha256 = client.get(f"/v1/content/{cid}/canonical-body").json()["body_sha256"]
+
+    resp = client.get(f"/v1/content/{cid}/canonical-body?expected_version={body_sha256}")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["fidelity"] == "hash-verified"
+    assert body["body"] == text
+    assert "version_conflict" not in body
+
+
+def test_expected_version_mismatch_is_409_without_reconstruction(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    cid = _save_content(client, "decision: expected_version mismatch fails closed with 409.")
+
+    resp = client.get(f"/v1/content/{cid}/canonical-body?expected_version=not-the-real-hash")
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert detail["detail"] == "mismatch"
+    assert detail["expected_version"] == "not-the-real-hash"
+    assert detail["current_version"]  # the real stored content_hash
+
+
+def test_expected_version_unknown_when_no_stored_hash(app_env):
+    # A row with content_hash=NULL and no chunks (unavailable) but a caller
+    # supplies expected_version anyway -- must fail closed to version_unknown,
+    # never silently proceed as if there were nothing to check.
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    cid = _save_content(client, "decision: version_unknown when content_hash is null.")
+
+    conn = _psycopg2().connect(app_env)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE content_items SET content_hash = NULL WHERE content_id = %s::uuid", (cid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = client.get(f"/v1/content/{cid}/canonical-body?expected_version=anything")
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["detail"] == "version_unknown"
+
+
+def test_empty_expected_version_is_422(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    cid = _save_content(client, "decision: empty expected_version query value is a stated-contract violation.")
+
+    resp = client.get(f"/v1/content/{cid}/canonical-body?expected_version=")
+
+    assert resp.status_code == 422

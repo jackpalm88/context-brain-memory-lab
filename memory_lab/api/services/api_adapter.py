@@ -652,8 +652,14 @@ class ApiAdapter:
             **project_current_state(row),
         }
 
-    def get_canonical_body(self, content_id: str, workspace_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Read-only canonical-body reconstruction (Patch 1 / decision 5533831e).
+    def get_canonical_body(
+        self,
+        content_id: str,
+        workspace_id: Optional[str] = None,
+        expected_version: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Read-only canonical-body reconstruction (Patch 1 / decision 5533831e;
+        expected_version added in Patch 1.1 / decision b97a9f74).
 
         Permission-safe lookup only -- same workspace-scoped WHERE-clause
         pattern as get_content_minimal/get_content_metadata, no new access
@@ -667,11 +673,19 @@ class ApiAdapter:
         memory_lab.content.canonical_body proves it with an exact SHA-256
         match against the stored content_hash -- see that module for the
         hash-verified / unverifiable / unavailable fidelity contract.
+
+        expected_version, when supplied, is checked against the stored
+        content_hash BEFORE any chunk is read or reconstruction attempted
+        (memory_lab.content.canonical_body.check_expected_version). A
+        blocking result (mismatch / version_unknown) short-circuits with a
+        `version_conflict` envelope instead of a normal body response --
+        the caller maps that to 409, distinct from the 404/200 path.
         """
         from memory_lab.content.canonical_body import (
             HASH_SEMANTICS,
             FIDELITY_HASH_VERIFIED,
             PersistedChunk,
+            check_expected_version,
             reconstruct_canonical_body,
         )
 
@@ -699,6 +713,15 @@ class ApiAdapter:
             if not row:
                 return None
 
+            version_result = check_expected_version(row.get("content_hash"), expected_version)
+            if version_result.blocks:
+                return {
+                    "version_conflict": True,
+                    "reason": version_result.status,
+                    "expected_version": version_result.expected_version,
+                    "current_version": version_result.current_version,
+                }
+
             with conn.cursor() as chunk_cur:
                 chunk_cur.execute(
                     """
@@ -723,6 +746,7 @@ class ApiAdapter:
             "body_sha256": result.computed_hash if verified else None,
             "fidelity": result.fidelity,
             "hash_semantics": HASH_SEMANTICS,
+            "version_conflict": False,
         }
 
     def list_current_state_anchors(

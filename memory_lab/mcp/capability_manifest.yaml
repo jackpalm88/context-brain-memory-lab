@@ -158,6 +158,7 @@ tools:
     avoid_when: "You just need the stored record/metadata — use memory_lab_content_get; it does not attempt body reconstruction."
     determinism: deterministic
     required_inputs: [content_id]
+    optional_inputs: [expected_version]
     output_kind: record
     response_shape:
       kind: record
@@ -165,8 +166,8 @@ tools:
     suggested_followups:
       - tool: memory_lab_content_get
         when: "fidelity is not hash-verified — the record/metadata are still available even when the exact body is not"
-    failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design). Never a 5xx merely because fidelity is unverifiable/unavailable — body is null instead."
-    honest_contract: "body is populated ONLY when fidelity=hash-verified; unverifiable/unavailable always return body=null, never a best-effort guess."
+    failure: "404 when the id is unknown OR belongs to another workspace (indistinguishable by design). 409 when expected_version is supplied and does not match the current content_hash (or no content_hash is stored) — checked before any reconstruction. Never a 5xx merely because fidelity is unverifiable/unavailable — body is null instead."
+    honest_contract: "body is populated ONLY when fidelity=hash-verified; unverifiable/unavailable always return body=null, never a best-effort guess. expected_version compares against content_hash, not a dedicated version field — there is no other version concept on this record."
 
   - name: list_current_state_anchors
     role: read

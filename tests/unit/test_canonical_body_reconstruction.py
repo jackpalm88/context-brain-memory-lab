@@ -19,7 +19,12 @@ from memory_lab.content.canonical_body import (
     FIDELITY_HASH_VERIFIED,
     FIDELITY_UNAVAILABLE,
     FIDELITY_UNVERIFIABLE,
+    VERSION_MATCH,
+    VERSION_MISMATCH,
+    VERSION_NOT_CHECKED,
+    VERSION_UNKNOWN,
     PersistedChunk,
+    check_expected_version,
     diagnose_reconstruction,
     reconstruct_canonical_body,
 )
@@ -279,3 +284,35 @@ def test_diagnostics_does_not_claim_normalization_when_unproven():
     )
     assert diag.fidelity == FIDELITY_UNVERIFIABLE
     assert diag.possible_line_ending_normalization is False
+
+
+# ---------------------------------------------------------------------------
+# check_expected_version (Patch 1.1) fixture matrix.
+# ---------------------------------------------------------------------------
+def test_version_not_checked_when_expected_version_absent():
+    result = check_expected_version(_sha256("body"), None)
+    assert result.status == VERSION_NOT_CHECKED
+    assert result.blocks is False
+    assert result.current_version == _sha256("body")
+
+
+def test_version_match_when_equal_to_stored_hash():
+    h = _sha256("body")
+    result = check_expected_version(h, h)
+    assert result.status == VERSION_MATCH
+    assert result.blocks is False
+
+
+def test_version_mismatch_when_different_from_stored_hash():
+    result = check_expected_version(_sha256("body"), _sha256("a different body"))
+    assert result.status == VERSION_MISMATCH
+    assert result.blocks is True
+    assert result.expected_version == _sha256("a different body")
+    assert result.current_version == _sha256("body")
+
+
+def test_version_unknown_when_no_stored_hash_but_expected_version_given():
+    result = check_expected_version(None, _sha256("something"))
+    assert result.status == VERSION_UNKNOWN
+    assert result.blocks is True
+    assert result.current_version is None

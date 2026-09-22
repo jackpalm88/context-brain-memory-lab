@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from memory_lab.api.auth_context import AuthContext
@@ -92,19 +92,41 @@ def get_content_metadata(content_id: str, auth: AuthContext = Depends(require_pe
 
 
 @router.get("/{content_id}/canonical-body")
-def get_canonical_body(content_id: str, auth: AuthContext = Depends(require_permission("content.read"))) -> dict:
-    """Read-only, additive (Patch 1 / OpenCB decision 5533831e-c751-434a-8ae7-f8f40cdaf0f8).
+def get_canonical_body(
+    content_id: str,
+    expected_version: Optional[str] = Query(None, min_length=1),
+    auth: AuthContext = Depends(require_permission("content.read")),
+) -> dict:
+    """Read-only, additive (Patch 1 / OpenCB decision 5533831e-c751-434a-8ae7-f8f40cdaf0f8;
+    expected_version added in Patch 1.1 / decision b97a9f74-2d8c-4427-af46-4780aa9ce986).
 
     `body` is populated only when `fidelity` is `hash-verified`; otherwise it
     is null (`unverifiable` or `unavailable`) -- this endpoint never claims
     exact body fidelity it has not proven with a SHA-256 match against the
     stored content_hash.
+
+    expected_version, when supplied, is checked against the stored
+    content_hash before any reconstruction is attempted: a match proceeds
+    normally, a mismatch or an unknown-version content item returns 409
+    (never a guessed body), checked before the 200/null-body path.
     """
     settings = get_settings()
     adapter = ApiAdapter(settings.database_url)
-    row = adapter.get_canonical_body(content_id, workspace_id=auth.workspace_id)
+    row = adapter.get_canonical_body(
+        content_id, workspace_id=auth.workspace_id, expected_version=expected_version
+    )
     if not row:
         raise HTTPException(status_code=404, detail="content not found")
+    if row.get("version_conflict"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": row["reason"],  # "mismatch" | "version_unknown"
+                "expected_version": row["expected_version"],
+                "current_version": row["current_version"],
+            },
+        )
+    row.pop("version_conflict", None)
     return row
 
 

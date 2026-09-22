@@ -28,8 +28,10 @@ class FakeAdapter:
     def __init__(self, database_url):
         self.database_url = database_url
 
-    def get_canonical_body(self, content_id, workspace_id=None):
-        self.__class__.calls.append({"content_id": content_id, "workspace_id": workspace_id})
+    def get_canonical_body(self, content_id, workspace_id=None, expected_version=None):
+        self.__class__.calls.append({
+            "content_id": content_id, "workspace_id": workspace_id, "expected_version": expected_version,
+        })
         return self.__class__.rows.get((workspace_id, content_id))
 
 
@@ -83,7 +85,7 @@ def test_api_canonical_body_hash_verified_shape(monkeypatch):
     assert body["fidelity"] == "hash-verified"
     assert body["body"] == "exact body"
     assert body["body_sha256"] == "abc123"
-    assert FakeAdapter.calls == [{"content_id": CONTENT, "workspace_id": WS}]
+    assert FakeAdapter.calls == [{"content_id": CONTENT, "workspace_id": WS, "expected_version": None}]
 
 
 def test_api_canonical_body_404_for_unknown_id(monkeypatch):
@@ -108,6 +110,61 @@ def test_api_canonical_body_404_for_wrong_workspace(monkeypatch):
     assert FakeAdapter.calls[0]["workspace_id"] == WS
 
 
+def test_api_canonical_body_409_for_version_mismatch(monkeypatch):
+    client = _client(monkeypatch, workspace_id=WS)
+    FakeAdapter.rows[(WS, CONTENT)] = {
+        "version_conflict": True,
+        "reason": "mismatch",
+        "expected_version": "old-hash",
+        "current_version": "new-hash",
+    }
+
+    resp = client.get(f"/v1/content/{CONTENT}/canonical-body?expected_version=old-hash")
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail == {"detail": "mismatch", "expected_version": "old-hash", "current_version": "new-hash"}
+    assert FakeAdapter.calls[0]["expected_version"] == "old-hash"
+
+
+def test_api_canonical_body_409_for_version_unknown(monkeypatch):
+    client = _client(monkeypatch, workspace_id=WS)
+    FakeAdapter.rows[(WS, CONTENT)] = {
+        "version_conflict": True,
+        "reason": "version_unknown",
+        "expected_version": "some-hash",
+        "current_version": None,
+    }
+
+    resp = client.get(f"/v1/content/{CONTENT}/canonical-body?expected_version=some-hash")
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["detail"] == "version_unknown"
+
+
+def test_api_canonical_body_422_for_empty_expected_version(monkeypatch):
+    client = _client(monkeypatch, workspace_id=WS)
+
+    resp = client.get(f"/v1/content/{CONTENT}/canonical-body?expected_version=")
+
+    assert resp.status_code == 422
+    assert FakeAdapter.calls == []
+
+
+def test_api_canonical_body_strips_version_conflict_flag_on_success(monkeypatch):
+    client = _client(monkeypatch, workspace_id=WS)
+    FakeAdapter.rows[(WS, CONTENT)] = {
+        "content_id": CONTENT, "workspace_id": WS, "updated_at": None,
+        "body": "ok", "body_sha256": "h", "fidelity": "hash-verified",
+        "hash_semantics": "n/a", "version_conflict": False,
+    }
+
+    resp = client.get(f"/v1/content/{CONTENT}/canonical-body")
+
+    assert resp.status_code == 200
+    assert "version_conflict" not in resp.json()
+
+
 class RecordingClient(MemoryLabApiClient):
     def __init__(self):
         super().__init__(base_url="http://127.0.0.1:8000")
@@ -128,6 +185,20 @@ def test_mcp_client_canonical_body_path():
         "method": "GET",
         "path": f"/v1/content/{CONTENT}/canonical-body",
         "params": None,
+        "json_body": None,
+        "workspace_id": WS,
+    }
+
+
+def test_mcp_client_canonical_body_path_with_expected_version():
+    client = RecordingClient()
+
+    result = client.canonical_body_get(CONTENT, workspace_id=WS, expected_version="abc123")
+
+    assert result == {
+        "method": "GET",
+        "path": f"/v1/content/{CONTENT}/canonical-body",
+        "params": {"expected_version": "abc123"},
         "json_body": None,
         "workspace_id": WS,
     }
