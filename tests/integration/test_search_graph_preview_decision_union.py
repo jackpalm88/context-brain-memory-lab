@@ -228,3 +228,79 @@ def test_zero_query_match_vs_zero_workspace_mismatch_are_distinguishable(app_env
     # layer doesn't need to prove that distinction itself (that's a documented
     # contract, not a field), yet the test proves it's not the SAME reason by
     # showing the corpus round-trips fine when workspace+query are aligned.
+
+
+# ---------------------------------------------------------------------------
+# hub_id path — cb_hub_content.content_id is TEXT (migration 005) while
+# content_items.content_id is UUID. The hub-scoped LEFT JOIN compared them
+# without a cast, so EVERY search-preview call with hub_id raised
+# "operator does not exist: text = uuid" (500), independent of query text.
+# Latent since the hub_id branch was written; only unit-tested against fakes.
+# ---------------------------------------------------------------------------
+
+def _insert_hub_with_content(test_dsn, workspace_id, linked_text, unlinked_text):
+    hub_id = str(uuid.uuid4())
+    linked_id = str(uuid.uuid4())
+    unlinked_id = str(uuid.uuid4())
+    conn = _psycopg2().connect(test_dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO cb_hubs (hub_id, title, workspace_id) VALUES (%s::uuid, %s, %s::uuid)",
+                (hub_id, "Steward MVP", workspace_id),
+            )
+            for cid, text in ((linked_id, linked_text), (unlinked_id, unlinked_text)):
+                cur.execute(
+                    "INSERT INTO content_items (content_id, workspace_id, quick_summary) "
+                    "VALUES (%s::uuid, %s::uuid, %s)",
+                    (cid, workspace_id, text),
+                )
+                cur.execute(
+                    "INSERT INTO content_chunks (content_id, chunk_index, chunk_text) VALUES (%s::uuid, 0, %s)",
+                    (cid, text),
+                )
+            cur.execute(
+                "INSERT INTO cb_hub_content (hub_id, content_id, workspace_id) VALUES (%s::uuid, %s, %s::uuid)",
+                (hub_id, linked_id, workspace_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return hub_id, linked_id, unlinked_id
+
+
+def test_hub_scoped_search_preview_does_not_500_and_marks_hub_match(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_id, linked_id, unlinked_id = _insert_hub_with_content(
+        app_env, ws_id,
+        linked_text="Steward MVP next gate open question",
+        unlinked_text="Steward MVP next gate open question (unlinked copy)",
+    )
+
+    # Multi-word phrase, exactly the shape of the failing Steward calls.
+    resp = client.get(
+        "/v1/graph/search-preview",
+        params={"query": "Steward MVP next gate open question", "hub_id": hub_id, "limit": 5},
+    )
+    assert resp.status_code == 200, resp.text
+    by_id = {r["content_id"]: r for r in resp.json()["results"]}
+    assert by_id[linked_id]["hub_match"] is True
+    assert by_id[unlinked_id]["hub_match"] is False
+
+
+def test_hub_scoped_search_preview_with_decision_union(app_env):
+    """node_type=decision + hub_id exercises both the content_items hub join
+    and DecisionStore.search_preview's hub_match in the same request."""
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_id, _, _ = _insert_hub_with_content(app_env, ws_id, "unrelated note", "another note")
+    did = _create_decision(client, "Adopt Kafka for event streaming")
+
+    resp = client.get(
+        "/v1/graph/search-preview",
+        params={"query": "Kafka", "node_type": "decision", "hub_id": hub_id, "limit": 5},
+    )
+    assert resp.status_code == 200, resp.text
+    hit = next(r for r in resp.json()["results"] if r.get("decision_id") == did)
+    assert hit["hub_match"] is False  # decision not linked to this hub

@@ -249,7 +249,7 @@ class DecisionStore:
         params: List[Any] = []
         hub_match_expr = "FALSE AS hub_match"
         if hub_id:
-            hub_match_expr = "(%s::uuid = ANY(linked_hub_ids)) AS hub_match"
+            hub_match_expr = "COALESCE(%s::uuid = ANY(linked_hub_ids), FALSE) AS hub_match"
             params.append(hub_id)
         params.append(q)
         conditions = [

@@ -1190,7 +1190,9 @@ class ApiAdapter:
         score_expr = "max(CASE WHEN LOWER(COALESCE(ci.quick_summary, '')) LIKE %s THEN 2 ELSE 1 END) AS score"
         lead_params: List[Any] = [q]
         if hub_id:
-            joins += " LEFT JOIN cb_hub_content hc ON hc.content_id = ci.content_id AND hc.hub_id = %s::uuid"
+            # cb_hub_content.content_id is TEXT (migration 005); cast the uuid side
+            # so the join type-checks and idx_cb_hub_content_cid stays usable.
+            joins += " LEFT JOIN cb_hub_content hc ON hc.content_id = ci.content_id::text AND hc.hub_id = %s::uuid"
             params.insert(0, hub_id)
             select_hub_match = "bool_or(hc.hub_id IS NOT NULL) AS hub_match"
         if node_type:
