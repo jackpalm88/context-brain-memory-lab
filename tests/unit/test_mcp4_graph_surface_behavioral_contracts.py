@@ -158,7 +158,11 @@ class FakeGraphApiAdapter:
         hub_id: Optional[str] = None,
         limit: int = 10,
         workspace_id: Optional[str] = None,
+        hub_scope: str = "annotate",
     ) -> Dict[str, Any]:
+        # Mirrors the real SQL: hub_id alone only annotates (hub_match); it
+        # filters only under hub_scope="strict". An earlier version of this fake
+        # always filtered, which hid the annotate-only runtime from these tests.
         q = (query or "").lower()
         results: List[Dict[str, Any]] = []
         for row in self._content.values():
@@ -166,7 +170,7 @@ class FakeGraphApiAdapter:
                 continue
             if node_type and row.get("node_type") != node_type:
                 continue
-            if hub_id and row.get("hub_id") != hub_id:
+            if hub_scope == "strict" and row.get("hub_id") != hub_id:
                 continue
             haystack = f"{row.get('quick_summary') or ''} {row.get('full_text') or ''}".lower()
             if q not in haystack:
@@ -180,7 +184,10 @@ class FakeGraphApiAdapter:
                 "load_full_content_recommended": not bool(row.get("quick_summary")),
             })
         results = sorted(results, key=lambda r: (-r["score"], r["content_id"]))[:limit]
-        return {"results": results, "count": len(results), "workspace_id": workspace_id}
+        out: Dict[str, Any] = {"results": results, "count": len(results), "workspace_id": workspace_id}
+        if hub_scope == "strict":
+            out["scope_applied"] = {"hub_id": hub_id, "mode": "strict", "enforcement": "server_pre_filter"}
+        return out
 
 
 @pytest.fixture
@@ -365,6 +372,20 @@ def test_search_graph_preview_G4_3_workspace_isolation(hermetic_client_graph: MC
     ids_a = {r["content_id"] for r in res_a["results"]}
     assert content_a["content_id"] in ids_a
     assert content_b["content_id"] not in ids_a
+
+
+def test_search_graph_preview_G4_3b_hub_scope_annotate_vs_strict(hermetic_client_graph: MCPHermeticClient) -> None:
+    hub_a, content_a, _ = _seed_graph_pair()
+    outside = FakeGraphApiAdapter.seed_content(workspace_id=WS_A, text="alpha outside hub", quick_summary="alpha outside")
+
+    annotated = mcp_tools.search_graph_preview("alpha", hub_id=hub_a["hub_id"], workspace_id=WS_A)
+    by_id = {r["content_id"]: r for r in annotated["results"]}
+    assert by_id[outside["content_id"]]["hub_match"] is False  # hub_id alone does not filter
+    assert "scope_applied" not in annotated
+
+    strict = mcp_tools.search_graph_preview("alpha", hub_id=hub_a["hub_id"], hub_scope="strict", workspace_id=WS_A)
+    assert [r["content_id"] for r in strict["results"]] == [content_a["content_id"]]
+    assert strict["scope_applied"]["mode"] == "strict"
 
 
 def test_search_graph_preview_G4_4_structured_error_on_api_failure(monkeypatch: pytest.MonkeyPatch) -> None:

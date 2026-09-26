@@ -185,6 +185,12 @@ produce the same SQL/param shape as before when no scope is supplied (see
   already takes a single `hub_id` as an *annotation* (not a filter, per its
   `LEFT JOIN` use); folding it into `retrieval_scope` semantics is a second,
   later change, not bundled here.
+  *Update 2026-09-26:* the annotate default is unchanged. An explicit opt-in
+  `hub_scope=strict` (query param, `annotate` default) was added for
+  specialist containment: server-side pre-filter on both the content_items
+  and decision branches, before ranking/limit, workspace-bounded via
+  `cb_hubs.workspace_uuid`, fail-closed (unknown/foreign hub → 0 rows), with a
+  `scope_applied` proof block present only in strict responses.
 
 ### 6.5 Fail-closed semantics
 

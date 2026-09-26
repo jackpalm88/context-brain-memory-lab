@@ -484,7 +484,7 @@ tools:
     use_when: "Cheap navigation before loading full nodes."
     determinism: deterministic
     required_inputs: [query]
-    optional_inputs: [node_type, hub_id, limit]
+    optional_inputs: [node_type, hub_id, hub_scope, limit]
     output_kind: preview_list
     response_shape:
       kind: keyed_list

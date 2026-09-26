@@ -237,14 +237,25 @@ class DecisionStore:
         )
 
     def search_preview(
-        self, query: str, limit: int, hub_id: Optional[str] = None, workspace_id: Optional[str] = None
+        self,
+        query: str,
+        limit: int,
+        hub_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+        strict_hub: bool = False,
     ) -> List[Dict[str, Any]]:
         """Free-text preview search over cb_decision_nodes for search_graph_preview's
         node_type="decision" branch. cb_decision_nodes is a separate table from
         content_items/content_chunks — this exists so that branch can see the real
         decision corpus instead of only the content_items.node_type='decision'
         classification flag, which is a different, largely-unused concept.
+
+        strict_hub=True filters to decisions whose linked_hub_ids contain hub_id,
+        and additionally requires that hub to be owned by workspace_id — so a
+        decision link pointing at another workspace's hub can never admit a row.
         """
+        if strict_hub and not hub_id:
+            raise ValueError("strict_hub requires hub_id")
         q = f"%{(query or '').lower()}%"
         params: List[Any] = []
         hub_match_expr = "FALSE AS hub_match"
@@ -257,6 +268,15 @@ class DecisionStore:
             "OR LOWER(COALESCE(decision_context, '')) LIKE %s OR LOWER(COALESCE(why_this_matters, '')) LIKE %s)"
         ]
         params.extend([q, q, q, q])
+        if strict_hub:
+            ws_hub = " AND sh.workspace_uuid = %s::uuid" if workspace_id else ""
+            conditions.append(
+                "%s::uuid = ANY(linked_hub_ids) AND EXISTS "
+                "(SELECT 1 FROM cb_hubs sh WHERE sh.hub_id = %s::uuid" + ws_hub + ")"
+            )
+            params.extend([hub_id, hub_id])
+            if workspace_id:
+                params.append(workspace_id)
         if workspace_id:
             conditions.append("workspace_id = %s::uuid")
             params.append(workspace_id)

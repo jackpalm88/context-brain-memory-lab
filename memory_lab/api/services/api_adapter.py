@@ -1171,7 +1171,15 @@ class ApiAdapter:
             "updated_at": row.get("updated_at").isoformat() if row.get("updated_at") else None,
         }
 
-    def search_graph_preview(self, query: str, node_type: Optional[str] = None, hub_id: Optional[str] = None, limit: int = 10, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    def search_graph_preview(
+        self,
+        query: str,
+        node_type: Optional[str] = None,
+        hub_id: Optional[str] = None,
+        limit: int = 10,
+        workspace_id: Optional[str] = None,
+        hub_scope: str = "annotate",
+    ) -> Dict[str, Any]:
         """Preview search over content_items, plus — when node_type == "decision" —
         a UNION over cb_decision_nodes via DecisionStore.
 
@@ -1181,7 +1189,16 @@ class ApiAdapter:
         only ever see content manually classified via classify_content_node, which
         is a different, largely-unused concept — a structural false negative on the
         real decision corpus regardless of query text.
+
+        hub_scope="annotate" (default, historical contract — DESIGN_SCOPED_RETRIEVAL
+        §6.4): hub_id only sets hub_match. hub_scope="strict": only rows linked to
+        hub_id enter the candidate set (WHERE, i.e. before ORDER BY/LIMIT), the hub
+        must be owned by the caller's workspace (cb_hubs.workspace_uuid), and an
+        unknown or foreign hub yields zero rows — never an unscoped fallback.
         """
+        strict = hub_scope == "strict"
+        if strict and not hub_id:
+            raise ValueError("hub_scope=strict requires hub_id")
         q = f"%{(query or '').lower()}%"
         conditions = ["(LOWER(COALESCE(ci.quick_summary, '')) LIKE %s OR LOWER(COALESCE(ch.chunk_text, '')) LIKE %s)"]
         params: List[Any] = [q, q]
@@ -1195,6 +1212,15 @@ class ApiAdapter:
             joins += " LEFT JOIN cb_hub_content hc ON hc.content_id = ci.content_id::text AND hc.hub_id = %s::uuid"
             params.insert(0, hub_id)
             select_hub_match = "bool_or(hc.hub_id IS NOT NULL) AS hub_match"
+        if strict:
+            ws_link = " AND sc.workspace_id = %s::uuid AND sh.workspace_uuid = %s::uuid" if workspace_id else ""
+            conditions.append(
+                "EXISTS (SELECT 1 FROM cb_hub_content sc JOIN cb_hubs sh ON sh.hub_id = sc.hub_id"
+                " WHERE sc.content_id = ci.content_id::text AND sc.hub_id = %s::uuid" + ws_link + ")"
+            )
+            params.append(hub_id)
+            if workspace_id:
+                params.extend([workspace_id, workspace_id])
         if node_type:
             conditions.append("ci.node_type = %s")
             params.append(node_type)
@@ -1225,7 +1251,7 @@ class ApiAdapter:
         results: List[Dict[str, Any]] = [{**dict(r), "source": "content_item"} for r in rows]
         if node_type == "decision":
             decision_rows = DecisionStore(self.database_url).search_preview(
-                query=query, limit=limit, hub_id=hub_id, workspace_id=workspace_id
+                query=query, limit=limit, hub_id=hub_id, workspace_id=workspace_id, strict_hub=strict
             )
             results.extend(
                 {
@@ -1242,4 +1268,8 @@ class ApiAdapter:
             )
             results.sort(key=lambda r: r["score"], reverse=True)
             results = results[:limit]
-        return {"results": results, "count": len(results), "workspace_id": workspace_id}
+        response: Dict[str, Any] = {"results": results, "count": len(results), "workspace_id": workspace_id}
+        if strict:
+            # Present only in strict mode so annotate-mode responses stay byte-identical.
+            response["scope_applied"] = {"hub_id": hub_id, "mode": "strict", "enforcement": "server_pre_filter"}
+        return response

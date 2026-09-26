@@ -557,12 +557,15 @@ class MemoryLabApiClient:
         hub_id: Optional[str] = None,
         limit: int = 10,
         workspace_id: Optional[str] = None,
+        hub_scope: Optional[str] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {"query": query, "limit": limit}
         if node_type is not None:
             params["node_type"] = node_type
         if hub_id is not None:
             params["hub_id"] = hub_id
+        if hub_scope is not None:
+            params["hub_scope"] = hub_scope
         return self._request("GET", "/v1/graph/search-preview", params=params, workspace_id=workspace_id)
 
     def decision_create(self, payload: Dict[str, Any], workspace_id: Optional[str] = None) -> Dict[str, Any]:

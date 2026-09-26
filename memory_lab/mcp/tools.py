@@ -551,13 +551,18 @@ def search_graph_preview(
     hub_id: Optional[str] = None,
     limit: int = 10,
     workspace_id: Optional[str] = None,
+    hub_scope: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Search graph nodes by free text with optional node_type / hub_id filters.
+    """Search graph nodes by free text with an optional node_type filter.
     Returns a lightweight preview list for navigation. When node_type="decision",
     results include both content items manually classified as decisions and the
     real decision corpus in cb_decision_nodes (source: "content_item" vs
     "decision_node" per result) — follow up "content_item" rows with
-    load_graph_node_full, and "decision_node" rows with explain_decision."""
+    load_graph_node_full, and "decision_node" rows with explain_decision.
+    hub_id alone does NOT filter: it only marks each row's hub_match (default
+    hub_scope="annotate"). To restrict results to one hub, pass hub_id together
+    with hub_scope="strict" — the server then pre-filters before ranking, and
+    the response carries scope_applied as proof; hub_match alone is not."""
     return _call_api(
         _client().graph_search_preview,
         query=query,
@@ -565,6 +570,7 @@ def search_graph_preview(
         hub_id=hub_id,
         limit=limit,
         workspace_id=workspace_id,
+        hub_scope=hub_scope,
     )
 
 

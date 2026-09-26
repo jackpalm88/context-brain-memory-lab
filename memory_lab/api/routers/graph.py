@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -37,9 +38,23 @@ def load_graph_node_full(content_id: str, auth: AuthContext = Depends(require_pe
 def search_graph_preview(
     query: str,
     node_type: Optional[str] = None,
-    hub_id: Optional[str] = None,
+    hub_id: Optional[UUID] = None,
+    hub_scope: Literal["annotate", "strict"] = "annotate",
     limit: int = 10,
     auth: AuthContext = Depends(require_permission("retrieval.search")),
 ) -> dict:
+    """hub_scope="annotate" (default): hub_id only sets per-row hub_match; the
+    candidate set and ranking stay workspace-wide. hub_scope="strict": hub_id is a
+    server-side pre-filter applied before ranking/limit on both the content_items
+    and the decision branch, fail-closed (unknown / other-workspace hub -> 0 rows)."""
+    if hub_scope == "strict" and hub_id is None:
+        raise HTTPException(status_code=422, detail="hub_scope=strict requires hub_id")
     adapter = ApiAdapter(get_settings().database_url)
-    return adapter.search_graph_preview(query=query, node_type=node_type, hub_id=hub_id, limit=limit, workspace_id=auth.workspace_id)
+    return adapter.search_graph_preview(
+        query=query,
+        node_type=node_type,
+        hub_id=str(hub_id) if hub_id else None,
+        hub_scope=hub_scope,
+        limit=limit,
+        workspace_id=auth.workspace_id,
+    )

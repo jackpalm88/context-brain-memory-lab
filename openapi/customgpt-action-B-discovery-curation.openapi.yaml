@@ -665,7 +665,7 @@ paths:
       operationId: searchGraphPreview
       x-openai-isConsequential: false
       summary: "Search graph nodes by free text (MCP-only)"
-      description: "Lightweight search — returns id, title, type, node_type only. Use loadGraphNodeFull to get the full payload of any result. Optionally filter by node_type or hub_id."
+      description: "Lightweight search — returns id, title, type, node_type only. Use loadGraphNodeFull to get the full payload of any result. Optionally filter by node_type. To restrict to one hub, pass hub_id with hub_scope=strict."
       parameters:
         - name: query
           in: query
@@ -682,10 +682,18 @@ paths:
         - name: hub_id
           in: query
           required: false
-          description: "Restrict search to nodes in this hub."
+          description: "Hub to check. Alone it does NOT filter — it only sets hub_match per row. Combine with hub_scope=strict to restrict results to this hub."
           schema:
             type: string
             format: uuid
+        - name: hub_scope
+          in: query
+          required: false
+          description: "annotate (default): hub_id only marks hub_match. strict: server returns only rows linked to hub_id (requires hub_id; unknown hub gives 0 results)."
+          schema:
+            type: string
+            enum: [annotate, strict]
+            default: annotate
         - name: limit
           in: query
           required: false

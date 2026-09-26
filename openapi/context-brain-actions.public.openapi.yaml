@@ -1678,6 +1678,13 @@ paths:
         Search the knowledge graph returning only metadata (no full chunk text).
         Use this before load_graph_node_full to navigate cheaply.
         Each result shows content_id, node_type, quick_summary, hub_match, score.
+        hub_id semantics depend on hub_scope: "annotate" (default) only sets
+        hub_match per row — candidate set and ranking stay workspace-wide.
+        "strict" pre-filters server-side to rows linked to hub_id (content items
+        and, for node_type=decision, decision nodes) before ranking/limit; the
+        hub must belong to the caller's workspace, otherwise 0 results
+        (fail-closed). Strict responses include scope_applied; hub_match alone
+        is not proof of scoping.
       tags: [graph]
       parameters:
         - name: query
@@ -1696,6 +1703,13 @@ paths:
             type: string
             format: uuid
             nullable: true
+        - name: hub_scope
+          in: query
+          description: "annotate (default) | strict — strict requires hub_id (422 otherwise)."
+          schema:
+            type: string
+            enum: [annotate, strict]
+            default: annotate
         - name: limit
           in: query
           schema:
@@ -1717,3 +1731,16 @@ paths:
                       $ref: "#/components/schemas/SearchPreviewResult"
                   count:
                     type: integer
+                  scope_applied:
+                    type: object
+                    description: "Present only when hub_scope=strict — proof the hub pre-filter ran server-side."
+                    properties:
+                      hub_id:
+                        type: string
+                        format: uuid
+                      mode:
+                        type: string
+                        enum: [strict]
+                      enforcement:
+                        type: string
+                        enum: [server_pre_filter]

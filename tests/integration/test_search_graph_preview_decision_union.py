@@ -304,3 +304,197 @@ def test_hub_scoped_search_preview_with_decision_union(app_env):
     assert resp.status_code == 200, resp.text
     hit = next(r for r in resp.json()["results"] if r.get("decision_id") == did)
     assert hit["hub_match"] is False  # decision not linked to this hub
+
+
+# ---------------------------------------------------------------------------
+# hub_scope — hub_id alone is annotation-only (DESIGN_SCOPED_RETRIEVAL §6.4);
+# hub_scope="strict" is the opt-in server-side pre-filter used for specialist
+# containment. Strict must (1) admit only rows linked to the hub, (2) rank only
+# inside that scoped set (filter precedes ORDER BY/LIMIT), (3) cover the
+# decision branch, (4) stay inside the caller's workspace — including decision
+# links that point at another workspace's hub — and (5) fail closed.
+# ---------------------------------------------------------------------------
+
+def _insert_hub(test_dsn, workspace_id, title):
+    """Hub owned the way HubStore.create_hub writes it (workspace_uuid set)."""
+    hub_id = str(uuid.uuid4())
+    conn = _psycopg2().connect(test_dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO cb_hubs (hub_id, title, workspace_id, workspace_uuid) "
+                "VALUES (%s::uuid, %s, %s, %s::uuid)",
+                (hub_id, title, workspace_id, workspace_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return hub_id
+
+
+def _insert_content(test_dsn, workspace_id, quick_summary, chunk_text, hub_id=None, link_workspace_id=None):
+    cid = str(uuid.uuid4())
+    conn = _psycopg2().connect(test_dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO content_items (content_id, workspace_id, quick_summary) VALUES (%s::uuid, %s::uuid, %s)",
+                (cid, workspace_id, quick_summary),
+            )
+            cur.execute(
+                "INSERT INTO content_chunks (content_id, chunk_index, chunk_text) VALUES (%s::uuid, 0, %s)",
+                (cid, chunk_text),
+            )
+            if hub_id:
+                cur.execute(
+                    "INSERT INTO cb_hub_content (hub_id, content_id, workspace_id) VALUES (%s::uuid, %s, %s::uuid)",
+                    (hub_id, cid, link_workspace_id or workspace_id),
+                )
+        conn.commit()
+    finally:
+        conn.close()
+    return cid
+
+
+def _strict_hub_fixture(test_dsn, ws_id):
+    """Hub A holds one weakly-matching record (chunk-only match, score 1); hub B
+    holds three strongly-matching records (quick_summary match, score 2), so a
+    workspace-wide top-2 is all B and A can only surface if ranking is scoped."""
+    hub_a = _insert_hub(test_dsn, ws_id, "Steward hub A")
+    hub_b = _insert_hub(test_dsn, ws_id, "Other hub B")
+    a_id = _insert_content(test_dsn, ws_id, "hub A note", "steward containment detail", hub_id=hub_a)
+    b_ids = [
+        _insert_content(test_dsn, ws_id, f"steward containment B{i}", "steward containment B body", hub_id=hub_b)
+        for i in range(3)
+    ]
+    return hub_a, hub_b, a_id, b_ids
+
+
+def _preview(client, **params):
+    resp = client.get("/v1/graph/search-preview", params=params)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_A_strict_hub_isolation_ranks_inside_scoped_set(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_a, hub_b, a_id, b_ids = _strict_hub_fixture(app_env, ws_id)
+
+    body = _preview(client, query="steward containment", hub_id=hub_a, hub_scope="strict", limit=2)
+    ids = [r["content_id"] for r in body["results"]]
+    assert ids == [a_id], body
+    assert not set(ids) & set(b_ids)
+    assert body["results"][0]["hub_match"] is True
+    assert body["scope_applied"] == {"hub_id": hub_a, "mode": "strict", "enforcement": "server_pre_filter"}
+
+
+def test_B_annotate_default_is_backward_compatible(app_env):
+    """hub_id without hub_scope (and hub_scope=annotate explicitly) keeps the
+    historical contract: workspace-wide candidates + ranking, hub_match only,
+    no scope_applied key. Same limit as test A — A's record is crowded out,
+    which is exactly why annotate mode is not a containment boundary."""
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_a, hub_b, a_id, b_ids = _strict_hub_fixture(app_env, ws_id)
+
+    implicit = _preview(client, query="steward containment", hub_id=hub_a, limit=2)
+    explicit = _preview(client, query="steward containment", hub_id=hub_a, hub_scope="annotate", limit=2)
+    assert implicit == explicit
+    assert "scope_applied" not in implicit
+    assert set(implicit.keys()) == {"results", "count", "workspace_id"}
+    assert [r["content_id"] for r in implicit["results"]] == sorted(b_ids)[:2]
+    assert all(r["hub_match"] is False for r in implicit["results"])
+
+    # Unscoped call returns the same candidate set/order — hub_id only annotates.
+    unscoped = _preview(client, query="steward containment", limit=2)
+    assert [r["content_id"] for r in unscoped["results"]] == [r["content_id"] for r in implicit["results"]]
+
+
+def test_C_strict_scope_covers_decision_branch(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_a, hub_b, a_id, b_ids = _strict_hub_fixture(app_env, ws_id)
+    resp = client.post("/decisions/", json={
+        "title": "Steward containment policy for hub A",
+        "decision_reason": "scoped", "linked_hub_ids": [hub_a],
+    })
+    assert resp.status_code == 201, resp.text
+    dec_a = resp.json()["decision_id"]
+    resp = client.post("/decisions/", json={
+        "title": "Steward containment policy for hub B (more relevant)",
+        "decision_reason": "steward containment steward containment", "linked_hub_ids": [hub_b],
+    })
+    assert resp.status_code == 201, resp.text
+    dec_b = resp.json()["decision_id"]
+    unlinked = _create_decision(client, "Steward containment unlinked decision")
+
+    body = _preview(client, query="steward containment", node_type="decision", hub_id=hub_a, hub_scope="strict", limit=10)
+    decision_ids = {r.get("decision_id") for r in body["results"] if r["source"] == "decision_node"}
+    assert decision_ids == {dec_a}, body
+    assert dec_b not in decision_ids and unlinked not in decision_ids
+    assert all(r["hub_match"] is True for r in body["results"])
+    assert body["scope_applied"]["mode"] == "strict"
+
+    # Annotate mode on the same request still sees all three (backward compat).
+    annotated = _preview(client, query="steward containment", node_type="decision", hub_id=hub_a, limit=10)
+    assert {dec_a, dec_b, unlinked} <= {r.get("decision_id") for r in annotated["results"]}
+
+
+def test_strict_cross_workspace_hub_fails_closed_on_both_branches(app_env):
+    """A hub owned by workspace W2 must admit nothing for a W1 caller in strict
+    mode — even when W1 rows carry (forged/legacy) links to it: a cb_hub_content
+    row and a decision linked_hub_ids entry pointing across the boundary."""
+    ws1 = _insert_workspace(app_env)
+    ws2 = _insert_workspace(app_env)
+    client1 = _client(ws1)
+    foreign_hub = _insert_hub(app_env, ws2, "W2 private hub")
+    _insert_content(app_env, ws2, "steward containment W2 secret", "x", hub_id=foreign_hub)
+    _insert_content(app_env, ws1, "steward containment W1 row", "x", hub_id=foreign_hub)
+    resp = client1.post("/decisions/", json={
+        "title": "Steward containment W1 decision", "decision_reason": "r", "linked_hub_ids": [foreign_hub],
+    })
+    assert resp.status_code == 201, resp.text
+
+    body = _preview(client1, query="steward containment", node_type="decision", hub_id=foreign_hub, hub_scope="strict")
+    assert body["results"] == [] and body["count"] == 0, body
+    body = _preview(client1, query="steward containment", hub_id=foreign_hub, hub_scope="strict")
+    assert body["results"] == [] and body["count"] == 0, body
+
+
+def test_strict_unknown_hub_fails_closed_not_unscoped(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    _strict_hub_fixture(app_env, ws_id)
+    missing = str(uuid.uuid4())
+    body = _preview(client, query="steward containment", hub_id=missing, hub_scope="strict")
+    assert body["results"] == [] and body["count"] == 0
+    assert body["scope_applied"]["hub_id"] == missing
+    body = _preview(client, query="steward containment", node_type="decision", hub_id=missing, hub_scope="strict")
+    assert body["results"] == []
+
+
+def test_strict_input_validation_is_422(app_env):
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    assert client.get("/v1/graph/search-preview", params={"query": "x", "hub_scope": "strict"}).status_code == 422
+    assert client.get("/v1/graph/search-preview", params={"query": "x", "hub_scope": "loose"}).status_code == 422
+    assert client.get(
+        "/v1/graph/search-preview", params={"query": "x", "hub_id": "not-a-uuid", "hub_scope": "strict"}
+    ).status_code == 422
+
+
+def test_D_hub_join_type_regression_holds_in_both_modes(app_env):
+    """text = uuid (cb_hub_content.content_id TEXT vs content_items UUID) must
+    not return in either the annotate LEFT JOIN or the strict EXISTS, with or
+    without the decision union."""
+    ws_id = _insert_workspace(app_env)
+    client = _client(ws_id)
+    hub_a, _, a_id, _ = _strict_hub_fixture(app_env, ws_id)
+    for scope in ("annotate", "strict"):
+        for node_type in (None, "decision"):
+            params = {"query": "steward", "hub_id": hub_a, "hub_scope": scope}
+            if node_type:
+                params["node_type"] = node_type
+            resp = client.get("/v1/graph/search-preview", params=params)
+            assert resp.status_code == 200, (scope, node_type, resp.text)
